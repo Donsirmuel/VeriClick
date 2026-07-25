@@ -1,0 +1,159 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  --color-primary: #000000;
+  --color-primary-hover: #1a1a1a;
+  --color-primary-light: #f5f5f5;
+  --color-highlight: #d4d4d4;
+  --color-highlight-light: #f0f0f0;
+  --color-background: #fafafa;
+  --color-surface: #FFFFFF;
+  --color-sidebar: #0a0a0a;
+  --color-sidebar-hover: #1a1a1a;
+  --color-dark-bg: #000000;
+  --color-dark-surface: #111111;
+  --color-dark-card: #111111;
+  --color-success: #6b7280;
+  --color-success-light: #f3f4f6;
+  --color-error: #EF4444;
+  --color-error-light: #FEE2E2;
+  --color-warning: #9ca3af;
+  --color-warning-light: #f3f4f6;
+  --color-border: #e5e5e5;
+  --color-muted: #737373;
+  --color-muted-dark: #a3a3a3;
+  --color-code-bg: #0a0a0a;
+
+  --animate-scan: scan 4s ease-in-out infinite;
+  --animate-pulse-dot: pulse-dot 2s ease-in-out infinite;
+  --animate-float: float 6s ease-in-out infinite;
+  --animate-float-delayed: float 6s ease-in-out 2s infinite;
+  --animate-grid-move: grid-move 20s linear infinite;
+  --animate-typing: typing 3.5s steps(40, end);
+  --animate-blink: blink 0.75s step-end infinite;
+  --animate-fade-in-up: fade-in-up 0.6s ease-out forwards;
+  --animate-fade-in-up-delay-1: fade-in-up 0.6s ease-out 0.1s forwards;
+  --animate-fade-in-up-delay-2: fade-in-up 0.6s ease-out 0.2s forwards;
+  --animate-fade-in-up-delay-3: fade-in-up 0.6s ease-out 0.3s forwards;
+  --animate-slide-in-right: slide-in-right 0.8s ease-out 0.4s forwards;
+  --animate-count-pulse: count-pulse 0.3s ease-out;
+}
+
+@layer base {
+  body {
+    margin: 0;
+    @apply bg-background text-slate-900 antialiased;
+    font-family: var(--font-sans);
+  }
+}
+
+@keyframes scan {
+  0%, 100% { transform: translateY(0); opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { transform: translateY(100%); opacity: 0; }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.5); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-20px); }
+}
+
+@keyframes grid-move {
+  0% { transform: translate(0, 0); }
+  100% { transform: translate(40px, 40px); }
+}
+
+@keyframes typing {
+  from { width: 0; }
+  to { width: 100%; }
+}
+
+@keyframes blink {
+  from, to { border-color: transparent; }
+  50% { border-color: white; }
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(60px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes count-pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+@layer utilities {
+  .animate-on-scroll {
+    opacity: 0;
+    transform: translateY(30px);
+    transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+  }
+
+  .animate-on-scroll.is-visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .stagger-1 { transition-delay: 0.1s; }
+  .stagger-2 { transition-delay: 0.2s; }
+  .stagger-3 { transition-delay: 0.3s; }
+  .stagger-4 { transition-delay: 0.4s; }
+
+  .hero-grid-bg {
+    background-image:
+      linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    animation: grid-move 20s linear infinite;
+  }
+
+  .scan-line {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent);
+    animation: scan 4s ease-in-out infinite;
+  }
+
+  .terminal-cursor::after {
+    content: '▌';
+    animation: blink 0.75s step-end infinite;
+    color: white;
+  }
+
+  .text-gradient {
+    background: linear-gradient(135deg, #ffffff 0%, #737373 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+}

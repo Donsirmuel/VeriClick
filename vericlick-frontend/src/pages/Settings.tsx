@@ -1,0 +1,176 @@
+import { HugeiconsIcon } from '@hugeicons/react'
+import { Settings01Icon, Notification02Icon, ShieldIcon, UserIcon } from '@hugeicons/core-free-icons'
+import { useState } from 'react'
+
+export default function SettingsPage() {
+  const [activeTab, setActiveTab] = useState<'general' | 'notifications' | 'security'>('general')
+
+  const tabs = [
+    { id: 'general' as const, label: 'General', icon: Settings01Icon },
+    { id: 'notifications' as const, label: 'Notifications', icon: Notification02Icon },
+    { id: 'security' as const, label: 'Security', icon: ShieldIcon },
+  ]
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Settings</h1>
+          <p className="text-sm text-muted mt-1">Manage your workspace preferences</p>
+        </div>
+      </div>
+
+      <div className="flex gap-6">
+        {/* Tab sidebar */}
+        <div className="w-56 shrink-0">
+          <nav className="space-y-1">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                  activeTab === tab.id
+                    ? 'bg-black text-white'
+                    : 'text-muted hover:bg-neutral-100 hover:text-slate-900'
+                }`}
+              >
+                <HugeiconsIcon icon={tab.icon} className="w-4 h-4" />
+                {tab.label}
+              </button>
+            ))}
+          </nav>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1">
+          {activeTab === 'general' && (
+            <div className="bg-white rounded-2xl border border-border p-8 shadow-sm space-y-6">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900 mb-1">Workspace</h3>
+                <p className="text-sm text-muted">Configure your workspace name and preferences.</p>
+              </div>
+
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-700 ml-1">Workspace name</label>
+                  <input
+                    type="text"
+                    defaultValue="VeriClick Pro"
+                    className="w-full bg-slate-50 border border-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-black transition-colors"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-700 ml-1">Default time zone</label>
+                  <select className="w-full bg-slate-50 border border-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-black transition-colors appearance-none">
+                    <option>UTC</option>
+                    <option>US/Eastern</option>
+                    <option>US/Pacific</option>
+                    <option>Europe/London</option>
+                    <option>Asia/Tokyo</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-4 border-t border-border">
+                <button className="bg-black hover:bg-neutral-800 text-white px-6 py-2.5 rounded-xl text-sm font-bold transition-all">
+                  Save changes
+                </button>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'notifications' && (
+            <div className="bg-white rounded-2xl border border-border p-8 shadow-sm space-y-6">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900 mb-1">Notifications</h3>
+                <p className="text-sm text-muted">Choose how you want to be alerted.</p>
+              </div>
+
+              <div className="space-y-4">
+                {[
+                  { label: 'Bot spike alerts', desc: 'Get notified when bot traffic exceeds thresholds', default: true },
+                  { label: 'Domain blacklist alerts', desc: 'Instant alerts when a domain is flagged on RBLs', default: true },
+                  { label: 'Weekly digest', desc: 'Summary of traffic stats and protection performance', default: false },
+                  { label: 'Product updates', desc: 'New features and platform improvements', default: false },
+                ].map((item) => (
+                  <div key={item.label} className="flex items-center justify-between p-4 rounded-xl border border-border hover:border-neutral-300 transition-colors">
+                    <div>
+                      <div className="text-sm font-bold text-slate-900">{item.label}</div>
+                      <div className="text-xs text-muted mt-0.5">{item.desc}</div>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input type="checkbox" defaultChecked={item.default} className="sr-only peer" />
+                      <div className="w-9 h-5 bg-neutral-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-black" />
+                    </label>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex justify-end pt-4 border-t border-border">
+                <button className="bg-black hover:bg-neutral-800 text-white px-6 py-2.5 rounded-xl text-sm font-bold transition-all">
+                  Save preferences
+                </button>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'security' && (
+            <div className="bg-white rounded-2xl border border-border p-8 shadow-sm space-y-6">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900 mb-1">Security</h3>
+                <p className="text-sm text-muted">Manage your account security settings.</p>
+              </div>
+
+              <div className="space-y-4">
+                <div className="p-4 rounded-xl border border-border">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-lg bg-neutral-100 flex items-center justify-center">
+                        <HugeiconsIcon icon={UserIcon} className="w-4 h-4 text-slate-600" />
+                      </div>
+                      <div>
+                        <div className="text-sm font-bold text-slate-900">Password</div>
+                        <div className="text-xs text-muted">Last changed 30 days ago</div>
+                      </div>
+                    </div>
+                    <button className="text-sm font-bold text-black hover:text-neutral-700 transition-colors">Change</button>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-xl border border-border">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-lg bg-neutral-100 flex items-center justify-center">
+                        <HugeiconsIcon icon={ShieldIcon} className="w-4 h-4 text-slate-600" />
+                      </div>
+                      <div>
+                        <div className="text-sm font-bold text-slate-900">Two-factor authentication</div>
+                        <div className="text-xs text-muted">Add an extra layer of security to your account</div>
+                      </div>
+                    </div>
+                    <button className="text-sm font-bold text-black hover:text-neutral-700 transition-colors">Enable</button>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-xl border border-border">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-lg bg-neutral-100 flex items-center justify-center">
+                        <HugeiconsIcon icon={ShieldIcon} className="w-4 h-4 text-slate-600" />
+                      </div>
+                      <div>
+                        <div className="text-sm font-bold text-slate-900">API keys</div>
+                        <div className="text-xs text-muted">Manage your programmatic access keys</div>
+                      </div>
+                    </div>
+                    <button className="text-sm font-bold text-black hover:text-neutral-700 transition-colors">Manage</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
