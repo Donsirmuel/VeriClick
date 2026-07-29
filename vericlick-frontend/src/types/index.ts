@@ -1,5 +1,5 @@
 export type HealthStatus = 'healthy' | 'degraded' | 'blacklisted'
-export type LinkStatus = 'active' | 'paused'
+export type LinkStatus = 'active' | 'paused' | 'disabled'
 export type TimeRange = '7d' | '30d' | '90d'
 
 export interface DashboardStats {
@@ -19,7 +19,7 @@ export interface TrafficData {
 }
 
 export interface ActivityEntry {
-  id: number
+  id: string
   ip: string
   country: string
   device: string
@@ -30,11 +30,11 @@ export interface ActivityEntry {
 }
 
 export interface TrackingLink {
-  id: number
+  id: string
   slug: string
   destinationUrl: string
-  domain: string
-  domainHealth: HealthStatus
+  domain: string | null
+  domainHealth: HealthStatus | null
   totalClicks: number
   botClicks: number
   status: LinkStatus
@@ -44,15 +44,15 @@ export interface TrackingLink {
 export interface LinkCreateInput {
   slug: string
   destinationUrl: string
-  domain: string
-  status: LinkStatus
+  domain?: string | null
+  status?: LinkStatus
 }
 
 export interface Domain {
-  id: number
+  id: string
   domain: string
   healthStatus: HealthStatus
-  lastChecked: string
+  lastChecked: string | null
   linksCount: number
   createdAt: string
 }
@@ -60,5 +60,12 @@ export interface Domain {
 export interface AuthUser {
   id: number
   email: string
-  name: string
+  username: string
+}
+
+export interface PaginatedResponse<T> {
+  count: number
+  next: string | null
+  previous: string | null
+  results: T[]
 }

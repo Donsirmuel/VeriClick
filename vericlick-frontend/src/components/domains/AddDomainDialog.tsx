@@ -5,16 +5,16 @@ import { Cancel01Icon, Globe02Icon, ShieldIcon } from '@hugeicons/core-free-icon
 interface AddDomainDialogProps {
   onClose: () => void
   onSubmit: (domain: string) => void
+  loading?: boolean
 }
 
-export function AddDomainDialog({ onClose, onSubmit }: AddDomainDialogProps) {
+export function AddDomainDialog({ onClose, onSubmit, loading }: AddDomainDialogProps) {
   const [domain, setDomain] = useState('')
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!domain) return
+    if (!domain || loading) return
     onSubmit(domain)
-    onClose()
   }
 
   return (

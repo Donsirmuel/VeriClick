@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+*.sqlite3
+
+# Environment
+.env
+.venv/
+.vericlick-venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo

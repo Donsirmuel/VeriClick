@@ -1,4 +1,5 @@
-import { QueryClient } from '@tanstack/react-query'
+import { QueryClient, QueryCache, MutationCache } from '@tanstack/react-query'
+import { showErrorToast } from './errors'
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -7,4 +8,14 @@ export const queryClient = new QueryClient({
       retry: 1,
     },
   },
+  queryCache: new QueryCache({
+    onError: (error) => {
+      showErrorToast(error, 'Failed to load data')
+    },
+  }),
+  mutationCache: new MutationCache({
+    onError: (error) => {
+      showErrorToast(error, 'Operation failed')
+    },
+  }),
 })

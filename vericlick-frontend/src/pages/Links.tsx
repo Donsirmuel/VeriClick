@@ -1,238 +1,231 @@
 import { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { PlusSignIcon, Search01Icon, Copy01Icon, EditIcon, Delete02Icon, ExternalLinkIcon, EyeIcon, ViewOffIcon } from '@hugeicons/core-free-icons'
+import {
+  PlusSignIcon, Search01Icon, FilterIcon,
+  Copy01Icon, Edit01Icon, Cancel01Icon,
+  ArrowRight02Icon, ArrowLeft02Icon,
+} from '@hugeicons/core-free-icons'
+import toast from 'react-hot-toast'
 import { CreateLinkModal } from '@/components/links/CreateLinkModal'
-import { formatRelativeTime, truncateUrl } from '@/lib/utils'
-import { mockLinks } from '@/api/mock'
-import { generateSlug } from '@/lib/utils'
-import type { TrackingLink, LinkStatus, LinkCreateInput } from '@/types'
-import { toast } from 'sonner'
+import { fetchLinks, createLink, updateLink, deleteLink } from '@/api/links'
+import { fetchDomains } from '@/api/domains'
+import type { TrackingLink, LinkCreateInput } from '@/types'
 
 export default function LinksPage() {
-  const [links, setLinks] = useState<TrackingLink[]>(mockLinks)
+  const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [editTarget, setEditTarget] = useState<TrackingLink | null>(null)
 
-  const filteredLinks = links.filter(link =>
-    link.slug.toLowerCase().includes(search.toLowerCase()) ||
-    link.destinationUrl.toLowerCase().includes(search.toLowerCase()) ||
-    link.domain.toLowerCase().includes(search.toLowerCase())
-  )
+  const { data: linksData } = useQuery({
+    queryKey: ['links', search, page],
+    queryFn: () => fetchLinks({ search, page }),
+  })
 
-  const handleCopySlug = (link: TrackingLink) => {
-    const fullUrl = `https://${link.domain}/${link.slug}`
-    navigator.clipboard.writeText(fullUrl)
-    toast.success(`Copied ${fullUrl}`)
-  }
+  const { data: domains } = useQuery({
+    queryKey: ['domains-list'],
+    queryFn: fetchDomains,
+  })
+
+  const links = linksData?.results ?? []
+  const totalPages = linksData ? Math.ceil(linksData.count / 20) : 0
+
+  const createMutation = useMutation({
+    mutationFn: createLink,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['links'] })
+      toast.success('Link created successfully')
+      setShowCreateModal(false)
+    },
+  })
+
+  const editMutation = useMutation({
+    mutationFn: ({ id, input }: { id: string; input: Partial<LinkCreateInput> }) => updateLink(id, input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['links'] })
+      toast.success('Link updated successfully')
+      setEditTarget(null)
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteLink,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['links'] })
+      toast.success('Link deleted')
+    },
+  })
 
   const handleCreate = (input: LinkCreateInput) => {
-    const newLink: TrackingLink = {
-      id: Math.floor(Math.random() * 1000) + 100,
-      slug: input.slug || generateSlug(),
-      destinationUrl: input.destinationUrl,
-      domain: input.domain,
-      domainHealth: 'healthy',
-      totalClicks: 0,
-      botClicks: 0,
-      status: input.status,
-      createdAt: new Date().toISOString(),
-    }
-    setLinks(prev => [newLink, ...prev])
-    toast.success('Link created successfully')
+    createMutation.mutate(input)
   }
 
   const handleEdit = (input: LinkCreateInput) => {
     if (!editTarget) return
-    setLinks(prev => prev.map(l =>
-      l.id === editTarget.id
-        ? { ...l, slug: input.slug || l.slug, destinationUrl: input.destinationUrl, domain: input.domain, status: input.status }
-        : l
-    ))
-    setEditTarget(null)
-    toast.success('Link updated successfully')
+    editMutation.mutate({ id: editTarget.id, input })
   }
 
-  const handleDelete = (id: number) => {
-    setLinks(prev => prev.filter(l => l.id !== id))
-    toast.success('Link deleted')
+  const handleDelete = (id: string) => {
+    if (confirm('Delete this link?')) {
+      deleteMutation.mutate(id)
+    }
   }
 
-  const handleToggleStatus = (link: TrackingLink) => {
-    const newStatus: LinkStatus = link.status === 'active' ? 'paused' : 'active'
-    setLinks(prev => prev.map(l =>
-      l.id === link.id ? { ...l, status: newStatus } : l
-    ))
-    toast.success(`Link ${newStatus === 'active' ? 'activated' : 'paused'}`)
+  const handleCopySlug = async (link: TrackingLink) => {
+    const fullUrl = link.domain
+      ? `https://${link.domain}/${link.slug}`
+      : `${window.location.origin}/r/${link.slug}`
+    try {
+      await navigator.clipboard.writeText(fullUrl)
+      toast.success('Copied to clipboard')
+    } catch {
+      toast.error('Failed to copy')
+    }
   }
+
+  const domainOptions = [...new Set(domains?.map(d => d.domain) ?? [])]
 
   return (
     <div>
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Links</h1>
-          <p className="text-sm text-muted mt-1">Manage your tracking links and destinations</p>
+          <h1 className="text-2xl font-bold text-slate-900">Tracking Links</h1>
+          <p className="text-sm text-muted mt-1">Manage your campaign links</p>
         </div>
-        <button 
+        <button
           onClick={() => setShowCreateModal(true)}
-          className="flex items-center gap-2 bg-black hover:bg-neutral-800 text-white px-4 py-2.5 rounded-xl font-bold text-sm transition-all shadow-sm"
+          className="bg-black hover:bg-neutral-800 text-white px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-sm"
         >
           <HugeiconsIcon icon={PlusSignIcon} className="w-4 h-4" />
           Create Link
         </button>
       </div>
 
-      {/* Search Bar */}
-      <div className="flex items-center gap-2 bg-white border border-neutral-200 rounded-xl px-4 py-3 mb-6 shadow-sm">
-        <HugeiconsIcon icon={Search01Icon} className="w-5 h-5 text-muted" />
-        <input 
-          type="text" 
-          placeholder="Search by slug, destination, or domain..."
-          className="flex-1 bg-transparent text-sm focus:outline-none placeholder:text-muted"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-        {search && (
-          <button onClick={() => setSearch('')} className="text-muted hover:text-slate-900 text-xs font-medium">
-            Clear
-          </button>
-        )}
+      {/* Filters */}
+      <div className="flex items-center gap-3 mb-6">
+        <div className="relative flex-1 max-w-md">
+          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-muted">
+            <HugeiconsIcon icon={Search01Icon} className="w-4 h-4" />
+          </div>
+          <input
+            type="text"
+            placeholder="Search by slug, URL or domain..."
+            className="w-full bg-neutral-50 border border-neutral-200 rounded-xl pl-11 pr-4 py-2.5 text-sm focus:outline-none focus:border-black transition-colors"
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1) }}
+          />
+        </div>
+        <button className="p-2.5 bg-neutral-50 border border-neutral-200 rounded-xl hover:bg-neutral-100 transition-colors">
+          <HugeiconsIcon icon={FilterIcon} className="w-4 h-4 text-muted" />
+        </button>
       </div>
 
-      {/* Links Table */}
-      <div className="bg-white rounded-2xl border border-neutral-200 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-neutral-200 bg-neutral-50/50">
-                <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Slug</th>
-                <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Destination</th>
-                <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Domain</th>
-                <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Clicks</th>
-                <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Bots</th>
-                <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Status</th>
-                <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Created</th>
-                <th className="text-right px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Actions</th>
+      {/* Table */}
+      <div className="bg-white border border-neutral-200 rounded-2xl overflow-hidden">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-neutral-200 bg-neutral-50/50">
+              <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Slug</th>
+              <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Destination</th>
+              <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Domain</th>
+              <th className="text-center px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Clicks</th>
+              <th className="text-center px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Bots</th>
+              <th className="text-center px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Status</th>
+              <th className="text-right px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {links.map((link) => (
+              <tr key={link.id} className="border-b border-neutral-100 hover:bg-neutral-50/50 transition-colors">
+                <td className="px-6 py-4">
+                  <span className="font-mono font-bold text-sm">{link.slug}</span>
+                </td>
+                <td className="px-6 py-4">
+                  <span className="text-sm text-muted truncate block max-w-[200px]">{link.destinationUrl}</span>
+                </td>
+                <td className="px-6 py-4">
+                  <span className="text-sm text-muted">{link.domain ?? '-'}</span>
+                </td>
+                <td className="px-6 py-4 text-center font-bold text-sm">{link.totalClicks.toLocaleString()}</td>
+                <td className="px-6 py-4 text-center">
+                  <span className="text-sm font-medium text-error">{link.botClicks.toLocaleString()}</span>
+                </td>
+                <td className="px-6 py-4 text-center">
+                  <span className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full ${
+                    link.status === 'active' ? 'bg-success/10 text-success' :
+                    link.status === 'paused' ? 'bg-warning/10 text-warning' :
+                    'bg-neutral-100 text-muted'
+                  }`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${
+                      link.status === 'active' ? 'bg-success' :
+                      link.status === 'paused' ? 'bg-warning' :
+                      'bg-muted'
+                    }`} />
+                    {link.status}
+                  </span>
+                </td>
+                <td className="px-6 py-4">
+                  <div className="flex items-center justify-end gap-1">
+                    <button onClick={() => handleCopySlug(link)} className="p-2 rounded-lg hover:bg-neutral-100 transition-colors" title="Copy URL">
+                      <HugeiconsIcon icon={Copy01Icon} className="w-4 h-4 text-muted" />
+                    </button>
+                    <button onClick={() => setEditTarget(link)} className="p-2 rounded-lg hover:bg-neutral-100 transition-colors" title="Edit">
+                      <HugeiconsIcon icon={Edit01Icon} className="w-4 h-4 text-muted" />
+                    </button>
+                    <button onClick={() => handleDelete(link.id)} className="p-2 rounded-lg hover:bg-error/10 transition-colors" title="Delete">
+                      <HugeiconsIcon icon={Cancel01Icon} className="w-4 h-4 text-error" />
+                    </button>
+                  </div>
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {filteredLinks.map((link) => (
-                <tr key={link.id} className="border-b border-neutral-100 hover:bg-neutral-50/50 transition-colors">
-                  <td className="px-6 py-4">
-                    <button 
-                      onClick={() => handleCopySlug(link)}
-                      className="font-mono text-sm font-bold text-primary hover:text-primary-hover flex items-center gap-1 group"
-                    >
-                      {link.slug}
-                      <HugeiconsIcon icon={Copy01Icon} className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </button>
-                  </td>
-                  <td className="px-6 py-4 max-w-50">
-                    <a href={link.destinationUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-sm text-muted hover:text-slate-900 transition-colors truncate">
-                      {truncateUrl(link.destinationUrl, 35)}
-                      <HugeiconsIcon icon={ExternalLinkIcon} className="w-3 h-3 shrink-0" />
-                    </a>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-2">
-                      <div className={`w-2 h-2 rounded-full ${
-                        link.domainHealth === 'healthy' ? 'bg-neutral-400' :
-                        link.domainHealth === 'degraded' ? 'bg-warning' : 'bg-error'
-                      }`} />
-                      <span className="text-sm font-medium text-slate-900 truncate">{link.domain}</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className="text-sm font-bold text-slate-900">{link.totalClicks.toLocaleString()}</span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className="text-sm font-bold text-error">{link.botClicks.toLocaleString()}</span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <button onClick={() => handleToggleStatus(link)} className={`px-2.5 py-1 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-colors ${
-                      link.status === 'active' 
-                        ? 'bg-neutral-100 text-black hover:bg-neutral-200' 
-                        : 'bg-neutral-100 text-muted hover:bg-neutral-200'
-                    }`}>
-                      {link.status === 'active' ? <HugeiconsIcon icon={EyeIcon} className="w-3 h-3 inline mr-1" /> : <HugeiconsIcon icon={ViewOffIcon} className="w-3 h-3 inline mr-1" />}
-                      {link.status}
-                    </button>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className="text-xs text-muted">{formatRelativeTime(link.createdAt)}</span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center justify-end gap-1">
-                      <button 
-                        onClick={() => handleCopySlug(link)}
-                        className="p-2 rounded-lg hover:bg-neutral-100 text-muted hover:text-black transition-colors"
-                        title="Copy URL"
-                      >
-                        <HugeiconsIcon icon={Copy01Icon} className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onClick={() => setEditTarget(link)}
-                        className="p-2 rounded-lg hover:bg-neutral-100 text-muted hover:text-black transition-colors"
-                        title="Edit"
-                      >
-                        <HugeiconsIcon icon={EditIcon} className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onClick={() => handleDelete(link.id)}
-                        className="p-2 rounded-lg hover:bg-error/10 text-muted hover:text-error transition-colors"
-                        title="Delete"
-                      >
-                        <HugeiconsIcon icon={Delete02Icon} className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {filteredLinks.length === 0 && (
-          <div className="py-16 text-center">
-            <p className="text-muted text-sm">No links found matching your search.</p>
-          </div>
-        )}
-
-        {/* Pagination Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-neutral-200 bg-neutral-50/30">
-          <span className="text-xs text-muted">
-            Showing {filteredLinks.length} of {links.length} links
-          </span>
-          <div className="flex items-center gap-1">
-            <button className="px-3 py-1.5 text-xs font-bold rounded-lg border border-neutral-200 hover:bg-neutral-50 transition-colors">
-              Prev
-            </button>
-            <button className="px-3 py-1.5 text-xs font-bold rounded-lg bg-black text-white">
-              1
-            </button>
-            <button className="px-3 py-1.5 text-xs font-bold rounded-lg border border-neutral-200 hover:bg-neutral-50 transition-colors">
-              Next
-            </button>
-          </div>
-        </div>
+            ))}
+          </tbody>
+        </table>
       </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between mt-6">
+          <p className="text-sm text-muted">
+            Page {page} of {totalPages}
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              disabled={page <= 1}
+              onClick={() => setPage(p => p - 1)}
+              className="p-2 rounded-xl border border-neutral-200 hover:bg-neutral-50 disabled:opacity-40 transition-colors"
+            >
+              <HugeiconsIcon icon={ArrowLeft02Icon} className="w-4 h-4" />
+            </button>
+            <button
+              disabled={page >= totalPages}
+              onClick={() => setPage(p => p + 1)}
+              className="p-2 rounded-xl border border-neutral-200 hover:bg-neutral-50 disabled:opacity-40 transition-colors"
+            >
+              <HugeiconsIcon icon={ArrowRight02Icon} className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Create Modal */}
       {showCreateModal && (
-        <CreateLinkModal 
+        <CreateLinkModal
           onClose={() => setShowCreateModal(false)}
           onSubmit={handleCreate}
-          domains={mockLinks.map(l => l.domain).filter((v, i, a) => a.indexOf(v) === i)}
+          domains={domainOptions}
         />
       )}
 
       {/* Edit Modal */}
       {editTarget && (
-        <CreateLinkModal 
+        <CreateLinkModal
           onClose={() => setEditTarget(null)}
           onSubmit={handleEdit}
-          domains={mockLinks.map(l => l.domain).filter((v, i, a) => a.indexOf(v) === i)}
+          domains={domainOptions}
           initialData={editTarget}
         />
       )}

@@ -1,4 +1,4 @@
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { DashboardSquare01Icon, LinkSquare02Icon, Globe02Icon, Settings01Icon, Logout01Icon, HelpCircleIcon, ChevronRightIcon } from '@hugeicons/core-free-icons'
 import { cn } from '@/lib/utils'
@@ -29,6 +29,13 @@ const NavItem = ({ to, icon: Icon, label, active }: NavItemProps) => (
 
 export function Sidebar({ onClose: _onClose }: { onClose: () => void }) {
   const location = useLocation()
+  const navigate = useNavigate()
+
+  const handleSignOut = () => {
+    localStorage.removeItem('token')
+    localStorage.removeItem('refresh')
+    navigate('/auth/login')
+  }
 
   return (
     <aside className="w-72 h-full bg-sidebar flex flex-col p-6 border-r border-neutral-800">
@@ -84,10 +91,10 @@ export function Sidebar({ onClose: _onClose }: { onClose: () => void }) {
           <HugeiconsIcon icon={HelpCircleIcon} className="w-5 h-5" />
           <span className="font-semibold text-sm">Help & Docs</span>
         </button>
-        <Link to="/" className="flex items-center gap-3 px-4 py-3 w-full text-neutral-400 hover:text-error transition-colors group">
+        <button onClick={handleSignOut} className="flex items-center gap-3 px-4 py-3 w-full text-neutral-400 hover:text-error transition-colors group">
           <HugeiconsIcon icon={Logout01Icon} className="w-5 h-5" />
           <span className="font-semibold text-sm">Sign Out</span>
-        </Link>
+        </button>
       </div>
     </aside>
   )

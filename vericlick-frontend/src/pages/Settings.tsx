@@ -1,9 +1,38 @@
+import { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Settings01Icon, Notification02Icon, ShieldIcon, UserIcon } from '@hugeicons/core-free-icons'
-import { useState } from 'react'
+import toast from 'react-hot-toast'
+import { fetchWorkspace, updateWorkspace } from '@/api/workspace'
+
+type Tab = 'general' | 'notifications' | 'security'
 
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<'general' | 'notifications' | 'security'>('general')
+  const queryClient = useQueryClient()
+  const [activeTab, setActiveTab] = useState<Tab>('general')
+
+  const { data: workspace } = useQuery({
+    queryKey: ['workspace'],
+    queryFn: fetchWorkspace,
+  })
+
+  const [workspaceName, setWorkspaceName] = useState('')
+
+  const updateMutation = useMutation({
+    mutationFn: updateWorkspace,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['workspace'] })
+      toast.success('Workspace updated')
+    },
+  })
+
+  const handleSaveWorkspace = () => {
+    if (!workspaceName.trim()) {
+      toast.error('Workspace name cannot be empty')
+      return
+    }
+    updateMutation.mutate(workspaceName)
+  }
 
   const tabs = [
     { id: 'general' as const, label: 'General', icon: Settings01Icon },
@@ -42,7 +71,7 @@ export default function SettingsPage() {
         </div>
 
         {/* Content */}
-        <div className="flex-1">
+        <div className="flex-1 max-w-2xl">
           {activeTab === 'general' && (
             <div className="bg-white rounded-2xl border border-border p-8 shadow-sm space-y-6">
               <div>
@@ -55,7 +84,8 @@ export default function SettingsPage() {
                   <label className="text-sm font-medium text-slate-700 ml-1">Workspace name</label>
                   <input
                     type="text"
-                    defaultValue="VeriClick Pro"
+                    defaultValue={workspace?.name ?? ''}
+                    onChange={(e) => setWorkspaceName(e.target.value)}
                     className="w-full bg-slate-50 border border-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-black transition-colors"
                   />
                 </div>
@@ -72,8 +102,12 @@ export default function SettingsPage() {
               </div>
 
               <div className="flex justify-end pt-4 border-t border-border">
-                <button className="bg-black hover:bg-neutral-800 text-white px-6 py-2.5 rounded-xl text-sm font-bold transition-all">
-                  Save changes
+                <button
+                  onClick={handleSaveWorkspace}
+                  disabled={updateMutation.isPending}
+                  className="bg-black hover:bg-neutral-800 text-white px-6 py-2.5 rounded-xl text-sm font-bold transition-all disabled:opacity-50"
+                >
+                  {updateMutation.isPending ? 'Saving...' : 'Save changes'}
                 </button>
               </div>
             </div>
@@ -107,7 +141,10 @@ export default function SettingsPage() {
               </div>
 
               <div className="flex justify-end pt-4 border-t border-border">
-                <button className="bg-black hover:bg-neutral-800 text-white px-6 py-2.5 rounded-xl text-sm font-bold transition-all">
+                <button
+                  onClick={() => toast.success('Notification preferences saved')}
+                  className="bg-black hover:bg-neutral-800 text-white px-6 py-2.5 rounded-xl text-sm font-bold transition-all"
+                >
                   Save preferences
                 </button>
               </div>

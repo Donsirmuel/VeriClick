@@ -4,7 +4,7 @@ import { Cancel01Icon } from '@hugeicons/core-free-icons'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
-import type { TrackingLink, LinkCreateInput, LinkStatus } from '@/types'
+import type { TrackingLink, LinkCreateInput } from '@/types'
 
 const createLinkSchema = z.object({
   slug: z.string().min(0).max(50).optional().or(z.literal('')),
@@ -28,13 +28,13 @@ export function CreateLinkModal({ onClose, onSubmit, domains, initialData }: Cre
     defaultValues: initialData ? {
       slug: initialData.slug,
       destinationUrl: initialData.destinationUrl,
-      domain: initialData.domain,
-      status: initialData.status,
+      domain: initialData.domain ?? domains[0] ?? '',
+      status: (initialData.status === 'disabled' ? 'paused' : initialData.status) as 'active' | 'paused',
     } : {
       slug: '',
       destinationUrl: '',
       domain: domains[0] || '',
-      status: 'active' as LinkStatus,
+      status: 'active' as 'active' | 'paused',
     }
   })
 
@@ -55,7 +55,7 @@ export function CreateLinkModal({ onClose, onSubmit, domains, initialData }: Cre
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit((data) => onSubmit(data as LinkCreateInput))} className="p-6 space-y-5">
+        <form onSubmit={handleSubmit((data) => onSubmit(data as unknown as LinkCreateInput))} className="p-6 space-y-5">
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">Slug</label>
             <div className="flex gap-2">

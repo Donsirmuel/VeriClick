@@ -1,10 +1,15 @@
-import { Outlet } from 'react-router-dom'
+import { Outlet, Navigate } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { TopBar } from './TopBar'
 import { useState } from 'react'
 
 export default function DashboardLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const token = localStorage.getItem('token')
+
+  if (!token) {
+    return <Navigate to="/auth/login" replace />
+  }
 
   return (
     <div className="min-h-screen bg-background flex">
