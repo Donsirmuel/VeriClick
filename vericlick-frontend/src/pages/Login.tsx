@@ -9,7 +9,7 @@ import { login } from '@/api/auth'
 import { parseApiError } from '@/lib/errors'
 
 export default function Login() {
-  const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -17,14 +17,20 @@ export default function Login() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!username.trim() || !password) {
+      toast.error('Please enter your username and password')
+      return
+    }
     setLoading(true)
     try {
-      const res = await login(email, password)
+      const res = await login(username, password)
       localStorage.setItem('token', res.access)
       localStorage.setItem('refresh', res.refresh)
+      toast.success('Signed in successfully')
       navigate('/app/dashboard')
     } catch (err) {
-      toast.error(parseApiError(err))
+      const message = parseApiError(err)
+      toast.error(message || 'Invalid username or password. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -93,7 +99,7 @@ export default function Login() {
 
           <div className="mb-10">
             <h1 className="text-3xl font-bold text-white mb-2">Welcome back</h1>
-            <p className="text-neutral-400">Sign in to your workspace to manage your traffic.</p>
+            <p className="text-neutral-400">Sign in to your workspace to manage your links and traffic.</p>
           </div>
 
           <div className="bg-neutral-950 border border-neutral-800 rounded-2xl p-8">
@@ -107,10 +113,11 @@ export default function Login() {
                   <input
                     type="text"
                     required
-                    placeholder="username"
+                    placeholder="Enter your username"
                     className="w-full bg-black border border-neutral-800 rounded-xl pl-12 pr-4 py-3 text-white focus:outline-none focus:border-white/50 focus:ring-1 focus:ring-white/10 transition-all placeholder:text-neutral-600"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    autoComplete="username"
                   />
                 </div>
               </div>
@@ -131,6 +138,7 @@ export default function Login() {
                     className="w-full bg-black border border-neutral-800 rounded-xl pl-12 pr-12 py-3 text-white focus:outline-none focus:border-white/50 focus:ring-1 focus:ring-white/10 transition-all placeholder:text-neutral-600"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="current-password"
                   />
                   <button
                     type="button"
@@ -149,7 +157,7 @@ export default function Login() {
               >
                 {loading ? 'Signing in...' : (
                   <>
-                    Sign in to Dashboard
+                    Sign in
                     <HugeiconsIcon icon={ArrowRight01Icon} className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                   </>
                 )}
@@ -171,7 +179,7 @@ export default function Login() {
             <div className="mt-6 pt-6 border-t border-neutral-800 text-center">
               <p className="text-sm text-neutral-400">
                 Don't have an account?{' '}
-                <Link to="/auth/register" className="text-white hover:text-neutral-300 font-bold transition-colors">Create account</Link>
+                <Link to="/auth/register" className="text-white hover:text-neutral-300 font-bold transition-colors">Create one here</Link>
               </p>
             </div>
           </div>
@@ -179,7 +187,7 @@ export default function Login() {
           <div className="mt-8 flex items-center justify-center gap-6 text-xs text-neutral-500">
             <a href="#" className="hover:text-white transition-colors">Security Policy</a>
             <a href="#" className="hover:text-white transition-colors">System Status</a>
-            <a href="#" className="hover:text-white transition-colors">Terms</a>
+            <a href="#" className="hover:text-white transition-colors">Terms of Service</a>
           </div>
         </div>
       </div>

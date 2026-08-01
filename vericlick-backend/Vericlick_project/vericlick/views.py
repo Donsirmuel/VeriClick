@@ -1,19 +1,22 @@
 from datetime import timedelta
-from django.db.models import Count, Q
+from django.db.models import Count, Q, F
 from django.db.models.functions import TruncDate
+from django.conf import settings
 from django.utils import timezone
 from django.contrib.auth.models import User
 from django.contrib.auth.tokens import default_token_generator
+from django.shortcuts import get_object_or_404
+from django.http import HttpResponse, HttpResponseRedirect
 
 from rest_framework import viewsets, status
-from rest_framework.decorators import api_view, permission_classes, action
+from rest_framework.decorators import api_view, permission_classes, action, throttle_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
 from rest_framework_simplejwt.tokens import RefreshToken
 from decouple import config
 
-from .models import Workspace, DomainRegistry, TrackingLink, ClickLog
+from .models import Workspace, DomainRegistry, TrackingLink, ClickLog, IPRule, TrackerEvent
 from .serializers import (
     UserSerializer,
     WorkspaceSerializer,
@@ -21,16 +24,17 @@ from .serializers import (
     DomainRegistrySerializer,
     TrackingLinkSerializer,
     ClickLogSerializer,
+    IPRuleSerializer,
+    TrackerEventSerializer,
+    BlockedIPSerializer,
 )
+from .version import get_version
+from .services import classify_request
 
-
-#Helpers 
 
 def get_user_workspace(user):
     return Workspace.objects.filter(owner=user).first()
 
-
-#Workspace 
 
 @api_view(['GET', 'PATCH'])
 @permission_classes([IsAuthenticated])
@@ -49,15 +53,75 @@ def workspace_detail(request):
     return Response(serializer.data)
 
 
-#Health 
-
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def health_check(request):
+    return Response({'status': 'ok', 'version': get_version()})
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+@throttle_classes([])
+def serve_tracker_script(request):
+    try:
+        with open(settings.TRACKER_SCRIPT_PATH, 'r', encoding='utf-8') as f:
+            template = f.read()
+    except (OSError, FileNotFoundError):
+        return Response(
+            {'errors': [{'field': 'script', 'detail': 'Tracker script not found'}]},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+    api_base = request.build_absolute_uri('/api/')
+    script = template.replace('__API_BASE_URL__', api_base)
+    response = HttpResponse(script, content_type='application/javascript')
+    response['Cache-Control'] = 'public, max-age=3600'
+    return response
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+@throttle_classes([])
+def receive_tracker_event(request):
+    site_id = request.data.get('site_id')
+    if not site_id:
+        return Response(
+            {'errors': [{'field': 'site_id', 'detail': 'site_id is required'}]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        workspace = Workspace.objects.get(id=site_id)
+    except (Workspace.DoesNotExist, ValueError):
+        return Response(
+            {'errors': [{'field': 'site_id', 'detail': 'Invalid workspace'}]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    ip = request.META.get('REMOTE_ADDR', '127.0.0.1')
+    forwarded = request.META.get('HTTP_X_FORWARDED_FOR')
+    if forwarded:
+        ip = forwarded.split(',')[0].strip()
+
+    data = {
+        'workspace': workspace.id,
+        'page_url': request.data.get('page_url'),
+        'referrer': request.data.get('referrer', ''),
+        'signals': request.data.get('signals') or {},
+        'engagement': request.data.get('engagement') or {},
+        'ip': ip,
+        'user_agent': request.META.get('HTTP_USER_AGENT', ''),
+    }
+
+    serializer = TrackerEventSerializer(data=data)
+    if not serializer.is_valid():
+        return Response(
+            {'errors': [{'field': field, 'detail': str(msg)} for field, msg in serializer.errors.items()]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    serializer.save(workspace=workspace)
     return Response({'status': 'ok'})
 
-
-#Auth
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
@@ -78,6 +142,7 @@ def google_login(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    import secrets
     import urllib.request
     import json
 
@@ -123,7 +188,7 @@ def google_login(request):
         user = User.objects.create_user(
             username=username,
             email=email,
-            password=User.objects.make_random_password(),
+            password=secrets.token_urlsafe(16),
         )
 
     refresh = RefreshToken.for_user(user)
@@ -152,8 +217,6 @@ def password_reset_request(request):
     try:
         user = User.objects.get(email=email)
         token = default_token_generator.make_token(user)
-        # In production, send email with reset link
-        # For dev, return the token directly
         return Response({'token': token, 'uid': user.pk, 'email': email})
     except User.DoesNotExist:
         return Response({'error': 'No user with this email address'}, status=status.HTTP_400_BAD_REQUEST)
@@ -189,8 +252,6 @@ def password_reset_confirm(request):
         return Response({'error': 'Invalid user'}, status=status.HTTP_400_BAD_REQUEST)
 
 
-#Dashboard
-
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def dashboard_stats(request):
@@ -206,6 +267,8 @@ def dashboard_stats(request):
     )
     total_clicks_24h = clicks_24h.count()
     bot_clicks_24h = clicks_24h.filter(is_bot=True).count()
+    blocked_24h = clicks_24h.filter(decision=ClickLog.Decision.BLOCKED).count()
+    challenged_24h = clicks_24h.filter(decision=ClickLog.Decision.CHALLENGED).count()
 
     active_links = TrackingLink.objects.filter(workspace=workspace, status=TrackingLink.Status.ACTIVE).count()
     domains_healthy = DomainRegistry.objects.filter(
@@ -221,6 +284,9 @@ def dashboard_stats(request):
     data = {
         'totalClicks24h': total_clicks_24h,
         'botTrafficBlocked': bot_clicks_24h,
+        'blocked': blocked_24h,
+        'challenged': challenged_24h,
+        'allowed': total_clicks_24h - bot_clicks_24h,
         'botTrafficPercentage': round(
             (bot_clicks_24h / total_clicks_24h * 100) if total_clicks_24h else 0, 1
         ),
@@ -228,6 +294,7 @@ def dashboard_stats(request):
         'domainsHealthy': domains_healthy,
         'domainsDegraded': domains_degraded,
         'domainsBlacklisted': domains_blacklisted,
+        'lastDomainScan': workspace.last_domain_scan_at,
     }
     return Response(data)
 
@@ -270,6 +337,34 @@ def dashboard_traffic(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+def blocked_ips(request):
+    workspace = get_user_workspace(request.user)
+    if not workspace:
+        return Response({'error': 'No workspace found'}, status=status.HTTP_404_NOT_FOUND)
+
+    qs = ClickLog.objects.select_related('link').filter(
+        link__workspace=workspace,
+        decision=ClickLog.Decision.BLOCKED,
+    )
+
+    search = request.query_params.get('search', '').strip()
+    if search:
+        qs = qs.filter(ip__icontains=search)
+
+    qs = qs.order_by('-created_at')[:500]
+
+    paginator = PageNumberPagination()
+    paginator.page_size = 50
+    paginator.page_size_query_param = 'size'
+    paginator.max_page_size = 100
+    page = paginator.paginate_queryset(qs, request)
+
+    serializer = BlockedIPSerializer(page, many=True)
+    return paginator.get_paginated_response(serializer.data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def dashboard_activity(request):
     workspace = get_user_workspace(request.user)
     if not workspace:
@@ -279,8 +374,6 @@ def dashboard_activity(request):
     serializer = ClickLogSerializer(clicks, many=True)
     return Response(serializer.data)
 
-
-#Links (ViewSet)
 
 class TrackingLinkPagination(PageNumberPagination):
     page_size = 20
@@ -313,8 +406,6 @@ class TrackingLinkViewSet(viewsets.ModelViewSet):
         serializer.save(workspace=workspace)
 
 
-#Domains (ViewSet)
-
 class DomainRegistryViewSet(viewsets.ModelViewSet):
     queryset = DomainRegistry.objects.all()
     serializer_class = DomainRegistrySerializer
@@ -330,11 +421,95 @@ class DomainRegistryViewSet(viewsets.ModelViewSet):
         workspace = get_user_workspace(self.request.user)
         if not workspace:
             raise PermissionError('No workspace found')
-        serializer.save(workspace=workspace)
+        domain = serializer.save(workspace=workspace)
+        domain.run_health_check()
 
     @action(detail=True, methods=['post'])
     def recheck(self, request, pk=None):
         domain = self.get_object()
-        domain.last_checked = timezone.now()
-        domain.save(update_fields=['last_checked'])
-        return Response({'status': 'ok', 'last_checked': domain.last_checked})
+        domain.run_health_check()
+        return Response({'status': 'ok', 'health_status': domain.health_status, 'last_checked': domain.last_checked})
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def redirect_click(request, slug):
+    link = get_object_or_404(TrackingLink, slug=slug, status=TrackingLink.Status.ACTIVE)
+
+    ip = request.META.get('REMOTE_ADDR', '127.0.0.1')
+    forwarded = request.META.get('HTTP_X_FORWARDED_FOR')
+    if forwarded:
+        ip = forwarded.split(',')[0].strip()
+    user_agent = request.META.get('HTTP_USER_AGENT', '')
+    workspace = link.workspace
+
+    result = classify_request(link, ip, user_agent, workspace)
+
+    ClickLog.objects.create(
+        link=link,
+        ip=ip,
+        user_agent=user_agent,
+        is_bot=result['is_bot'],
+        reason=result['reason'],
+        decision=result['decision'],
+        matched_rule=result['matched_rule'],
+    )
+
+    if result['is_bot']:
+        TrackingLink.objects.filter(id=link.id).update(bot_clicks=F('bot_clicks') + 1)
+    TrackingLink.objects.filter(id=link.id).update(total_clicks=F('total_clicks') + 1)
+
+    if result['decision'] in ('blocked', 'challenged'):
+        return Response(
+            {'error': 'Access denied', 'reason': result['reason']},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    return HttpResponseRedirect(redirect_to=link.destination_url)
+
+
+class IPRuleViewSet(viewsets.ModelViewSet):
+    queryset = IPRule.objects.all()
+    serializer_class = IPRuleSerializer
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        workspace = get_user_workspace(self.request.user)
+        if workspace:
+            qs = qs.filter(workspace=workspace)
+        return qs
+
+    def perform_create(self, serializer):
+        workspace = get_user_workspace(self.request.user)
+        if not workspace:
+            raise PermissionError('No workspace found')
+        serializer.save(workspace=workspace, created_by=self.request.user)
+
+    @action(detail=True, methods=['post'])
+    def whitelist(self, request, pk=None):
+        workspace = get_user_workspace(self.request.user)
+        if not workspace:
+            return Response({'error': 'No workspace found'}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            click = ClickLog.objects.select_related('link').get(id=pk, link__workspace=workspace)
+        except ClickLog.DoesNotExist:
+            return Response(
+                {'errors': [{'field': 'id', 'detail': 'Blocked entry not found'}]},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        rule, created = IPRule.objects.get_or_create(
+            workspace=workspace,
+            ip_or_cidr=click.ip,
+            action=IPRule.Action.ALLOW,
+            defaults={
+                'reason': 'Whitelisted from blocked list',
+                'created_by': self.request.user,
+            },
+        )
+        if not created:
+            rule.is_active = True
+            rule.save(update_fields=['is_active'])
+
+        return Response(IPRuleSerializer(rule).data)

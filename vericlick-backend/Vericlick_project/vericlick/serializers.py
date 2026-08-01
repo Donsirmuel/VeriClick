@@ -1,6 +1,16 @@
+import secrets
+import string
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import Workspace, DomainRegistry, TrackingLink, ClickLog
+from .models import Workspace, DomainRegistry, TrackingLink, ClickLog, IPRule, TrackerEvent
+
+
+def _generate_slug(length=7):
+    alphabet = string.ascii_lowercase + string.digits
+    while True:
+        slug = ''.join(secrets.choice(alphabet) for _ in range(length))
+        if not TrackingLink.objects.filter(slug=slug).exists():
+            return slug
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -12,7 +22,7 @@ class UserSerializer(serializers.ModelSerializer):
 class WorkspaceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Workspace
-        fields = ['id', 'name', 'created_at']
+        fields = ['id', 'name', 'created_at', 'last_domain_scan_at']
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -47,6 +57,10 @@ class TrackingLinkSerializer(serializers.ModelSerializer):
     domain_health = serializers.CharField(
         source='domain.health_status', read_only=True, default=None
     )
+    domain = serializers.SlugRelatedField(
+        slug_field='domain', queryset=DomainRegistry.objects.all(), allow_null=True, required=False,
+    )
+    slug = serializers.CharField(required=False, allow_blank=True, max_length=100)
 
     class Meta:
         model = TrackingLink
@@ -56,6 +70,11 @@ class TrackingLinkSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'total_clicks', 'bot_clicks', 'created_at', 'updated_at']
 
+    def create(self, validated_data):
+        if not validated_data.get('slug'):
+            validated_data['slug'] = _generate_slug()
+        return super().create(validated_data)
+
 
 class ClickLogSerializer(serializers.ModelSerializer):
     slug = serializers.CharField(source='link.slug', read_only=True)
@@ -63,4 +82,38 @@ class ClickLogSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ClickLog
-        fields = ['id', 'ip', 'country', 'device', 'reason', 'is_bot', 'slug', 'time', 'created_at']
+        fields = ['id', 'ip', 'country', 'device', 'reason', 'is_bot', 'decision', 'matched_rule', 'slug', 'time', 'created_at']
+
+
+class IPRuleSerializer(serializers.ModelSerializer):
+    created_by_username = serializers.CharField(source='created_by.username', read_only=True, default=None)
+
+    class Meta:
+        model = IPRule
+        fields = [
+            'id', 'ip_or_cidr', 'action', 'reason', 'expires_at',
+            'is_active', 'created_by', 'created_by_username',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'created_by', 'created_by_username', 'created_at', 'updated_at']
+
+
+class TrackerEventSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TrackerEvent
+        fields = [
+            'id', 'workspace', 'page_url', 'referrer', 'signals',
+            'engagement', 'ip', 'user_agent', 'created_at',
+        ]
+        read_only_fields = ['id', 'created_at']
+
+
+class BlockedIPSerializer(serializers.ModelSerializer):
+    slug = serializers.CharField(source='link.slug', read_only=True)
+
+    class Meta:
+        model = ClickLog
+        fields = [
+            'id', 'ip', 'reason', 'decision', 'is_bot',
+            'matched_rule', 'slug', 'country', 'created_at',
+        ]

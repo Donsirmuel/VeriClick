@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /auth/
+Disallow: /app/
+
+Sitemap: https://vericlick.io/sitemap.xml

@@ -5,12 +5,20 @@ import {
   PlusSignIcon, Search01Icon, FilterIcon,
   Copy01Icon, Edit01Icon, Cancel01Icon,
   ArrowRight02Icon, ArrowLeft02Icon,
+  LinkSquare02Icon,
 } from '@hugeicons/core-free-icons'
 import toast from 'react-hot-toast'
 import { CreateLinkModal } from '@/components/links/CreateLinkModal'
 import { fetchLinks, createLink, updateLink, deleteLink } from '@/api/links'
 import { fetchDomains } from '@/api/domains'
+import { EmptyState } from '@/components/ui/EmptyState'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import type { TrackingLink, LinkCreateInput } from '@/types'
+
+const BACKEND_ORIGIN = (() => {
+  const base = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
+  return base.replace(/\/api\/?$/, '')
+})()
 
 export default function LinksPage() {
   const queryClient = useQueryClient()
@@ -18,6 +26,7 @@ export default function LinksPage() {
   const [page, setPage] = useState(1)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [editTarget, setEditTarget] = useState<TrackingLink | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<TrackingLink | null>(null)
 
   const { data: linksData } = useQuery({
     queryKey: ['links', search, page],
@@ -55,6 +64,7 @@ export default function LinksPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['links'] })
       toast.success('Link deleted')
+      setDeleteTarget(null)
     },
   })
 
@@ -67,16 +77,15 @@ export default function LinksPage() {
     editMutation.mutate({ id: editTarget.id, input })
   }
 
-  const handleDelete = (id: string) => {
-    if (confirm('Delete this link?')) {
-      deleteMutation.mutate(id)
-    }
+  const handleDelete = () => {
+    if (!deleteTarget) return
+    deleteMutation.mutate(deleteTarget.id)
   }
 
   const handleCopySlug = async (link: TrackingLink) => {
     const fullUrl = link.domain
       ? `https://${link.domain}/${link.slug}`
-      : `${window.location.origin}/r/${link.slug}`
+      : `${BACKEND_ORIGIN}/r/${link.slug}`
     try {
       await navigator.clipboard.writeText(fullUrl)
       toast.success('Copied to clipboard')
@@ -89,11 +98,10 @@ export default function LinksPage() {
 
   return (
     <div>
-      {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Tracking Links</h1>
-          <p className="text-sm text-muted mt-1">Manage your campaign links</p>
+          <p className="text-sm text-muted mt-1">Each link has a short code (called a <strong>slug</strong>) like <code className="text-xs bg-neutral-100 px-1.5 py-0.5 rounded">abc123</code> that goes in your URL — e.g. <code className="text-xs bg-neutral-100 px-1.5 py-0.5 rounded">your.domain/r/abc123</code>. Links are attached to a domain.</p>
         </div>
         <button
           onClick={() => setShowCreateModal(true)}
@@ -104,7 +112,6 @@ export default function LinksPage() {
         </button>
       </div>
 
-      {/* Filters */}
       <div className="flex items-center gap-3 mb-6">
         <div className="relative flex-1 max-w-md">
           <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-muted">
@@ -123,70 +130,81 @@ export default function LinksPage() {
         </button>
       </div>
 
-      {/* Table */}
-      <div className="bg-white border border-neutral-200 rounded-2xl overflow-hidden">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-neutral-200 bg-neutral-50/50">
-              <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Slug</th>
-              <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Destination</th>
-              <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Domain</th>
-              <th className="text-center px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Clicks</th>
-              <th className="text-center px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Bots</th>
-              <th className="text-center px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Status</th>
-              <th className="text-right px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {links.map((link) => (
-              <tr key={link.id} className="border-b border-neutral-100 hover:bg-neutral-50/50 transition-colors">
-                <td className="px-6 py-4">
-                  <span className="font-mono font-bold text-sm">{link.slug}</span>
-                </td>
-                <td className="px-6 py-4">
-                  <span className="text-sm text-muted truncate block max-w-[200px]">{link.destinationUrl}</span>
-                </td>
-                <td className="px-6 py-4">
-                  <span className="text-sm text-muted">{link.domain ?? '-'}</span>
-                </td>
-                <td className="px-6 py-4 text-center font-bold text-sm">{link.totalClicks.toLocaleString()}</td>
-                <td className="px-6 py-4 text-center">
-                  <span className="text-sm font-medium text-error">{link.botClicks.toLocaleString()}</span>
-                </td>
-                <td className="px-6 py-4 text-center">
-                  <span className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full ${
-                    link.status === 'active' ? 'bg-success/10 text-success' :
-                    link.status === 'paused' ? 'bg-warning/10 text-warning' :
-                    'bg-neutral-100 text-muted'
-                  }`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${
-                      link.status === 'active' ? 'bg-success' :
-                      link.status === 'paused' ? 'bg-warning' :
-                      'bg-muted'
-                    }`} />
-                    {link.status}
-                  </span>
-                </td>
-                <td className="px-6 py-4">
-                  <div className="flex items-center justify-end gap-1">
-                    <button onClick={() => handleCopySlug(link)} className="p-2 rounded-lg hover:bg-neutral-100 transition-colors" title="Copy URL">
-                      <HugeiconsIcon icon={Copy01Icon} className="w-4 h-4 text-muted" />
-                    </button>
-                    <button onClick={() => setEditTarget(link)} className="p-2 rounded-lg hover:bg-neutral-100 transition-colors" title="Edit">
-                      <HugeiconsIcon icon={Edit01Icon} className="w-4 h-4 text-muted" />
-                    </button>
-                    <button onClick={() => handleDelete(link.id)} className="p-2 rounded-lg hover:bg-error/10 transition-colors" title="Delete">
-                      <HugeiconsIcon icon={Cancel01Icon} className="w-4 h-4 text-error" />
-                    </button>
-                  </div>
-                </td>
+      {links.length === 0 && !linksData ? (
+        <div className="bg-white border border-neutral-200 rounded-2xl p-8 text-center text-sm text-muted">Loading...</div>
+      ) : links.length === 0 ? (
+        <div className="bg-white border border-neutral-200 rounded-2xl">
+          <EmptyState
+            icon={LinkSquare02Icon}
+            title="No links yet"
+            description="Create your first tracking link to start monitoring clicks and blocking bots."
+            action={search ? undefined : { label: 'Create your first link', onClick: () => setShowCreateModal(true) }}
+          />
+        </div>
+      ) : (
+        <div className="bg-white border border-neutral-200 rounded-2xl overflow-hidden">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-neutral-200 bg-neutral-50/50">
+                <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Slug</th>
+                <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Destination</th>
+                <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Domain</th>
+                <th className="text-center px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Clicks</th>
+                <th className="text-center px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Bots</th>
+                <th className="text-center px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Status</th>
+                <th className="text-right px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {links.map((link) => (
+                <tr key={link.id} className="border-b border-neutral-100 hover:bg-neutral-50/50 transition-colors">
+                  <td className="px-6 py-4">
+                    <span className="font-mono font-bold text-sm">{link.slug}</span>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className="text-sm text-muted truncate block max-w-[200px]" title={link.destinationUrl}>{link.destinationUrl}</span>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className="text-sm text-muted">{link.domain ?? <span className="italic text-neutral-300">No domain</span>}</span>
+                  </td>
+                  <td className="px-6 py-4 text-center font-bold text-sm">{link.totalClicks.toLocaleString()}</td>
+                  <td className="px-6 py-4 text-center">
+                    <span className="text-sm font-medium text-error">{link.botClicks.toLocaleString()}</span>
+                  </td>
+                  <td className="px-6 py-4 text-center">
+                    <span className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full ${
+                      link.status === 'active' ? 'bg-success/10 text-success' :
+                      link.status === 'paused' ? 'bg-warning/10 text-warning' :
+                      'bg-neutral-100 text-muted'
+                    }`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${
+                        link.status === 'active' ? 'bg-success' :
+                        link.status === 'paused' ? 'bg-warning' :
+                        'bg-muted'
+                      }`} />
+                      {link.status}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center justify-end gap-1">
+                      <button onClick={() => handleCopySlug(link)} className="p-2 rounded-lg hover:bg-neutral-100 transition-colors" title="Copy URL">
+                        <HugeiconsIcon icon={Copy01Icon} className="w-4 h-4 text-muted" />
+                      </button>
+                      <button onClick={() => setEditTarget(link)} className="p-2 rounded-lg hover:bg-neutral-100 transition-colors" title="Edit">
+                        <HugeiconsIcon icon={Edit01Icon} className="w-4 h-4 text-muted" />
+                      </button>
+                      <button onClick={() => setDeleteTarget(link)} className="p-2 rounded-lg hover:bg-error/10 transition-colors" title="Delete">
+                        <HugeiconsIcon icon={Cancel01Icon} className="w-4 h-4 text-error" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
-      {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between mt-6">
           <p className="text-sm text-muted">
@@ -211,7 +229,6 @@ export default function LinksPage() {
         </div>
       )}
 
-      {/* Create Modal */}
       {showCreateModal && (
         <CreateLinkModal
           onClose={() => setShowCreateModal(false)}
@@ -220,7 +237,6 @@ export default function LinksPage() {
         />
       )}
 
-      {/* Edit Modal */}
       {editTarget && (
         <CreateLinkModal
           onClose={() => setEditTarget(null)}
@@ -229,6 +245,17 @@ export default function LinksPage() {
           initialData={editTarget}
         />
       )}
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title="Delete link"
+        message={`Are you sure you want to delete "${deleteTarget?.slug}"? This action cannot be undone. All click data for this link will be lost.`}
+        confirmLabel="Delete"
+        variant="danger"
+        onConfirm={handleDelete}
+        onCancel={() => setDeleteTarget(null)}
+        loading={deleteMutation.isPending}
+      />
     </div>
   )
 }

@@ -1,11 +1,14 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { Settings01Icon, Notification02Icon, ShieldIcon, UserIcon } from '@hugeicons/core-free-icons'
+import { Settings01Icon, Notification02Icon, ShieldIcon, UserIcon, CodeIcon, Copy01Icon } from '@hugeicons/core-free-icons'
 import toast from 'react-hot-toast'
 import { fetchWorkspace, updateWorkspace } from '@/api/workspace'
+import { apiClient } from '@/api/client'
 
-type Tab = 'general' | 'notifications' | 'security'
+type Tab = 'general' | 'notifications' | 'security' | 'script'
+
+const API_BASE = (apiClient.defaults.baseURL ?? 'http://localhost:8000/api').replace(/\/$/, '')
 
 export default function SettingsPage() {
   const queryClient = useQueryClient()
@@ -34,10 +37,25 @@ export default function SettingsPage() {
     updateMutation.mutate(workspaceName)
   }
 
+  const snippet = workspace
+    ? `<script src="${API_BASE}/tracker.js" data-site="${workspace.id}" async></script>`
+    : ''
+
+  const handleCopySnippet = async () => {
+    if (!snippet) return
+    try {
+      await navigator.clipboard.writeText(snippet)
+      toast.success('Snippet copied to clipboard')
+    } catch {
+      toast.error('Failed to copy')
+    }
+  }
+
   const tabs = [
     { id: 'general' as const, label: 'General', icon: Settings01Icon },
     { id: 'notifications' as const, label: 'Notifications', icon: Notification02Icon },
     { id: 'security' as const, label: 'Security', icon: ShieldIcon },
+    { id: 'script' as const, label: 'Site Script', icon: CodeIcon },
   ]
 
   return (
@@ -170,7 +188,7 @@ export default function SettingsPage() {
                         <div className="text-xs text-muted">Last changed 30 days ago</div>
                       </div>
                     </div>
-                    <button className="text-sm font-bold text-black hover:text-neutral-700 transition-colors">Change</button>
+                    <button onClick={() => toast.success('Password change coming soon')} className="text-sm font-bold text-black hover:text-neutral-700 transition-colors">Change</button>
                   </div>
                 </div>
 
@@ -185,7 +203,7 @@ export default function SettingsPage() {
                         <div className="text-xs text-muted">Add an extra layer of security to your account</div>
                       </div>
                     </div>
-                    <button className="text-sm font-bold text-black hover:text-neutral-700 transition-colors">Enable</button>
+                    <button onClick={() => toast.success('Two-factor authentication coming soon')} className="text-sm font-bold text-black hover:text-neutral-700 transition-colors">Enable</button>
                   </div>
                 </div>
 
@@ -200,9 +218,45 @@ export default function SettingsPage() {
                         <div className="text-xs text-muted">Manage your programmatic access keys</div>
                       </div>
                     </div>
-                    <button className="text-sm font-bold text-black hover:text-neutral-700 transition-colors">Manage</button>
+                    <button onClick={() => toast.success('API key management coming soon')} className="text-sm font-bold text-black hover:text-neutral-700 transition-colors">Manage</button>
                   </div>
                 </div>
+              </div>
+            </div>
+          )}
+          {activeTab === 'script' && (
+            <div className="bg-white rounded-2xl border border-border p-8 shadow-sm space-y-6">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900 mb-1">Site Script</h3>
+                <p className="text-sm text-muted">
+                  Add the script below to pages you own to detect bots and gather engagement signals
+                  (scroll depth, mouse movement, clicks) directly from your site.
+                </p>
+              </div>
+
+              <div className="p-4 rounded-xl bg-neutral-900 text-neutral-100 text-xs font-mono leading-relaxed overflow-x-auto whitespace-nowrap">
+                {snippet || <span className="italic text-neutral-500">Loading workspace…</span>}
+              </div>
+
+              <div className="p-4 rounded-xl border border-border bg-neutral-50 space-y-2">
+                <h4 className="text-sm font-bold text-slate-900">How to install</h4>
+                <ol className="list-decimal pl-5 text-sm text-muted space-y-1 leading-relaxed">
+                  <li>Copy the snippet above.</li>
+                  <li>Paste it in the <span className="font-mono text-xs bg-neutral-100 px-1 rounded">&lt;head&gt;</span> of any page you own, right before the closing tag.</li>
+                  <li>Keep the <span className="font-mono text-xs bg-neutral-100 px-1 rounded">data-site</span> attribute as-is — it links events to this workspace.</li>
+                  <li>The script fires an event after 3 seconds of inactivity or when the visitor leaves the page.</li>
+                </ol>
+              </div>
+
+              <div className="flex justify-end pt-4 border-t border-border">
+                <button
+                  onClick={handleCopySnippet}
+                  disabled={!snippet}
+                  className="bg-black hover:bg-neutral-800 text-white px-6 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all disabled:opacity-50"
+                >
+                  <HugeiconsIcon icon={Copy01Icon} className="w-4 h-4" />
+                  Copy snippet
+                </button>
               </div>
             </div>
           )}

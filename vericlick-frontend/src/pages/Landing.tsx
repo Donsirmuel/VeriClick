@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
   ArrowRight01Icon, ShieldIcon, ZapIcon, Globe02Icon, Chart03Icon, LockIcon, Copy01Icon,
@@ -206,6 +206,13 @@ const USE_CASES = [
 export default function Landing() {
   const [demoUrl, setDemoUrl] = useState('')
   const heroStats = useInView(0.2)
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    if (localStorage.getItem('token')) {
+      navigate('/app/dashboard', { replace: true })
+    }
+  }, [navigate])
 
   const humans = useCountUp(14, 2000)
   const bots = useCountUp(2, 2000)

@@ -1,8 +1,9 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClientProvider } from '@tanstack/react-query'
-import { Toaster } from 'sonner'
+import { Toaster } from 'react-hot-toast'
 import { queryClient } from './lib/queryClient'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { SEOHead } from './components/SEOHead'
 
 import Landing from './pages/Landing'
 import Login from './pages/Login'
@@ -15,11 +16,14 @@ import DashboardLayout from './components/layout/DashboardLayout'
 import Dashboard from './pages/Dashboard'
 import Links from './pages/Links'
 import Domains from './pages/Domains'
+import IpRules from './pages/IpRules'
+import BlockedIPs from './pages/BlockedIPs'
 
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
+        <SEOHead />
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/auth/login" element={<Login />} />
@@ -32,6 +36,8 @@ function App() {
             <Route path="links" element={<ErrorBoundary><Links /></ErrorBoundary>} />
             <Route path="domains" element={<ErrorBoundary><Domains /></ErrorBoundary>} />
             <Route path="settings" element={<ErrorBoundary><Settings /></ErrorBoundary>} />
+            <Route path="ip-rules" element={<ErrorBoundary><IpRules /></ErrorBoundary>} />
+            <Route path="blocked-ips" element={<ErrorBoundary><BlockedIPs /></ErrorBoundary>} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>

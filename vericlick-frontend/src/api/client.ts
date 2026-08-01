@@ -2,6 +2,32 @@ import axios from 'axios'
 
 export const MOCK_MODE = import.meta.env.VITE_MOCK_MODE !== 'false'
 
+function isObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function toSnakeCase(key: string): string {
+  return key.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)
+}
+
+function toCamelCase(key: string): string {
+  return key.replace(/_([a-z])/g, (_, c) => c.toUpperCase())
+}
+
+function transformKeys(obj: unknown, transform: (key: string) => string): unknown {
+  if (Array.isArray(obj)) {
+    return obj.map((item) => transformKeys(item, transform))
+  }
+  if (isObject(obj)) {
+    const result: Record<string, unknown> = {}
+    for (const [key, value] of Object.entries(obj)) {
+      result[transform(key)] = transformKeys(value, transform)
+    }
+    return result
+  }
+  return obj
+}
+
 export const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api',
   timeout: 10000,
@@ -15,14 +41,19 @@ apiClient.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
+  if (config.data && config.method !== 'get' && !(config.data instanceof FormData)) {
+    config.data = transformKeys(config.data, toSnakeCase)
+  }
   return config
 })
 
-let isRefreshing = false
-let pendingRequests: Array<(token: string) => void> = []
-
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    if (response.data && typeof response.data === 'object') {
+      response.data = transformKeys(response.data, toCamelCase) as typeof response.data
+    }
+    return response
+  },
   async (error) => {
     if (!error.response) {
       return Promise.reject(error)
@@ -73,3 +104,6 @@ apiClient.interceptors.response.use(
     return Promise.reject(error)
   },
 )
+
+let isRefreshing = false
+let pendingRequests: Array<(token: string) => void> = []

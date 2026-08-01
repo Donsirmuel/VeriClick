@@ -6,7 +6,7 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 from rest_framework.test import APITestCase, APIClient
 from rest_framework import status
-from .models import Workspace, DomainRegistry, TrackingLink, ClickLog
+from .models import Workspace, DomainRegistry, TrackingLink, ClickLog, IPRule, TrackerEvent
 from .utils import snake_to_camel, camel_to_snake, transform_keys
 
 
@@ -217,7 +217,9 @@ class HealthEndpointTests(APITestCase):
     def test_health_returns_ok(self):
         res = self.client.get('/api/health/')
         self.assertEqual(res.status_code, status.HTTP_200_OK)
-        self.assertEqual(res.json(), {'status': 'ok'})
+        body = res.json()
+        self.assertEqual(body['status'], 'ok')
+        self.assertEqual(body['version'], '1.0.0')
 
     def test_health_allows_unauthenticated(self):
         res = self.client.get('/api/health/')
@@ -412,7 +414,7 @@ class LinksEndpointTests(APITestCase):
         data = {
             'slug': 'with-domain',
             'destinationUrl': 'https://example.com',
-            'domain': str(domain.id),
+            'domain': 'link.example.com',
         }
         res = self.client.post('/api/links/', data, format='json')
         self.assertEqual(res.status_code, status.HTTP_201_CREATED)
@@ -520,8 +522,8 @@ class DomainsEndpointTests(APITestCase):
         self.assertEqual(res.status_code, status.HTTP_201_CREATED)
         body = res.json()
         self.assertEqual(body['domain'], 'tracking.example.com')
-        self.assertEqual(body['healthStatus'], 'healthy')
-        self.assertIsNone(body.get('lastChecked'))
+        self.assertIn(body['healthStatus'], ['healthy', 'degraded'])
+        self.assertIsNotNone(body.get('lastChecked'))
         self.assertEqual(body['linksCount'], 0)
         self.assertIn('id', body)
 
@@ -600,3 +602,541 @@ class DomainsEndpointTests(APITestCase):
         self.client.force_authenticate(user=None)
         res = self.client.get('/api/domains/')
         self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+# IP Rules
+
+class IPRuleModelTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='iprule_user')
+        self.workspace = Workspace.objects.get(owner=self.user)
+
+    def test_create_ip_rule(self):
+        rule = IPRule.objects.create(
+            workspace=self.workspace,
+            ip_or_cidr='192.168.1.1',
+            action=IPRule.Action.DENY,
+            reason='Known bad IP',
+            created_by=self.user,
+        )
+        self.assertIsInstance(rule.id, uuid.UUID)
+        self.assertEqual(str(rule), '192.168.1.1 (deny)')
+        self.assertTrue(rule.is_active)
+        self.assertIsNone(rule.expires_at)
+
+    def test_cidr_rule(self):
+        rule = IPRule.objects.create(
+            workspace=self.workspace,
+            ip_or_cidr='10.0.0.0/8',
+            action=IPRule.Action.ALLOW,
+        )
+        self.assertEqual(rule.action, 'allow')
+
+    def test_inactive_rule_not_returned_by_default(self):
+        IPRule.objects.create(
+            workspace=self.workspace,
+            ip_or_cidr='1.2.3.4',
+            action=IPRule.Action.DENY,
+            is_active=False,
+        )
+        active = IPRule.objects.filter(workspace=self.workspace, is_active=True)
+        self.assertEqual(active.count(), 0)
+
+
+class IPRuleEndpointTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='iprule_api', password='testpass123')
+        self.client.force_authenticate(user=self.user)
+        self.workspace = Workspace.objects.get(owner=self.user)
+
+    def test_list_rules_empty(self):
+        res = self.client.get('/api/ip-rules/')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.json()['results'], [])
+
+    def test_create_deny_rule(self):
+        data = {
+            'ipOrCidr': '203.0.113.5',
+            'action': 'deny',
+            'reason': 'Known scanner',
+        }
+        res = self.client.post('/api/ip-rules/', data, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        body = res.json()
+        self.assertEqual(body['ipOrCidr'], '203.0.113.5')
+        self.assertEqual(body['action'], 'deny')
+        self.assertEqual(body['reason'], 'Known scanner')
+        self.assertIsNotNone(body['createdByUsername'])
+
+    def test_create_allow_rule(self):
+        data = {
+            'ipOrCidr': '10.0.0.0/8',
+            'action': 'allow',
+            'reason': 'Internal network',
+        }
+        res = self.client.post('/api/ip-rules/', data, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(res.json()['action'], 'allow')
+
+    def test_workspace_scoping(self):
+        other_user = User.objects.create_user(username='other_ip', password='testpass123')
+        other_ws = Workspace.objects.get(owner=other_user)
+        IPRule.objects.create(workspace=other_ws, ip_or_cidr='1.1.1.1', action='deny')
+        IPRule.objects.create(workspace=self.workspace, ip_or_cidr='2.2.2.2', action='allow')
+        res = self.client.get('/api/ip-rules/')
+        results = res.json()['results']
+        ips = [r['ipOrCidr'] for r in results]
+        self.assertIn('2.2.2.2', ips)
+        self.assertNotIn('1.1.1.1', ips)
+
+    def test_update_rule(self):
+        rule = IPRule.objects.create(
+            workspace=self.workspace, ip_or_cidr='5.5.5.5', action='deny',
+        )
+        res = self.client.patch(f'/api/ip-rules/{rule.id}/', {'action': 'allow'}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        rule.refresh_from_db()
+        self.assertEqual(rule.action, 'allow')
+
+    def test_delete_rule(self):
+        rule = IPRule.objects.create(
+            workspace=self.workspace, ip_or_cidr='6.6.6.6', action='deny',
+        )
+        res = self.client.delete(f'/api/ip-rules/{rule.id}/')
+        self.assertEqual(res.status_code, status.HTTP_204_NO_CONTENT)
+
+    def test_unauthenticated_access(self):
+        self.client.force_authenticate(user=None)
+        res = self.client.get('/api/ip-rules/')
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+# Detection Engine / Services
+
+class ServicesTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='services_user')
+        self.workspace = Workspace.objects.get(owner=self.user)
+        self.link = TrackingLink.objects.create(
+            workspace=self.workspace,
+            slug='svc-test',
+            destination_url='https://example.com',
+        )
+
+    def test_ip_matches_cidr_exact(self):
+        from .services import ip_matches_cidr
+        self.assertTrue(ip_matches_cidr('192.168.1.1', '192.168.1.1'))
+
+    def test_ip_matches_cidr_subnet(self):
+        from .services import ip_matches_cidr
+        self.assertTrue(ip_matches_cidr('10.0.0.5', '10.0.0.0/8'))
+        self.assertFalse(ip_matches_cidr('11.0.0.5', '10.0.0.0/8'))
+
+    def test_ip_matches_cidr_invalid(self):
+        from .services import ip_matches_cidr
+        self.assertFalse(ip_matches_cidr('not-an-ip', '10.0.0.0/8'))
+
+    def test_is_likely_bot_ua(self):
+        from .services import is_likely_bot_ua
+        self.assertTrue(is_likely_bot_ua('Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)'))
+        self.assertTrue(is_likely_bot_ua('python-requests/2.28.0'))
+        self.assertFalse(is_likely_bot_ua('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'))
+
+    def test_empty_ua_is_bot(self):
+        from .services import is_likely_bot_ua
+        self.assertTrue(is_likely_bot_ua(''))
+        self.assertTrue(is_likely_bot_ua('   '))
+
+    def test_classify_human(self):
+        from .services import classify_request
+        result = classify_request(
+            self.link, '8.8.8.8',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            self.workspace,
+        )
+        self.assertFalse(result['is_bot'])
+        self.assertEqual(result['decision'], 'allowed')
+
+    def test_classify_bot_ua(self):
+        from .services import classify_request
+        result = classify_request(
+            self.link, '8.8.8.8',
+            'Googlebot/2.1 (+http://www.google.com/bot.html)',
+            self.workspace,
+        )
+        self.assertTrue(result['is_bot'])
+        self.assertEqual(result['decision'], 'blocked')
+        self.assertEqual(result['reason'], 'Suspicious UA')
+
+    def test_classify_deny_rule(self):
+        from .services import classify_request
+        IPRule.objects.create(
+            workspace=self.workspace, ip_or_cidr='8.8.8.8',
+            action='deny', reason='Test block',
+        )
+        result = classify_request(
+            self.link, '8.8.8.8',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            self.workspace,
+        )
+        self.assertTrue(result['is_bot'])
+        self.assertEqual(result['decision'], 'blocked')
+        self.assertIn('Test block', result['reason'])
+
+    def test_classify_allow_rule_overrides_ua(self):
+        from .services import classify_request
+        IPRule.objects.create(
+            workspace=self.workspace, ip_or_cidr='8.8.8.8',
+            action='allow', reason='Trusted IP',
+        )
+        result = classify_request(
+            self.link, '8.8.8.8',
+            'Googlebot/2.1 (+http://www.google.com/bot.html)',
+            self.workspace,
+        )
+        self.assertFalse(result['is_bot'])
+        self.assertEqual(result['decision'], 'allowed')
+        self.assertIn('allow', result['reason'])
+
+    def test_classify_deny_rule_takes_precedence_over_allow(self):
+        from .services import classify_request
+        IPRule.objects.create(
+            workspace=self.workspace, ip_or_cidr='0.0.0.0/0',
+            action='allow', reason='Allow all',
+        )
+        IPRule.objects.create(
+            workspace=self.workspace, ip_or_cidr='8.8.8.8',
+            action='deny', reason='Block specific',
+        )
+        result = classify_request(
+            self.link, '8.8.8.8',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            self.workspace,
+        )
+        self.assertTrue(result['is_bot'])
+        self.assertEqual(result['decision'], 'blocked')
+
+    def test_classify_expired_rule_ignored(self):
+        from .services import classify_request
+        from django.utils import timezone
+        from datetime import timedelta
+        IPRule.objects.create(
+            workspace=self.workspace, ip_or_cidr='8.8.8.8',
+            action='deny', reason='Expired',
+            expires_at=timezone.now() - timedelta(days=1),
+        )
+        result = classify_request(
+            self.link, '8.8.8.8',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            self.workspace,
+        )
+        self.assertFalse(result['is_bot'])
+        self.assertEqual(result['decision'], 'allowed')
+
+    def test_inactive_rule_ignored(self):
+        from .services import classify_request
+        IPRule.objects.create(
+            workspace=self.workspace, ip_or_cidr='8.8.8.8',
+            action='deny', reason='Inactive',
+            is_active=False,
+        )
+        result = classify_request(
+            self.link, '8.8.8.8',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            self.workspace,
+        )
+        self.assertFalse(result['is_bot'])
+        self.assertEqual(result['decision'], 'allowed')
+
+
+# Redirect Endpoint
+
+class RedirectEndpointTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='redirect_user')
+        self.workspace = Workspace.objects.get(owner=self.user)
+        self.link = TrackingLink.objects.create(
+            workspace=self.workspace,
+            slug='test-redirect',
+            destination_url='https://example.com/landing',
+        )
+
+    def test_redirect_human(self):
+        res = self.client.get('/api/r/test-redirect/', HTTP_USER_AGENT='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
+        self.assertEqual(res.status_code, status.HTTP_302_FOUND)
+        self.assertEqual(res.url, 'https://example.com/landing')
+
+    def test_redirect_bot_ua_blocked(self):
+        res = self.client.get('/api/r/test-redirect/', HTTP_USER_AGENT='Googlebot/2.1 (+http://www.google.com/bot.html)')
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+        body = res.json()
+        self.assertIn('Access denied', body['error'])
+
+    def test_redirect_ip_rule_deny(self):
+        IPRule.objects.create(
+            workspace=self.workspace, ip_or_cidr='127.0.0.1',
+            action='deny', reason='Block local',
+        )
+        res = self.client.get('/api/r/test-redirect/', HTTP_USER_AGENT='Mozilla/5.0')
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_redirect_ip_rule_allow_overrides_bot_ua(self):
+        IPRule.objects.create(
+            workspace=self.workspace, ip_or_cidr='127.0.0.1',
+            action='allow', reason='Allow local',
+        )
+        res = self.client.get('/api/r/test-redirect/', HTTP_USER_AGENT='Googlebot/2.1')
+        self.assertEqual(res.status_code, status.HTTP_302_FOUND)
+        self.assertEqual(res.url, 'https://example.com/landing')
+
+    def test_redirect_increments_click_counter(self):
+        self.client.get('/api/r/test-redirect/', HTTP_USER_AGENT='Mozilla/5.0')
+        self.link.refresh_from_db()
+        self.assertEqual(self.link.total_clicks, 1)
+        self.assertEqual(self.link.bot_clicks, 0)
+
+    def test_redirect_bot_increments_bot_counter(self):
+        self.client.get('/api/r/test-redirect/', HTTP_USER_AGENT='Googlebot/2.1')
+        self.link.refresh_from_db()
+        self.assertEqual(self.link.total_clicks, 1)
+        self.assertEqual(self.link.bot_clicks, 1)
+
+    def test_redirect_creates_click_log(self):
+        self.client.get('/api/r/test-redirect/', HTTP_USER_AGENT='Mozilla/5.0')
+        self.assertEqual(ClickLog.objects.count(), 1)
+        log = ClickLog.objects.first()
+        self.assertEqual(log.decision, 'allowed')
+        self.assertFalse(log.is_bot)
+
+    def test_redirect_not_found(self):
+        res = self.client.get('/api/r/nonexistent-slug/')
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_redirect_link_paused_returns_404(self):
+        self.link.status = TrackingLink.Status.PAUSED
+        self.link.save()
+        res = self.client.get('/api/r/test-redirect/', HTTP_USER_AGENT='Mozilla/5.0')
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_direct_destination_not_tracked(self):
+        # Visiting the destination URL directly should NOT create a ClickLog
+        res = self.client.get(self.link.destination_url, HTTP_USER_AGENT='Mozilla/5.0')
+        self.assertEqual(ClickLog.objects.count(), 0)
+        # Destination URL is external, so we don't expect a specific status
+        # The key assertion is that no ClickLog was created
+
+
+# SEO Endpoints
+
+class SEOEndpointTests(APITestCase):
+    def test_robots_txt(self):
+        res = self.client.get('/robots.txt')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res['Content-Type'], 'text/plain')
+        self.assertIn('Disallow: /auth/', res.content.decode())
+        self.assertIn('Sitemap:', res.content.decode())
+
+    def test_sitemap_xml(self):
+        res = self.client.get('/sitemap.xml')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res['Content-Type'], 'application/xml')
+        self.assertIn('<urlset', res.content.decode())
+
+
+class DomainScanCommandTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='scan_user')
+        self.workspace = Workspace.objects.get(owner=self.user)
+        self.domain = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='scan-test.example.com',
+        )
+
+    def test_command_updates_last_scan_at(self):
+        from django.core.management import call_command
+        self.assertIsNone(self.workspace.last_domain_scan_at)
+        call_command('check_domains')
+        self.workspace.refresh_from_db()
+        self.assertIsNotNone(self.workspace.last_domain_scan_at)
+
+    def test_command_checks_domains(self):
+        from django.core.management import call_command
+        call_command('check_domains')
+        self.domain.refresh_from_db()
+        self.assertIsNotNone(self.domain.last_checked)
+        self.assertIn(self.domain.health_status, ['healthy', 'degraded'])
+
+
+# Tracker Script
+
+class TrackerScriptTests(APITestCase):
+    def test_returns_javascript(self):
+        res = self.client.get('/api/tracker.js')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res['Content-Type'], 'application/javascript')
+        self.assertIn('tracker/event/', res.content.decode())
+        self.assertIn('data-site', res.content.decode())
+
+    def test_cache_control_header(self):
+        res = self.client.get('/api/tracker.js')
+        self.assertIn('max-age=3600', res['Cache-Control'])
+
+    def test_allows_unauthenticated(self):
+        res = self.client.get('/api/tracker.js')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+
+
+# Tracker Events
+
+class TrackerEventTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='tracker_user')
+        self.workspace = Workspace.objects.get(owner=self.user)
+
+    def _payload(self, **overrides):
+        data = {
+            'site_id': str(self.workspace.id),
+            'page_url': 'https://example.com/landing',
+            'referrer': 'https://google.com',
+            'signals': {
+                'user_agent': 'Mozilla/5.0',
+                'language': 'en-US',
+                'cookies_enabled': True,
+                'timezone': 'America/New_York',
+                'touch_support': False,
+                'screen_depth': 24,
+                'plugins': 5,
+                'viewport': {'width': 1920, 'height': 1080},
+            },
+            'engagement': {'moves': 42, 'clicks': 3, 'scroll_depth': 60, 'time_on_page': 12},
+        }
+        data.update(overrides)
+        return data
+
+    def test_creates_tracker_event(self):
+        res = self.client.post('/api/tracker/event/', self._payload(), format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.json()['status'], 'ok')
+        self.assertEqual(TrackerEvent.objects.count(), 1)
+        event = TrackerEvent.objects.first()
+        self.assertEqual(event.workspace, self.workspace)
+        self.assertEqual(event.page_url, 'https://example.com/landing')
+        self.assertEqual(event.referrer, 'https://google.com')
+
+    def test_bad_site_id_returns_400(self):
+        res = self.client.post('/api/tracker/event/', self._payload(site_id=str(uuid.uuid4())), format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(TrackerEvent.objects.count(), 0)
+
+    def test_missing_site_id_returns_400(self):
+        payload = self._payload()
+        del payload['site_id']
+        res = self.client.post('/api/tracker/event/', payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(TrackerEvent.objects.count(), 0)
+
+    def test_allows_unauthenticated(self):
+        res = self.client.post('/api/tracker/event/', self._payload(), format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+
+    def test_all_signal_fields_stored(self):
+        res = self.client.post('/api/tracker/event/', self._payload(), format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        event = TrackerEvent.objects.first()
+        for key in ['user_agent', 'language', 'cookies_enabled', 'timezone', 'touch_support', 'screen_depth', 'plugins', 'viewport']:
+            self.assertIn(key, event.signals)
+        self.assertEqual(event.signals['viewport'], {'width': 1920, 'height': 1080})
+        self.assertEqual(event.engagement['moves'], 42)
+        self.assertEqual(event.engagement['clicks'], 3)
+        self.assertEqual(event.engagement['scroll_depth'], 60)
+        self.assertEqual(event.engagement['time_on_page'], 12)
+
+
+# Blocked IPs
+
+class BlockedIPTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='blocked_user', password='testpass123')
+        self.client.force_authenticate(user=self.user)
+        self.workspace = Workspace.objects.get(owner=self.user)
+        self.link = TrackingLink.objects.create(
+            workspace=self.workspace,
+            slug='blocked-link',
+            destination_url='https://example.com',
+        )
+        self.other_user = User.objects.create_user(username='other_blocked', password='testpass123')
+        self.other_ws = Workspace.objects.get(owner=self.other_user)
+        self.other_link = TrackingLink.objects.create(
+            workspace=self.other_ws,
+            slug='other-blocked',
+            destination_url='https://other.com',
+        )
+
+    def test_list_blocked_ips(self):
+        ClickLog.objects.create(
+            link=self.link, ip='203.0.113.5', decision='blocked',
+            reason='Suspicious UA', is_bot=True, matched_rule='',
+        )
+        ClickLog.objects.create(link=self.link, ip='8.8.8.8', decision='allowed', is_bot=False)
+        res = self.client.get('/api/ip-rules/blocked/')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        body = res.json()
+        self.assertEqual(body['count'], 1)
+        entry = body['results'][0]
+        self.assertEqual(entry['ip'], '203.0.113.5')
+        self.assertEqual(entry['reason'], 'Suspicious UA')
+        self.assertEqual(entry['decision'], 'blocked')
+        self.assertTrue(entry['isBot'])
+        self.assertEqual(entry['slug'], 'blocked-link')
+        self.assertIn('createdAt', entry)
+
+    def test_only_own_workspace_blocked(self):
+        ClickLog.objects.create(link=self.link, ip='203.0.113.5', decision='blocked', is_bot=True)
+        ClickLog.objects.create(link=self.other_link, ip='198.51.100.7', decision='blocked', is_bot=True)
+        res = self.client.get('/api/ip-rules/blocked/')
+        body = res.json()
+        self.assertEqual(body['count'], 1)
+        self.assertEqual(body['results'][0]['ip'], '203.0.113.5')
+
+    def test_search_by_ip(self):
+        ClickLog.objects.create(link=self.link, ip='203.0.113.5', decision='blocked', is_bot=True)
+        ClickLog.objects.create(link=self.link, ip='198.51.100.7', decision='blocked', is_bot=True)
+        res = self.client.get('/api/ip-rules/blocked/?search=198')
+        body = res.json()
+        self.assertEqual(body['count'], 1)
+        self.assertEqual(body['results'][0]['ip'], '198.51.100.7')
+
+    def test_unauthenticated_access(self):
+        self.client.force_authenticate(user=None)
+        res = self.client.get('/api/ip-rules/blocked/')
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_whitelist_creates_allow_rule(self):
+        click = ClickLog.objects.create(link=self.link, ip='203.0.113.5', decision='blocked', is_bot=True)
+        res = self.client.post(f'/api/ip-rules/{click.id}/whitelist/')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        body = res.json()
+        self.assertEqual(body['ipOrCidr'], '203.0.113.5')
+        self.assertEqual(body['action'], 'allow')
+        rule = IPRule.objects.get(workspace=self.workspace, ip_or_cidr='203.0.113.5')
+        self.assertEqual(rule.action, 'allow')
+        self.assertTrue(rule.is_active)
+
+    def test_whitelist_cross_workspace_rejected(self):
+        click = ClickLog.objects.create(link=self.other_link, ip='198.51.100.7', decision='blocked', is_bot=True)
+        res = self.client.post(f'/api/ip-rules/{click.id}/whitelist/')
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertFalse(IPRule.objects.filter(ip_or_cidr='198.51.100.7').exists())
+
+    def test_whitelist_existing_rule_reactivated(self):
+        click = ClickLog.objects.create(link=self.link, ip='203.0.113.5', decision='blocked', is_bot=True)
+        IPRule.objects.create(
+            workspace=self.workspace, ip_or_cidr='203.0.113.5',
+            action='allow', is_active=False,
+        )
+        res = self.client.post(f'/api/ip-rules/{click.id}/whitelist/')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            IPRule.objects.filter(workspace=self.workspace, ip_or_cidr='203.0.113.5').count(), 1,
+        )
+        rule = IPRule.objects.get(workspace=self.workspace, ip_or_cidr='203.0.113.5')
+        self.assertTrue(rule.is_active)

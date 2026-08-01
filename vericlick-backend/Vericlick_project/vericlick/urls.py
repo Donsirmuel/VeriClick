@@ -7,6 +7,7 @@ from . import views
 router = DefaultRouter()
 router.register(r'links', views.TrackingLinkViewSet, basename='link')
 router.register(r'domains', views.DomainRegistryViewSet, basename='domain')
+router.register(r'ip-rules', views.IPRuleViewSet, basename='ip-rule')
 
 urlpatterns = [
     # Health
@@ -25,6 +26,13 @@ urlpatterns = [
     path('dashboard/activity/', views.dashboard_activity, name='dashboard-activity'),
     # Workspace
     path('workspace/', views.workspace_detail, name='workspace-detail'),
+    # Public redirect
+    path('r/<slug:slug>/', views.redirect_click, name='redirect-click'),
+    # Tracker
+    path('tracker.js', views.serve_tracker_script, name='tracker-script'),
+    path('tracker/event/', views.receive_tracker_event, name='tracker-event'),
+    # Blocked IPs
+    path('ip-rules/blocked/', views.blocked_ips, name='blocked-ips'),
     # CRUD
     path('', include(router.urls)),
 ]

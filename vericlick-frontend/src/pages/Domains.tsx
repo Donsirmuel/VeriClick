@@ -6,6 +6,9 @@ import toast from 'react-hot-toast'
 import { AddDomainDialog } from '@/components/domains/AddDomainDialog'
 import { fetchDomains, createDomain, updateDomain, deleteDomain, recheckDomain } from '@/api/domains'
 import { formatRelativeTime } from '@/lib/utils'
+import { EmptyState } from '@/components/ui/EmptyState'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { HelpTooltip } from '@/components/ui/HelpTooltip'
 
 function healthBadge(status: string) {
   const styles: Record<string, string> = {
@@ -29,6 +32,10 @@ export default function DomainsPage() {
   const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
   const [showAddDialog, setShowAddDialog] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+  const [deleteName, setDeleteName] = useState('')
+  const [editTarget, setEditTarget] = useState<{ id: string; domain: string } | null>(null)
+  const [editValue, setEditValue] = useState('')
 
   const { data: domains = [] } = useQuery({
     queryKey: ['domains'],
@@ -49,6 +56,7 @@ export default function DomainsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['domains'] })
       toast.success('Domain removed')
+      setDeleteTarget(null)
     },
   })
 
@@ -65,6 +73,7 @@ export default function DomainsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['domains'] })
       toast.success('Domain updated')
+      setEditTarget(null)
     },
   })
 
@@ -72,13 +81,27 @@ export default function DomainsPage() {
     d.domain.toLowerCase().includes(search.toLowerCase())
   )
 
+  const handleStartEdit = (id: string, domain: string) => {
+    setEditTarget({ id, domain })
+    setEditValue(domain)
+  }
+
+  const handleSaveEdit = () => {
+    if (!editTarget || !editValue.trim()) return
+    updateMutation.mutate({ id: editTarget.id, domain: editValue.trim() })
+  }
+
+  const handleDelete = () => {
+    if (!deleteTarget) return
+    deleteMutation.mutate(deleteTarget)
+  }
+
   return (
     <div>
-      {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Domain Registry</h1>
-          <p className="text-sm text-muted mt-1">Monitor and manage your tracking domains</p>
+          <p className="text-sm text-muted mt-1">Domains are the branded URLs your links live on. Each link belongs to a domain — e.g. link <code className="text-xs bg-neutral-100 px-1.5 py-0.5 rounded">your.domain/r/summer23</code> uses domain <code className="text-xs bg-neutral-100 px-1.5 py-0.5 rounded">your.domain</code>. Add a domain first, then create links under it.</p>
         </div>
         <button
           onClick={() => setShowAddDialog(true)}
@@ -89,7 +112,6 @@ export default function DomainsPage() {
         </button>
       </div>
 
-      {/* Search */}
       <div className="relative max-w-md mb-6">
         <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-muted">
           <HugeiconsIcon icon={Search01Icon} className="w-4 h-4" />
@@ -103,85 +125,113 @@ export default function DomainsPage() {
         />
       </div>
 
-      {/* Table */}
-      <div className="bg-white border border-neutral-200 rounded-2xl overflow-hidden">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-neutral-200 bg-neutral-50/50">
-              <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Domain</th>
-              <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Status</th>
-              <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Last Checked</th>
-              <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Links</th>
-              <th className="text-right px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredDomains.map(domain => (
-              <tr key={domain.id} className="border-b border-neutral-100 hover:bg-neutral-50/50 transition-colors">
-                <td className="px-6 py-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-neutral-100 rounded-lg flex items-center justify-center">
-                      <HugeiconsIcon icon={Globe02Icon} className="w-4 h-4 text-slate-700" />
-                    </div>
-                    <span className="font-bold text-sm">{domain.domain}</span>
-                  </div>
-                </td>
-                <td className="px-6 py-4">
-                  {healthBadge(domain.healthStatus)}
-                </td>
-                <td className="px-6 py-4">
-                  <div className="flex items-center gap-2 text-sm text-muted">
-                    <HugeiconsIcon icon={Clock03Icon} className="w-3.5 h-3.5" />
-                    {domain.lastChecked ? formatRelativeTime(domain.lastChecked) : 'Never'}
-                  </div>
-                </td>
-                <td className="px-6 py-4">
-                  <div className="flex items-center gap-1.5 text-sm text-slate-900 font-medium">
-                    <HugeiconsIcon icon={LinkSquare02Icon} className="w-4 h-4 text-muted" />
-                    {domain.linksCount}
-                  </div>
-                </td>
-                <td className="px-6 py-4">
-                  <div className="flex items-center justify-end gap-1">
-                    <button
-                      onClick={() => recheckMutation.mutate(domain.id)}
-                      className="p-2 rounded-lg hover:bg-neutral-100 transition-colors"
-                      title="Recheck"
-                    >
-                      <HugeiconsIcon icon={RefreshIcon} className="w-4 h-4 text-muted" />
-                    </button>
-                    <button
-                      onClick={() => {
-                        const newDomain = prompt('New domain name:', domain.domain)
-                        if (newDomain && newDomain !== domain.domain) {
-                          updateMutation.mutate({ id: domain.id, domain: newDomain })
-                        }
-                      }}
-                      className="p-2 rounded-lg hover:bg-neutral-100 transition-colors"
-                      title="Edit"
-                    >
-                      <HugeiconsIcon icon={Edit01Icon} className="w-4 h-4 text-muted" />
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (confirm(`Remove ${domain.domain}?`)) {
-                          deleteMutation.mutate(domain.id)
-                        }
-                      }}
-                      className="p-2 rounded-lg hover:bg-error/10 transition-colors"
-                      title="Remove"
-                    >
-                      <HugeiconsIcon icon={Cancel01Icon} className="w-4 h-4 text-error" />
-                    </button>
-                  </div>
-                </td>
+      {domains.length === 0 ? (
+        <div className="bg-white border border-neutral-200 rounded-2xl">
+          <EmptyState
+            icon={Globe02Icon}
+            title="No domains registered"
+            description="Add your first tracking domain to start routing traffic. You'll need to verify ownership by adding a TXT record."
+            action={{ label: 'Add your first domain', onClick: () => setShowAddDialog(true) }}
+          />
+        </div>
+      ) : filteredDomains.length === 0 ? (
+        <div className="bg-white border border-neutral-200 rounded-2xl">
+          <EmptyState
+            icon={Search01Icon}
+            title="No matching domains"
+            description="Try a different search term."
+          />
+        </div>
+      ) : (
+        <div className="bg-white border border-neutral-200 rounded-2xl overflow-hidden">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-neutral-200 bg-neutral-50/50">
+                <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Domain</th>
+                <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">
+                  <span className="flex items-center gap-1.5">
+                    Status
+                    <HelpTooltip text="Healthy: Domain resolves correctly. Degraded: DNS issues detected. Blacklisted: Domain flagged on RBLs." />
+                  </span>
+                </th>
+                <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Last Checked</th>
+                <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Links</th>
+                <th className="text-right px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {filteredDomains.map(domain => (
+                <tr key={domain.id} className="border-b border-neutral-100 hover:bg-neutral-50/50 transition-colors">
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-neutral-100 rounded-lg flex items-center justify-center">
+                        <HugeiconsIcon icon={Globe02Icon} className="w-4 h-4 text-slate-700" />
+                      </div>
+                      {editTarget?.id === domain.id ? (
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={editValue}
+                            onChange={(e) => setEditValue(e.target.value)}
+                            className="border border-neutral-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:border-black"
+                            autoFocus
+                            onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit()}
+                          />
+                          <button onClick={handleSaveEdit} className="text-xs font-bold text-success hover:text-success/80">Save</button>
+                          <button onClick={() => setEditTarget(null)} className="text-xs font-bold text-muted hover:text-slate-700">Cancel</button>
+                        </div>
+                      ) : (
+                        <span className="font-bold text-sm">{domain.domain}</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    {healthBadge(domain.healthStatus)}
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-2 text-sm text-muted">
+                      <HugeiconsIcon icon={Clock03Icon} className="w-3.5 h-3.5" />
+                      {domain.lastChecked ? formatRelativeTime(domain.lastChecked) : 'Never'}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-1.5 text-sm text-slate-900 font-medium">
+                      <HugeiconsIcon icon={LinkSquare02Icon} className="w-4 h-4 text-muted" />
+                      {domain.linksCount}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center justify-end gap-1">
+                      <button
+                        onClick={() => recheckMutation.mutate(domain.id)}
+                        className="p-2 rounded-lg hover:bg-neutral-100 transition-colors"
+                        title="Re-check domain health"
+                      >
+                        <HugeiconsIcon icon={RefreshIcon} className="w-4 h-4 text-muted" />
+                      </button>
+                      <button
+                        onClick={() => handleStartEdit(domain.id, domain.domain)}
+                        className="p-2 rounded-lg hover:bg-neutral-100 transition-colors"
+                        title="Edit domain"
+                      >
+                        <HugeiconsIcon icon={Edit01Icon} className="w-4 h-4 text-muted" />
+                      </button>
+                      <button
+                        onClick={() => { setDeleteTarget(domain.id); setDeleteName(domain.domain) }}
+                        className="p-2 rounded-lg hover:bg-error/10 transition-colors"
+                        title="Remove domain"
+                      >
+                        <HugeiconsIcon icon={Cancel01Icon} className="w-4 h-4 text-error" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
-      {/* Add Domain Dialog */}
       {showAddDialog && (
         <AddDomainDialog
           onClose={() => setShowAddDialog(false)}
@@ -189,6 +239,17 @@ export default function DomainsPage() {
           loading={createMutation.isPending}
         />
       )}
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title="Remove domain"
+        message={`Are you sure you want to remove "${deleteName}"? Links using this domain will continue to work but will show as "No domain".`}
+        confirmLabel="Remove"
+        variant="danger"
+        onConfirm={handleDelete}
+        onCancel={() => setDeleteTarget(null)}
+        loading={deleteMutation.isPending}
+      />
     </div>
   )
 }
