@@ -5,11 +5,17 @@ import { Notification02Icon, Search01Icon, Menu01Icon, ChevronDownIcon, UserIcon
 import { useQuery } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { fetchMe } from '@/api/auth'
+import { fetchWorkspace } from '@/api/workspace'
 
 export function TopBar({ onMenuToggle }: { onMenuToggle: () => void }) {
   const { data: user } = useQuery({
     queryKey: ['auth-me'],
     queryFn: fetchMe,
+    staleTime: 60_000,
+  })
+  const { data: workspace } = useQuery({
+    queryKey: ['workspace'],
+    queryFn: fetchWorkspace,
     staleTime: 60_000,
   })
   const [dropdownOpen, setDropdownOpen] = useState(false)
@@ -46,7 +52,7 @@ export function TopBar({ onMenuToggle }: { onMenuToggle: () => void }) {
         <div className="hidden md:flex items-center gap-2 text-sm">
           <span className="text-muted">Workspace</span>
           <span className="text-muted">/</span>
-          <span className="font-medium text-slate-900">VeriClick Pro</span>
+          <span className="font-medium text-slate-900">{workspace?.name ?? 'Workspace'}</span>
         </div>
       </div>
 

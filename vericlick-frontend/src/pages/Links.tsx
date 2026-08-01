@@ -157,10 +157,10 @@ export default function LinksPage() {
                 <tr key={link.id} className="border-b border-neutral-100 hover:bg-neutral-50/50 transition-colors">
                   <td className="px-6 py-4">
                     <span className="font-mono font-bold text-sm">{link.slug}</span>
-                    <span className="block text-xs text-muted truncate max-w-[220px] mt-0.5" title={link.trackingUrl}>{link.trackingUrl}</span>
+                    <span className="block text-xs text-muted truncate 55 mt-0.5" title={link.trackingUrl}>{link.trackingUrl}</span>
                   </td>
                   <td className="px-6 py-4">
-                    <span className="text-sm text-muted truncate block max-w-[200px]" title={link.destinationUrl}>{link.destinationUrl}</span>
+                    <span className="text-sm text-muted truncate block max-w-50" title={link.destinationUrl}>{link.destinationUrl}</span>
                   </td>
                   <td className="px-6 py-4 text-center font-bold text-sm">{link.totalClicks.toLocaleString()}</td>
                   <td className="px-6 py-4 text-center">

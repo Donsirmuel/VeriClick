@@ -19,6 +19,7 @@ const Links = lazy(() => import('./pages/Links'))
 const Domains = lazy(() => import('./pages/Domains'))
 const IpRules = lazy(() => import('./pages/IpRules'))
 const BlockedIPs = lazy(() => import('./pages/BlockedIPs'))
+const Help = lazy(() => import('./pages/Help'))
 
 function withSuspense(el: React.ReactNode) {
   return (
@@ -47,6 +48,7 @@ function App() {
             <Route path="settings" element={withSuspense(<ErrorBoundary><Settings /></ErrorBoundary>)} />
             <Route path="ip-rules" element={withSuspense(<ErrorBoundary><IpRules /></ErrorBoundary>)} />
             <Route path="blocked-ips" element={withSuspense(<ErrorBoundary><BlockedIPs /></ErrorBoundary>)} />
+            <Route path="help" element={withSuspense(<ErrorBoundary><Help /></ErrorBoundary>)} />
           </Route>
           <Route path="*" element={withSuspense(<NotFound />)} />
         </Routes>
