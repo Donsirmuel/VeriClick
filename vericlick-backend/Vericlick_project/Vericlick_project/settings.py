@@ -165,6 +165,7 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'anon': '100/hour',
         'user': '1000/hour',
+        'tracker': '600/min',
     },
     'DEFAULT_RENDERER_CLASSES': [
         'vericlick.utils.CamelCaseJSONRenderer',

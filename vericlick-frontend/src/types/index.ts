@@ -39,6 +39,7 @@ export interface TrackingLink {
   destinationUrl: string
   domain: string | null
   domainHealth: HealthStatus | null
+  trackingUrl: string
   totalClicks: number
   botClicks: number
   status: LinkStatus

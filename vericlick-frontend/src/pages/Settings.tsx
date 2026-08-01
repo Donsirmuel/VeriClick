@@ -38,7 +38,7 @@ export default function SettingsPage() {
   }
 
   const snippet = workspace
-    ? `<script src="${API_BASE}/tracker.js" data-site="${workspace.id}" async></script>`
+    ? `<script src="${API_BASE}/tracker.js" data-site="${workspace.id}" data-token="${workspace.trackerSecret}" async></script>`
     : ''
 
   const handleCopySnippet = async () => {

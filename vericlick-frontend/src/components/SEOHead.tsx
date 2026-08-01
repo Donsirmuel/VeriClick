@@ -7,9 +7,11 @@ export function SEOHead() {
   const { pathname } = useLocation()
 
   useEffect(() => {
-    shouldNoindex(pathname)
-      ? addNoindex()
-      : removeNoindex()
+    if (shouldNoindex(pathname)) {
+      addNoindex()
+    } else {
+      removeNoindex()
+    }
   }, [pathname])
 
   return null

@@ -13,6 +13,7 @@ class Workspace(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=255)
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='workspaces')
+    tracker_secret = models.UUIDField(default=uuid.uuid4, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
     last_domain_scan_at = models.DateTimeField(null=True, blank=True)
 

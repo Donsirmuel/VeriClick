@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { Activity01Icon, LinkSquare02Icon, Globe02Icon, PlusSignIcon, Shield02Icon } from '@hugeicons/core-free-icons'
+import { Activity01Icon, LinkSquare02Icon, Globe02Icon, Shield02Icon, Copy01Icon, CodeIcon, CheckmarkCircle02Icon, ArrowRight02Icon } from '@hugeicons/core-free-icons'
 import { StatCard } from '@/components/dashboard/StatCard'
 import { TrafficChart } from '@/components/dashboard/TrafficChart'
 import { ActivityFeed } from '@/components/dashboard/ActivityFeed'
@@ -34,45 +34,91 @@ export default function DashboardPage() {
   const hasData = totalClicks > 0 || activeLinks > 0
 
   if (!hasData && stats) {
+    const domainsCount =
+      (stats.domainsHealthy ?? 0) + (stats.domainsDegraded ?? 0) + (stats.domainsBlacklisted ?? 0)
+
+    const steps = [
+      {
+        n: 1,
+        title: 'Add your domain',
+        desc: 'Register the web address your tracked links live on.',
+        to: '/app/domains',
+        icon: Globe02Icon,
+        done: domainsCount > 0,
+      },
+      {
+        n: 2,
+        title: 'Create a tracked link',
+        desc: 'Point a tracked link at the page you want to protect.',
+        to: '/app/links',
+        icon: LinkSquare02Icon,
+        done: activeLinks > 0,
+      },
+      {
+        n: 3,
+        title: 'Copy your tracked link',
+        desc: 'Share the VeriClick URL — humans get through, suspicious traffic gets blocked.',
+        to: '/app/links',
+        icon: Copy01Icon,
+        done: activeLinks > 0,
+      },
+      {
+        n: 4,
+        title: 'Install the site script',
+        desc: 'Add extra detection to pages you own with one line of code.',
+        to: '/app/settings',
+        icon: CodeIcon,
+        done: false,
+        optional: true,
+      },
+    ]
+    const coreSteps = steps.filter((s) => !s.optional)
+    const doneCount = coreSteps.filter((s) => s.done).length
+
     return (
-      <div className="flex flex-col items-center justify-center py-20 px-4">
-        <div className="w-20 h-20 bg-neutral-100 rounded-3xl flex items-center justify-center mb-6">
-          <HugeiconsIcon icon={Activity01Icon} className="w-9 h-9 text-muted" />
+      <div className="max-w-3xl mx-auto py-12 px-4">
+        <div className="text-center mb-10">
+          <div className="w-20 h-20 bg-neutral-100 rounded-3xl flex items-center justify-center mx-auto mb-6">
+            <HugeiconsIcon icon={Activity01Icon} className="w-9 h-9 text-muted" />
+          </div>
+          <h1 className="text-2xl font-bold text-slate-900 mb-2">Get started with VeriClick</h1>
+          <p className="text-sm text-muted max-w-md mx-auto leading-relaxed">
+            Set up your first tracked link in a few minutes. Bots are stopped automatically —
+            you just share the link.
+          </p>
         </div>
-        <h1 className="text-2xl font-bold text-slate-900 mb-2">Welcome to VeriClick</h1>
-        <p className="text-sm text-muted text-center max-w-md mb-8 leading-relaxed">
-          Your dashboard is empty because you haven't created any links yet. 
-          Get started by creating your first tracking link — then come back here to see your traffic analytics.
-        </p>
-        <div className="flex gap-3">
-          <button
-            onClick={() => navigate('/app/links')}
-            className="bg-black hover:bg-neutral-800 text-white px-6 py-3 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-sm"
-          >
-            <HugeiconsIcon icon={PlusSignIcon} className="w-4 h-4" />
-            Create your first link
-          </button>
-          <button
-            onClick={() => navigate('/app/ip-rules')}
-            className="bg-white border border-neutral-200 hover:bg-neutral-50 px-6 py-3 rounded-xl text-sm font-bold flex items-center gap-2 transition-all"
-          >
-            <HugeiconsIcon icon={Shield02Icon} className="w-4 h-4" />
-            Set up IP rules
-          </button>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-12 max-w-2xl w-full">
-          {[
-            { step: '1', title: 'Create a link', desc: 'Set up your first tracking link with a custom slug and destination URL.' },
-            { step: '2', title: 'Add IP rules', desc: 'Allow trusted traffic and block suspicious sources with simple rules.' },
-            { step: '3', title: 'Monitor traffic', desc: 'Watch real-time analytics of clicks, bot detections, and blocked traffic.' },
-          ].map((item) => (
-            <div key={item.step} className="bg-white border border-neutral-200 rounded-2xl p-5 text-center">
-              <div className="w-8 h-8 bg-black text-white rounded-lg flex items-center justify-center mx-auto mb-3 text-sm font-bold">{item.step}</div>
-              <h3 className="font-bold text-sm text-slate-900 mb-1">{item.title}</h3>
-              <p className="text-xs text-muted leading-relaxed">{item.desc}</p>
-            </div>
+
+        <div className="space-y-3 mb-6">
+          {steps.map((step) => (
+            <button
+              key={step.n}
+              onClick={() => navigate(step.to)}
+              className="w-full flex items-start gap-4 p-4 bg-white border border-neutral-200 rounded-2xl text-left hover:border-neutral-400 hover:shadow-sm transition-all"
+            >
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${step.done ? 'bg-success/10' : 'bg-neutral-100'}`}>
+                {step.done ? (
+                  <HugeiconsIcon icon={CheckmarkCircle02Icon} className="w-5 h-5 text-success" />
+                ) : (
+                  <HugeiconsIcon icon={step.icon} className="w-5 h-5 text-muted" />
+                )}
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-bold text-sm text-slate-900">{step.n}. {step.title}</span>
+                  {step.optional && (
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-muted bg-neutral-100 px-2 py-0.5 rounded-full">Optional</span>
+                  )}
+                </div>
+                <p className="text-xs text-muted mt-0.5 leading-relaxed">{step.desc}</p>
+              </div>
+              <HugeiconsIcon icon={ArrowRight02Icon} className="w-4 h-4 text-neutral-300 mt-3 shrink-0" />
+            </button>
           ))}
         </div>
+
+        <p className="text-center text-xs text-muted">
+          {doneCount} of {coreSteps.length} core steps done
+        </p>
       </div>
     )
   }

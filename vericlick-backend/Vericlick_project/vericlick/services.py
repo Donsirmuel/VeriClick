@@ -57,6 +57,17 @@ def _lookup_country(ip):
     return None
 
 
+def get_public_tracking_url(link, request=None):
+    # Single source of truth for the shareable tracked URL. A link on a custom
+    # domain resolves to https://<domain>/<slug> (DNS must point at VeriClick);
+    # otherwise it falls back to the API host's /r/<slug> redirect route.
+    if link.domain and link.domain.domain:
+        return f'https://{link.domain.domain}/{link.slug}'
+    if request is not None:
+        return request.build_absolute_uri(f'/r/{link.slug}')
+    return f'/r/{link.slug}'
+
+
 def classify_request(link, ip, user_agent, workspace):
     now = timezone.now()
 

@@ -1,9 +1,11 @@
 (function () {
   var siteId = null;
+  var token = null;
   var scripts = document.getElementsByTagName('script');
   for (var i = 0; i < scripts.length; i++) {
     if (/\/tracker\.js/.test(scripts[i].src || '')) {
       siteId = scripts[i].getAttribute('data-site');
+      token = scripts[i].getAttribute('data-token');
       break;
     }
   }
@@ -26,6 +28,7 @@
   function buildPayload() {
     return {
       site_id: siteId,
+      token: token || '',
       page_url: window.location.href,
       referrer: document.referrer,
       signals: {

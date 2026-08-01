@@ -11,10 +11,14 @@ export const mockDashboardStats: DashboardStats = {
   totalClicks24h: 14239,
   botTrafficBlocked: 2847,
   botTrafficPercentage: 20.0,
+  blocked: 2847,
+  challenged: 410,
+  allowed: 11392,
   activeLinks: 24,
   domainsHealthy: 8,
   domainsDegraded: 1,
   domainsBlacklisted: 1,
+  lastDomainScan: null,
 }
 
 export const mockTrafficData: Record<string, TrafficData[]> = {
@@ -55,12 +59,12 @@ export const mockActivity: ActivityEntry[] = [
 ]
 
 export const mockLinks: TrackingLink[] = [
-  { id: uuid(), slug: 'a8k3x2m', destinationUrl: 'https://example.com/offer/campaign-alpha', domain: 'click.tracking-d.com', domainHealth: 'healthy', totalClicks: 4821, botClicks: 964, status: 'active', createdAt: '2026-07-10T08:00:00Z' },
-  { id: uuid(), slug: 'q7w9p1k', destinationUrl: 'https://example.com/offer/campaign-beta', domain: 'go.linkshield.io', domainHealth: 'healthy', totalClicks: 3204, botClicks: 641, status: 'active', createdAt: '2026-07-12T14:30:00Z' },
-  { id: uuid(), slug: 'm4n8j5h', destinationUrl: 'https://example.com/offer/campaign-gamma', domain: 'safe.route.net', domainHealth: 'degraded', totalClicks: 2107, botClicks: 421, status: 'active', createdAt: '2026-07-14T10:15:00Z' },
-  { id: uuid(), slug: 't3r7k9v', destinationUrl: 'https://example.com/offer/campaign-delta', domain: 'click.tracking-d.com', domainHealth: 'healthy', totalClicks: 1589, botClicks: 318, status: 'active', createdAt: '2026-07-16T16:45:00Z' },
-  { id: uuid(), slug: 'x2y5w8q', destinationUrl: 'https://example.com/offer/campaign-epsilon', domain: 'blacked.listed.xyz', domainHealth: 'blacklisted', totalClicks: 892, botClicks: 446, status: 'paused', createdAt: '2026-07-08T09:00:00Z' },
-  { id: uuid(), slug: 'p9u3v6n', destinationUrl: 'https://example.com/offer/campaign-zeta', domain: 'go.linkshield.io', domainHealth: 'healthy', totalClicks: 756, botClicks: 151, status: 'active', createdAt: '2026-07-18T11:20:00Z' },
+  { id: uuid(), slug: 'a8k3x2m', destinationUrl: 'https://example.com/offer/campaign-alpha', domain: 'click.tracking-d.com', domainHealth: 'healthy', trackingUrl: 'https://click.tracking-d.com/a8k3x2m', totalClicks: 4821, botClicks: 964, status: 'active', createdAt: '2026-07-10T08:00:00Z' },
+  { id: uuid(), slug: 'q7w9p1k', destinationUrl: 'https://example.com/offer/campaign-beta', domain: 'go.linkshield.io', domainHealth: 'healthy', trackingUrl: 'https://go.linkshield.io/q7w9p1k', totalClicks: 3204, botClicks: 641, status: 'active', createdAt: '2026-07-12T14:30:00Z' },
+  { id: uuid(), slug: 'm4n8j5h', destinationUrl: 'https://example.com/offer/campaign-gamma', domain: 'safe.route.net', domainHealth: 'degraded', trackingUrl: 'https://safe.route.net/m4n8j5h', totalClicks: 2107, botClicks: 421, status: 'active', createdAt: '2026-07-14T10:15:00Z' },
+  { id: uuid(), slug: 't3r7k9v', destinationUrl: 'https://example.com/offer/campaign-delta', domain: 'click.tracking-d.com', domainHealth: 'healthy', trackingUrl: 'https://click.tracking-d.com/t3r7k9v', totalClicks: 1589, botClicks: 318, status: 'active', createdAt: '2026-07-16T16:45:00Z' },
+  { id: uuid(), slug: 'x2y5w8q', destinationUrl: 'https://example.com/offer/campaign-epsilon', domain: 'blacked.listed.xyz', domainHealth: 'blacklisted', trackingUrl: 'https://blacked.listed.xyz/x2y5w8q', totalClicks: 892, botClicks: 446, status: 'paused', createdAt: '2026-07-08T09:00:00Z' },
+  { id: uuid(), slug: 'p9u3v6n', destinationUrl: 'https://example.com/offer/campaign-zeta', domain: 'go.linkshield.io', domainHealth: 'healthy', trackingUrl: 'https://go.linkshield.io/p9u3v6n', totalClicks: 756, botClicks: 151, status: 'active', createdAt: '2026-07-18T11:20:00Z' },
 ]
 
 export const mockDomains: Domain[] = [
@@ -92,6 +96,7 @@ export function createMockLink(input: LinkCreateInput): TrackingLink {
     destinationUrl: input.destinationUrl,
     domain: input.domain ?? null,
     domainHealth: 'healthy',
+    trackingUrl: input.domain ? `https://${input.domain}/${input.slug || ''}` : '',
     totalClicks: 0,
     botClicks: 0,
     status: input.status ?? 'active',

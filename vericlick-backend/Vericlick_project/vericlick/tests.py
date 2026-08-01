@@ -504,6 +504,25 @@ class LinksEndpointTests(APITestCase):
         res = self.client.get('/api/links/')
         self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
 
+    def test_tracking_url_fallback_to_redirect_route(self):
+        link = TrackingLink.objects.create(
+            workspace=self.workspace, slug='track-url', destination_url='https://example.com',
+        )
+        res = self.client.get(f'/api/links/{link.id}/')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.json()['trackingUrl'], 'http://testserver/r/track-url')
+
+    def test_tracking_url_uses_custom_domain(self):
+        domain = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='link.example.com',
+        )
+        link = TrackingLink.objects.create(
+            workspace=self.workspace, domain=domain,
+            slug='dom-url', destination_url='https://example.com',
+        )
+        res = self.client.get(f'/api/links/{link.id}/')
+        self.assertEqual(res.json()['trackingUrl'], 'https://link.example.com/dom-url')
+
 
 class DomainsEndpointTests(APITestCase):
     def setUp(self):
@@ -965,6 +984,18 @@ class DomainScanCommandTests(APITestCase):
         self.assertIsNotNone(self.domain.last_checked)
         self.assertIn(self.domain.health_status, ['healthy', 'degraded'])
 
+    def test_command_runs_once_with_interval_zero(self):
+        from django.core.management import call_command
+        call_command('check_domains', interval=0)
+        self.workspace.refresh_from_db()
+        self.assertIsNotNone(self.workspace.last_domain_scan_at)
+
+    def test_command_rejects_negative_interval(self):
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+        with self.assertRaises(CommandError):
+            call_command('check_domains', interval=-1)
+
 
 # Tracker Script
 
@@ -995,6 +1026,7 @@ class TrackerEventTests(APITestCase):
     def _payload(self, **overrides):
         data = {
             'site_id': str(self.workspace.id),
+            'token': str(self.workspace.tracker_secret),
             'page_url': 'https://example.com/landing',
             'referrer': 'https://google.com',
             'signals': {
@@ -1031,6 +1063,29 @@ class TrackerEventTests(APITestCase):
         payload = self._payload()
         del payload['site_id']
         res = self.client.post('/api/tracker/event/', payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(TrackerEvent.objects.count(), 0)
+
+    def test_missing_token_returns_400(self):
+        payload = self._payload()
+        del payload['token']
+        res = self.client.post('/api/tracker/event/', payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(TrackerEvent.objects.count(), 0)
+
+    def test_invalid_token_returns_400(self):
+        res = self.client.post('/api/tracker/event/', self._payload(token='not-the-secret'), format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(TrackerEvent.objects.count(), 0)
+
+    def test_token_binds_to_workspace(self):
+        other_user = User.objects.create_user(username='other_tracker')
+        other_ws = Workspace.objects.get(owner=other_user)
+        res = self.client.post(
+            '/api/tracker/event/',
+            self._payload(site_id=str(other_ws.id), token=str(self.workspace.tracker_secret)),
+            format='json',
+        )
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(TrackerEvent.objects.count(), 0)
 

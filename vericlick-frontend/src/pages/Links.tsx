@@ -4,7 +4,7 @@ import { HugeiconsIcon } from '@hugeicons/react'
 import {
   PlusSignIcon, Search01Icon, FilterIcon,
   Copy01Icon, Edit01Icon, Cancel01Icon,
-  ArrowRight02Icon, ArrowLeft02Icon,
+  ArrowRight02Icon, ArrowLeft02Icon, ExternalLinkIcon,
   LinkSquare02Icon,
 } from '@hugeicons/core-free-icons'
 import toast from 'react-hot-toast'
@@ -14,11 +14,6 @@ import { fetchDomains } from '@/api/domains'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import type { TrackingLink, LinkCreateInput } from '@/types'
-
-const BACKEND_ORIGIN = (() => {
-  const base = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
-  return base.replace(/\/api\/?$/, '')
-})()
 
 export default function LinksPage() {
   const queryClient = useQueryClient()
@@ -82,16 +77,17 @@ export default function LinksPage() {
     deleteMutation.mutate(deleteTarget.id)
   }
 
-  const handleCopySlug = async (link: TrackingLink) => {
-    const fullUrl = link.domain
-      ? `https://${link.domain}/${link.slug}`
-      : `${BACKEND_ORIGIN}/r/${link.slug}`
+  const handleCopyTrackedLink = async (link: TrackingLink) => {
     try {
-      await navigator.clipboard.writeText(fullUrl)
-      toast.success('Copied to clipboard')
+      await navigator.clipboard.writeText(link.trackingUrl)
+      toast.success('Tracked link copied to clipboard')
     } catch {
       toast.error('Failed to copy')
     }
+  }
+
+  const handlePreviewDestination = (link: TrackingLink) => {
+    window.open(link.destinationUrl, '_blank', 'noopener,noreferrer')
   }
 
   const domainOptions = [...new Set(domains?.map(d => d.domain) ?? [])]
@@ -101,7 +97,9 @@ export default function LinksPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Tracking Links</h1>
-          <p className="text-sm text-muted mt-1">Each link has a short code (called a <strong>slug</strong>) like <code className="text-xs bg-neutral-100 px-1.5 py-0.5 rounded">abc123</code> that goes in your URL — e.g. <code className="text-xs bg-neutral-100 px-1.5 py-0.5 rounded">your.domain/r/abc123</code>. Links are attached to a domain.</p>
+          <p className="text-sm text-muted mt-1">
+            A <strong>tracked link</strong> is the URL you share — VeriClick checks every visitor before sending them to the <strong>destination</strong> (the real page behind it). Each link has a short slug like <code className="text-xs bg-neutral-100 px-1.5 py-0.5 rounded">abc123</code>.
+          </p>
         </div>
         <button
           onClick={() => setShowCreateModal(true)}
@@ -146,9 +144,8 @@ export default function LinksPage() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-neutral-200 bg-neutral-50/50">
-                <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Slug</th>
+                <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Tracked link</th>
                 <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Destination</th>
-                <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Domain</th>
                 <th className="text-center px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Clicks</th>
                 <th className="text-center px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Bots</th>
                 <th className="text-center px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Status</th>
@@ -160,12 +157,10 @@ export default function LinksPage() {
                 <tr key={link.id} className="border-b border-neutral-100 hover:bg-neutral-50/50 transition-colors">
                   <td className="px-6 py-4">
                     <span className="font-mono font-bold text-sm">{link.slug}</span>
+                    <span className="block text-xs text-muted truncate max-w-[220px] mt-0.5" title={link.trackingUrl}>{link.trackingUrl}</span>
                   </td>
                   <td className="px-6 py-4">
                     <span className="text-sm text-muted truncate block max-w-[200px]" title={link.destinationUrl}>{link.destinationUrl}</span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className="text-sm text-muted">{link.domain ?? <span className="italic text-neutral-300">No domain</span>}</span>
                   </td>
                   <td className="px-6 py-4 text-center font-bold text-sm">{link.totalClicks.toLocaleString()}</td>
                   <td className="px-6 py-4 text-center">
@@ -187,8 +182,11 @@ export default function LinksPage() {
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center justify-end gap-1">
-                      <button onClick={() => handleCopySlug(link)} className="p-2 rounded-lg hover:bg-neutral-100 transition-colors" title="Copy URL">
+                      <button onClick={() => handleCopyTrackedLink(link)} className="p-2 rounded-lg hover:bg-neutral-100 transition-colors" title="Copy tracked link">
                         <HugeiconsIcon icon={Copy01Icon} className="w-4 h-4 text-muted" />
+                      </button>
+                      <button onClick={() => handlePreviewDestination(link)} className="p-2 rounded-lg hover:bg-neutral-100 transition-colors" title="Preview destination">
+                        <HugeiconsIcon icon={ExternalLinkIcon} className="w-4 h-4 text-muted" />
                       </button>
                       <button onClick={() => setEditTarget(link)} className="p-2 rounded-lg hover:bg-neutral-100 transition-colors" title="Edit">
                         <HugeiconsIcon icon={Edit01Icon} className="w-4 h-4 text-muted" />

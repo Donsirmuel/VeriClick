@@ -97,9 +97,7 @@ export function CreateLinkModal({ onClose, onSubmit, domains, initialData }: Cre
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">Status</label>
             <div className="flex gap-3">
-              <label className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-xl border cursor-pointer transition-all ${
-                false ? '' : ''
-              }`}>
+              <label className="flex-1 flex items-center justify-center gap-2 p-3 rounded-xl border cursor-pointer transition-all">
                 <input type="radio" value="active" {...register('status')} className="hidden peer" />
                 <span className="peer-checked:bg-black peer-checked:text-white peer-checked:border-black bg-neutral-100 text-neutral-500 border-neutral-200 px-4 py-2 rounded-lg text-sm font-bold transition-all">
                   Active

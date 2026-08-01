@@ -22,7 +22,8 @@ class UserSerializer(serializers.ModelSerializer):
 class WorkspaceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Workspace
-        fields = ['id', 'name', 'created_at', 'last_domain_scan_at']
+        fields = ['id', 'name', 'tracker_secret', 'created_at', 'last_domain_scan_at']
+        read_only_fields = ['id', 'tracker_secret', 'created_at', 'last_domain_scan_at']
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -61,14 +62,20 @@ class TrackingLinkSerializer(serializers.ModelSerializer):
         slug_field='domain', queryset=DomainRegistry.objects.all(), allow_null=True, required=False,
     )
     slug = serializers.CharField(required=False, allow_blank=True, max_length=100)
+    tracking_url = serializers.SerializerMethodField()
 
     class Meta:
         model = TrackingLink
         fields = [
             'id', 'slug', 'destination_url', 'domain', 'domain_health',
-            'total_clicks', 'bot_clicks', 'status', 'created_at', 'updated_at',
+            'tracking_url', 'total_clicks', 'bot_clicks', 'status',
+            'created_at', 'updated_at',
         ]
-        read_only_fields = ['id', 'total_clicks', 'bot_clicks', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'tracking_url', 'total_clicks', 'bot_clicks', 'created_at', 'updated_at']
+
+    def get_tracking_url(self, obj):
+        from .services import get_public_tracking_url
+        return get_public_tracking_url(obj, self.context.get('request'))
 
     def create(self, validated_data):
         if not validated_data.get('slug'):

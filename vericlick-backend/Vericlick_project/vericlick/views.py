@@ -13,6 +13,7 @@ from rest_framework.decorators import api_view, permission_classes, action, thro
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework_simplejwt.tokens import RefreshToken
 from decouple import config
 
@@ -34,6 +35,10 @@ from .services import classify_request
 
 def get_user_workspace(user):
     return Workspace.objects.filter(owner=user).first()
+
+
+class TrackerEventThrottle(ScopedRateThrottle):
+    scope = 'tracker'
 
 
 @api_view(['GET', 'PATCH'])
@@ -81,7 +86,7 @@ def serve_tracker_script(request):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
-@throttle_classes([])
+@throttle_classes([TrackerEventThrottle])
 def receive_tracker_event(request):
     site_id = request.data.get('site_id')
     if not site_id:
@@ -95,6 +100,13 @@ def receive_tracker_event(request):
     except (Workspace.DoesNotExist, ValueError):
         return Response(
             {'errors': [{'field': 'site_id', 'detail': 'Invalid workspace'}]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    token = request.data.get('token')
+    if not token or token != str(workspace.tracker_secret):
+        return Response(
+            {'errors': [{'field': 'token', 'detail': 'Invalid tracker token'}]},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
