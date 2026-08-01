@@ -8,6 +8,7 @@ import { TrafficChart } from '@/components/dashboard/TrafficChart'
 import { ActivityFeed } from '@/components/dashboard/ActivityFeed'
 import { DomainHealthWidget } from '@/components/dashboard/DomainHealthWidget'
 import { fetchDashboardStats, fetchTrafficData, fetchActivity } from '@/api/dashboard'
+import { fetchDomains } from '@/api/domains'
 import type { TimeRange } from '@/types'
 
 export default function DashboardPage() {
@@ -29,6 +30,11 @@ export default function DashboardPage() {
     queryFn: fetchActivity,
   })
 
+  const { data: domains } = useQuery({
+    queryKey: ['domains'],
+    queryFn: fetchDomains,
+  })
+
   const totalClicks = stats?.totalClicks24h ?? 0
   const activeLinks = stats?.activeLinks ?? 0
   const hasData = totalClicks > 0 || activeLinks > 0
@@ -36,6 +42,7 @@ export default function DashboardPage() {
   if (!hasData && stats) {
     const domainsCount =
       (stats.domainsHealthy ?? 0) + (stats.domainsDegraded ?? 0) + (stats.domainsBlacklisted ?? 0)
+    const hasVerifiedDomain = (domains ?? []).some((d) => d.verified)
 
     const steps = [
       {
@@ -48,6 +55,14 @@ export default function DashboardPage() {
       },
       {
         n: 2,
+        title: 'Verify your domain',
+        desc: 'VeriClick checks the address resolves so your links work. Click “Recheck” on a domain to verify it.',
+        to: '/app/domains',
+        icon: CheckmarkCircle02Icon,
+        done: hasVerifiedDomain,
+      },
+      {
+        n: 3,
         title: 'Create a tracked link',
         desc: 'Point a tracked link at the page you want to protect.',
         to: '/app/links',
@@ -55,7 +70,7 @@ export default function DashboardPage() {
         done: activeLinks > 0,
       },
       {
-        n: 3,
+        n: 4,
         title: 'Copy your tracked link',
         desc: 'Share the VeriClick URL — humans get through, suspicious traffic gets blocked.',
         to: '/app/links',
@@ -63,7 +78,7 @@ export default function DashboardPage() {
         done: activeLinks > 0,
       },
       {
-        n: 4,
+        n: 5,
         title: 'Install the site script',
         desc: 'Add extra detection to pages you own with one line of code.',
         to: '/app/settings',
@@ -181,6 +196,7 @@ export default function DashboardPage() {
             healthy={stats?.domainsHealthy ?? 0}
             degraded={stats?.domainsDegraded ?? 0}
             blacklisted={stats?.domainsBlacklisted ?? 0}
+            lastScan={stats?.lastDomainScan ?? null}
           />
         </div>
       </div>

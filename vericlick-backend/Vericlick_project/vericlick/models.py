@@ -14,6 +14,10 @@ class Workspace(models.Model):
     name = models.CharField(max_length=255)
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='workspaces')
     tracker_secret = models.UUIDField(default=uuid.uuid4, editable=False)
+    safe_destination = models.URLField(
+        max_length=2048, blank=True, default='',
+        help_text='Where suspicious traffic is sent instead of the real destination.',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     last_domain_scan_at = models.DateTimeField(null=True, blank=True)
 
@@ -38,6 +42,10 @@ class DomainRegistry(models.Model):
     health_status = models.CharField(
         max_length=20, choices=HealthStatus.choices, default=HealthStatus.HEALTHY
     )
+    verified = models.BooleanField(
+        default=False,
+        help_text='True once a health check confirms the domain resolves (DNS ownership check).',
+    )
     last_checked = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -52,11 +60,12 @@ class DomainRegistry(models.Model):
         try:
             socket.getaddrinfo(self.domain, 80, proto=socket.IPPROTO_TCP)
             self.health_status = self.HealthStatus.HEALTHY
+            self.verified = True
         except Exception:
             self.health_status = self.HealthStatus.DEGRADED
         finally:
             self.last_checked = now()
-            self.save(update_fields=['health_status', 'last_checked'])
+            self.save(update_fields=['health_status', 'last_checked', 'verified'])
 
 
 class TrackingLink(models.Model):
@@ -97,6 +106,8 @@ class ClickLog(models.Model):
     link = models.ForeignKey(TrackingLink, on_delete=models.CASCADE, related_name='clicks')
     ip = models.GenericIPAddressField()
     country = models.CharField(max_length=100, blank=True, default='')
+    region = models.CharField(max_length=100, blank=True, default='')
+    city = models.CharField(max_length=100, blank=True, default='')
     device = models.CharField(max_length=200, blank=True, default='')
     user_agent = models.TextField(blank=True, default='')
     is_bot = models.BooleanField(default=False)

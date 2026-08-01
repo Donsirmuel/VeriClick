@@ -57,7 +57,7 @@ export function CreateLinkModal({ onClose, onSubmit, domains, initialData }: Cre
         {/* Form */}
         <form onSubmit={handleSubmit((data) => onSubmit(data as unknown as LinkCreateInput))} className="p-6 space-y-5">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">Slug</label>
+            <label className="block text-sm font-medium text-slate-700 mb-2">Tracked link slug</label>
             <div className="flex gap-2">
               <input 
                 {...register('slug')}
@@ -68,16 +68,23 @@ export function CreateLinkModal({ onClose, onSubmit, domains, initialData }: Cre
                 auto-gen
               </div>
             </div>
+            <p className="text-xs text-muted mt-1.5 leading-relaxed">
+              This becomes the URL you share — the tracked link VeriClick checks every visitor on.
+            </p>
             {errors.slug && <p className="text-xs text-error mt-1">{errors.slug.message}</p>}
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">Destination URL</label>
+            <label className="block text-sm font-medium text-slate-700 mb-2">Destination</label>
             <input 
               {...register('destinationUrl')}
               placeholder="https://example.com/your-landing-page"
               className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-black transition-colors"
             />
+            <p className="text-xs text-muted mt-1.5 leading-relaxed">
+              The real page visitors reach after passing checks. Suspicious traffic is sent to your
+              safe destination instead of here.
+            </p>
             {errors.destinationUrl && <p className="text-xs text-error mt-1">{errors.destinationUrl.message}</p>}
           </div>
 

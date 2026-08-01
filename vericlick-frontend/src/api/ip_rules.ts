@@ -94,6 +94,8 @@ const mockBlocked: BlockedIPEntry[] = [
     matchedRule: '185.220.101.0/24',
     slug: 'a8k3x2m',
     country: 'Germany',
+    region: 'Berlin',
+    city: 'Berlin',
     createdAt: '2026-07-22T06:10:00Z',
   },
   {
@@ -105,6 +107,8 @@ const mockBlocked: BlockedIPEntry[] = [
     matchedRule: '162.243.0.0/16',
     slug: 'q7w9p1k',
     country: 'United States',
+    region: 'New York',
+    city: 'New York',
     createdAt: '2026-07-22T05:58:00Z',
   },
   {
@@ -116,6 +120,8 @@ const mockBlocked: BlockedIPEntry[] = [
     matchedRule: '',
     slug: 't3r7k9v',
     country: 'Australia',
+    region: 'New South Wales',
+    city: 'Sydney',
     createdAt: '2026-07-22T05:42:00Z',
   },
 ]

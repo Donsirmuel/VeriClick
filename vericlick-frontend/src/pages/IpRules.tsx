@@ -117,7 +117,7 @@ export default function IpRulesPage() {
           <h1 className="text-2xl font-bold text-slate-900">IP Rules</h1>
           <p className="text-sm text-muted mt-1">
             Control which IP addresses can or cannot reach your links
-            <HelpTooltip text="An IP address is like a computer's home address on the internet. Allow rules let specific IPs through. Deny rules block them. Deny always wins if both match. You can use CIDR ranges like 192.168.1.0/24 to cover many addresses at once." side="right" />
+            <HelpTooltip text="An IP address is like a computer's home address on the internet. Allow rules let specific IPs through and are checked first — they always win, so whitelisted IPs are never flagged again. Deny rules block traffic next. After that, automated bot detection and rate limits apply. You can use CIDR ranges like 192.168.1.0/24 to cover many addresses at once." side="right" />
           </p>
         </div>
         <button
@@ -208,7 +208,7 @@ export default function IpRulesPage() {
                 <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">
                   <span className="flex items-center gap-1.5">
                     Action
-                    <HelpTooltip text="Allow: traffic bypasses all checks. Deny: traffic is blocked immediately." />
+                    <HelpTooltip text="Allow: traffic bypasses all checks and is always let through. Deny: traffic is blocked and sent to your safe destination." />
                   </span>
                 </th>
                 <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Reason</th>

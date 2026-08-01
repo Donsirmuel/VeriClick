@@ -1,14 +1,16 @@
 import { Link } from 'react-router-dom'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { ArrowRight01Icon, CheckmarkCircle02Icon, Alert02Icon, CancelCircleIcon } from '@hugeicons/core-free-icons'
+import { ArrowRight01Icon, CheckmarkCircle02Icon, Alert02Icon, CancelCircleIcon, Clock01Icon } from '@hugeicons/core-free-icons'
+import { formatRelativeTime } from '@/lib/utils'
 
 interface DomainHealthWidgetProps {
   healthy: number
   degraded: number
   blacklisted: number
+  lastScan: string | null
 }
 
-export function DomainHealthWidget({ healthy, degraded, blacklisted }: DomainHealthWidgetProps) {
+export function DomainHealthWidget({ healthy, degraded, blacklisted, lastScan }: DomainHealthWidgetProps) {
   const total = healthy + degraded + blacklisted
   const healthyPct = Math.round((healthy / total) * 100)
   const degradedPct = Math.round((degraded / total) * 100)
@@ -19,7 +21,11 @@ export function DomainHealthWidget({ healthy, degraded, blacklisted }: DomainHea
       <div className="flex items-center justify-between mb-6">
         <div>
           <h3 className="text-lg font-bold text-slate-900">Domain Health</h3>
-          <p className="text-sm text-muted mt-1">{total} registered domains</p>
+          <p className="text-sm text-muted mt-1 flex items-center gap-1.5">
+            <HugeiconsIcon icon={Clock01Icon} className="w-3.5 h-3.5" />
+            Auto-checks every 15 min · last scan{' '}
+            {lastScan ? formatRelativeTime(lastScan) : 'never'}
+          </p>
         </div>
         <Link to="/app/domains" className="text-black hover:text-neutral-700 text-sm font-bold flex items-center gap-1">
           All Domains <HugeiconsIcon icon={ArrowRight01Icon} className="w-4 h-4" />

@@ -101,7 +101,7 @@ export default function DomainsPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Domain Registry</h1>
-          <p className="text-sm text-muted mt-1">Domains are the branded URLs your links live on. Each link belongs to a domain — e.g. link <code className="text-xs bg-neutral-100 px-1.5 py-0.5 rounded">your.domain/r/summer23</code> uses domain <code className="text-xs bg-neutral-100 px-1.5 py-0.5 rounded">your.domain</code>. Add a domain first, then create links under it.</p>
+          <p className="text-sm text-muted mt-1 max-w-3xl">Domains are the branded URLs your links live on. Each link belongs to a domain — e.g. link <code className="text-xs bg-neutral-100 px-1.5 py-0.5 rounded">your.domain/r/summer23</code> uses domain <code className="text-xs bg-neutral-100 px-1.5 py-0.5 rounded">your.domain</code>. Domains are health-checked automatically every 15 minutes, and the recheck button verifies a domain immediately.</p>
         </div>
         <button
           onClick={() => setShowAddDialog(true)}
@@ -151,7 +151,7 @@ export default function DomainsPage() {
                 <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">
                   <span className="flex items-center gap-1.5">
                     Status
-                    <HelpTooltip text="Healthy: Domain resolves correctly. Degraded: DNS issues detected. Blacklisted: Domain flagged on RBLs." />
+                    <HelpTooltip text="Healthy: Domain resolves correctly. Degraded: DNS issues detected. Blacklisted: Domain flagged on RBLs. Verified: a health check confirmed the domain resolves." />
                   </span>
                 </th>
                 <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Last Checked</th>
@@ -181,7 +181,18 @@ export default function DomainsPage() {
                           <button onClick={() => setEditTarget(null)} className="text-xs font-bold text-muted hover:text-slate-700">Cancel</button>
                         </div>
                       ) : (
-                        <span className="font-bold text-sm">{domain.domain}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-sm">{domain.domain}</span>
+                          {domain.verified ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-success bg-success/10 px-2 py-0.5 rounded-full">
+                              Verified
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-warning bg-warning/10 px-2 py-0.5 rounded-full">
+                              Unverified
+                            </span>
+                          )}
+                        </div>
                       )}
                     </div>
                   </td>

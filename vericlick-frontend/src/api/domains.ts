@@ -26,6 +26,7 @@ export async function createDomain(domain: string): Promise<Domain> {
       id: crypto.randomUUID(),
       domain,
       healthStatus: 'healthy',
+      verified: true,
       lastChecked: null,
       linksCount: 0,
       createdAt: new Date().toISOString(),

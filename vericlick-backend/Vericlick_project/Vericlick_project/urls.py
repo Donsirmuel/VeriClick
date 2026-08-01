@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.urls import path, include
 from django.http import HttpResponse
 from django.template.loader import render_to_string
-from vericlick.views import redirect_click
+from vericlick.views import redirect_click, neutral_page
 
 def robots_txt(request):
     lines = [
@@ -34,4 +34,5 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('vericlick.urls')),
     path('r/<slug:slug>/', redirect_click, name='redirect-click'),
+    path('suspicious/', neutral_page, name='neutral-page'),
 ]

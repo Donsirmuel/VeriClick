@@ -22,7 +22,10 @@ class UserSerializer(serializers.ModelSerializer):
 class WorkspaceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Workspace
-        fields = ['id', 'name', 'tracker_secret', 'created_at', 'last_domain_scan_at']
+        fields = [
+            'id', 'name', 'tracker_secret', 'safe_destination',
+            'created_at', 'last_domain_scan_at',
+        ]
         read_only_fields = ['id', 'tracker_secret', 'created_at', 'last_domain_scan_at']
 
 
@@ -47,8 +50,8 @@ class DomainRegistrySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = DomainRegistry
-        fields = ['id', 'domain', 'health_status', 'last_checked', 'links_count', 'created_at']
-        read_only_fields = ['id', 'health_status', 'last_checked', 'links_count', 'created_at']
+        fields = ['id', 'domain', 'health_status', 'verified', 'last_checked', 'links_count', 'created_at']
+        read_only_fields = ['id', 'health_status', 'verified', 'last_checked', 'links_count', 'created_at']
 
     def get_links_count(self, obj):
         return obj.links.count()
@@ -89,7 +92,10 @@ class ClickLogSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ClickLog
-        fields = ['id', 'ip', 'country', 'device', 'reason', 'is_bot', 'decision', 'matched_rule', 'slug', 'time', 'created_at']
+        fields = [
+            'id', 'ip', 'country', 'region', 'city', 'device', 'reason',
+            'is_bot', 'decision', 'matched_rule', 'slug', 'time', 'created_at',
+        ]
 
 
 class IPRuleSerializer(serializers.ModelSerializer):
@@ -122,5 +128,5 @@ class BlockedIPSerializer(serializers.ModelSerializer):
         model = ClickLog
         fields = [
             'id', 'ip', 'reason', 'decision', 'is_bot',
-            'matched_rule', 'slug', 'country', 'created_at',
+            'matched_rule', 'slug', 'country', 'region', 'city', 'created_at',
         ]

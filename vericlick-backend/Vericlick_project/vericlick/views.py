@@ -30,7 +30,7 @@ from .serializers import (
     BlockedIPSerializer,
 )
 from .version import get_version
-from .services import classify_request
+from .services import classify_request, lookup_location, get_safe_destination
 
 
 def get_user_workspace(user):
@@ -361,7 +361,7 @@ def blocked_ips(request):
 
     search = request.query_params.get('search', '').strip()
     if search:
-        qs = qs.filter(ip__icontains=search)
+        qs = qs.filter(Q(ip__icontains=search) | Q(link__slug__icontains=search))
 
     qs = qs.order_by('-created_at')[:500]
 
@@ -456,10 +456,14 @@ def redirect_click(request, slug):
     workspace = link.workspace
 
     result = classify_request(link, ip, user_agent, workspace)
+    location = lookup_location(ip)
 
     ClickLog.objects.create(
         link=link,
         ip=ip,
+        country=location['country'],
+        region=location['region'],
+        city=location['city'],
         user_agent=user_agent,
         is_bot=result['is_bot'],
         reason=result['reason'],
@@ -472,12 +476,45 @@ def redirect_click(request, slug):
     TrackingLink.objects.filter(id=link.id).update(total_clicks=F('total_clicks') + 1)
 
     if result['decision'] in ('blocked', 'challenged'):
-        return Response(
-            {'error': 'Access denied', 'reason': result['reason']},
-            status=status.HTTP_403_FORBIDDEN,
-        )
+        # Divert suspicious traffic to the configured safe destination, falling
+        # back to a neutral VeriClick page. Humans always reach the real URL.
+        return HttpResponseRedirect(redirect_to=get_safe_destination(workspace, request))
 
     return HttpResponseRedirect(redirect_to=link.destination_url)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def neutral_page(request):
+    html = """<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex" />
+  <title>Link Protected</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+           background: #fafafa; color: #171717; display: grid; place-items: center;
+           min-height: 100vh; margin: 0; padding: 24px; }
+    .card { text-align: center; max-width: 420px; }
+    .shield { width: 64px; height: 64px; margin: 0 auto 20px; border-radius: 20px;
+              background: #111; color: #fff; display: grid; place-items: center;
+              font-size: 28px; }
+    h1 { font-size: 20px; margin: 0 0 8px; }
+    p { color: #737373; font-size: 14px; line-height: 1.6; margin: 0; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="shield">&#128737;</div>
+    <h1>This link is protected</h1>
+    <p>The destination was not shown because this request looked automated or suspicious.
+       If you are a person, try opening the link again from your normal browser.</p>
+  </div>
+</body>
+</html>"""
+    return HttpResponse(html, content_type='text/html')
 
 
 class IPRuleViewSet(viewsets.ModelViewSet):

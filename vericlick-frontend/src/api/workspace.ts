@@ -1,25 +1,36 @@
 import { MOCK_MODE, apiClient } from './client'
 import { mockFetch } from './mock'
+import type { Workspace } from '@/types'
 
-interface Workspace {
-  id: string
-  name: string
-  trackerSecret: string
-  created_at: string
+interface WorkspaceUpdateInput {
+  name?: string
+  safeDestination?: string
 }
 
 export async function fetchWorkspace(): Promise<Workspace> {
   if (MOCK_MODE) {
-    return mockFetch({ id: 'mock-id', name: 'VeriClick Pro', trackerSecret: 'mock-secret', created_at: new Date().toISOString() })
+    return mockFetch<Workspace>({
+      id: 'mock-id',
+      name: 'VeriClick Pro',
+      trackerSecret: 'mock-secret',
+      safeDestination: '',
+      lastDomainScanAt: '2026-07-22T06:10:00Z',
+    })
   }
   const { data } = await apiClient.get<Workspace>('/workspace/')
   return data
 }
 
-export async function updateWorkspace(name: string): Promise<Workspace> {
+export async function updateWorkspace(input: WorkspaceUpdateInput): Promise<Workspace> {
   if (MOCK_MODE) {
-    return mockFetch({ id: 'mock-id', name, trackerSecret: 'mock-secret', created_at: new Date().toISOString() })
+    return mockFetch<Workspace>({
+      id: 'mock-id',
+      name: input.name ?? 'VeriClick Pro',
+      trackerSecret: 'mock-secret',
+      safeDestination: input.safeDestination ?? '',
+      lastDomainScanAt: '2026-07-22T06:10:00Z',
+    })
   }
-  const { data } = await apiClient.patch<Workspace>('/workspace/', { name })
+  const { data } = await apiClient.patch<Workspace>('/workspace/', input)
   return data
 }

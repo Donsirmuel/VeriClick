@@ -20,6 +20,7 @@ export default function SettingsPage() {
   })
 
   const [workspaceName, setWorkspaceName] = useState('')
+  const [safeDestination, setSafeDestination] = useState('')
 
   const updateMutation = useMutation({
     mutationFn: updateWorkspace,
@@ -34,7 +35,10 @@ export default function SettingsPage() {
       toast.error('Workspace name cannot be empty')
       return
     }
-    updateMutation.mutate(workspaceName)
+    updateMutation.mutate({
+      name: workspaceName.trim(),
+      safeDestination: safeDestination.trim(),
+    })
   }
 
   const snippet = workspace
@@ -106,6 +110,21 @@ export default function SettingsPage() {
                     onChange={(e) => setWorkspaceName(e.target.value)}
                     className="w-full bg-slate-50 border border-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-black transition-colors"
                   />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-700 ml-1">Safe destination</label>
+                  <input
+                    type="url"
+                    defaultValue={workspace?.safeDestination ?? ''}
+                    onChange={(e) => setSafeDestination(e.target.value)}
+                    placeholder="https://example.com/blocked (optional)"
+                    className="w-full bg-slate-50 border border-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-black transition-colors"
+                  />
+                  <p className="text-xs text-muted ml-1 leading-relaxed">
+                    Where suspicious traffic is sent instead of your real page. Leave blank to use
+                    VeriClick's built-in “link protected” page. Real visitors always reach your
+                    destination — this only affects flagged requests.
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-slate-700 ml-1">Default time zone</label>

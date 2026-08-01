@@ -50,8 +50,10 @@ export default function BlockedIPsPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Blocked IPs</h1>
-          <p className="text-sm text-muted mt-1">
-            Recently blocked traffic for your links. Whitelist an IP to allow it through in the future.
+          <p className="text-sm text-muted mt-1 max-w-2xl">
+            Recently blocked traffic for your links. These requests were sent to your safe
+            destination instead of your real page. If any are actually humans, whitelist the IP to
+            let it through every time.
           </p>
         </div>
       </div>
@@ -92,7 +94,7 @@ export default function BlockedIPsPage() {
               <tr className="border-b border-neutral-200 bg-neutral-50/50">
                 <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">IP</th>
                 <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Reason</th>
-                <th className="text-center px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Bot?</th>
+                <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Bot / Human</th>
                 <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Matched Rule</th>
                 <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Slug</th>
                 <th className="text-center px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Timestamp</th>
@@ -104,18 +106,20 @@ export default function BlockedIPsPage() {
                 <tr key={entry.id} className="border-b border-neutral-100 hover:bg-neutral-50/50 transition-colors">
                   <td className="px-6 py-4">
                     <span className="font-mono font-bold text-sm">{entry.ip}</span>
-                    {entry.country && (
-                      <span className="block text-xs text-muted mt-0.5">{entry.country}</span>
+                    {(entry.country || entry.region || entry.city) && (
+                      <span className="block text-xs text-muted mt-0.5">
+                        {[entry.city, entry.region, entry.country].filter(Boolean).join(', ')}
+                      </span>
                     )}
                   </td>
                   <td className="px-6 py-4">
                     <span className="text-sm text-muted">{entry.reason || <span className="italic text-neutral-300">No reason</span>}</span>
                   </td>
-                  <td className="px-6 py-4 text-center">
+                  <td className="px-6 py-4">
                     <span className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full ${
-                      entry.isBot ? 'bg-error/10 text-error' : 'bg-neutral-100 text-muted'
+                      entry.isBot ? 'bg-error/10 text-error' : 'bg-success/10 text-success'
                     }`}>
-                      {entry.isBot ? 'Yes' : 'No'}
+                      {entry.isBot ? 'Bot' : 'Human'}
                     </span>
                   </td>
                   <td className="px-6 py-4">
@@ -173,7 +177,7 @@ export default function BlockedIPsPage() {
       <ConfirmDialog
         open={!!whitelistTarget}
         title="Whitelist IP"
-        message={`Create an allow rule for "${whitelistTarget?.ip}"? Traffic from this IP will bypass all checks.`}
+        message={`Create a permanent allow rule for "${whitelistTarget?.ip}"? Allow rules are checked first, so this IP will always reach your destination and never be flagged again.`}
         confirmLabel="Whitelist"
         onConfirm={handleWhitelist}
         onCancel={() => setWhitelistTarget(null)}

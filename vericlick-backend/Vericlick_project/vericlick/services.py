@@ -52,9 +52,51 @@ def check_rate_limit(ip, workspace, max_clicks=60, window_seconds=60):
 
 
 def _lookup_country(ip):
-    # Geo-IP lookup placeholder. Swap in a provider (e.g. pygeoip, GeoIP2)
-    # later to populate ClickLog.country and TrackerEvent geo metadata.
-    return None
+    # Backwards-compatible alias. Real GeoIP enrichment is in lookup_location().
+    return lookup_location(ip)['country']
+
+
+def lookup_location(ip):
+    # Persisted location enrichment for click logs. Tries an optional GeoLite2
+    # database first (pip install geoip2 + set GEOIP2_DB), then falls back to a
+    # safe offline classification so records always carry country/region/city.
+    try:
+        from django.conf import settings as django_settings
+        from geoip2.database import Reader
+        db_path = getattr(django_settings, 'GEOIP2_DB', '')
+        if db_path:
+            with Reader(db_path) as reader:
+                resp = reader.city(ip)
+                return {
+                    'country': resp.country.names.get('en', resp.country.name or ''),
+                    'region': (resp.subdivisions.most_specific.name or '') if resp.subdivisions else '',
+                    'city': resp.city.name or '',
+                }
+    except Exception:
+        pass
+
+    try:
+        ip_obj = ipaddress.ip_address(ip)
+    except ValueError:
+        return {'country': '', 'region': '', 'city': ''}
+
+    if ip_obj.is_loopback:
+        return {'country': 'Localhost', 'region': '', 'city': ''}
+    if ip_obj.is_private or ip_obj.is_link_local:
+        return {'country': 'Private network', 'region': '', 'city': ''}
+    if ip_obj.is_reserved:
+        return {'country': 'Reserved', 'region': '', 'city': ''}
+    return {'country': 'Unknown', 'region': '', 'city': ''}
+
+
+def get_safe_destination(workspace, request=None):
+    # Suspicious traffic is diverted here. Prefers the workspace-configured safe
+    # destination; otherwise falls back to a neutral VeriClick page.
+    if workspace.safe_destination and workspace.safe_destination.strip():
+        return workspace.safe_destination.strip()
+    if request is not None:
+        return request.build_absolute_uri('/suspicious/')
+    return '/suspicious/'
 
 
 def get_public_tracking_url(link, request=None):
@@ -71,32 +113,26 @@ def get_public_tracking_url(link, request=None):
 def classify_request(link, ip, user_agent, workspace):
     now = timezone.now()
 
-    # Decision chain: denylist -> allowlist -> bot heuristics -> rate limits -> default.
-    # Deny-first is intentional: a deny rule always overrides an allow rule for the
-    # same IP so blocked addresses can never slip through a broad allow range.
+    # Decision chain: allowlist -> denylist -> bot heuristics -> rate limits.
+    # Allowlist is highest priority: an allow rule always wins (e.g. recovered
+    # false positives), so allowlisted IPs are never diverted. Deny rules come
+    # next so a blocked address is always intercepted. Then UA heuristics, then
+    # rate limiting, then default allow for everyone else.
     rules = IPRule.objects.filter(
         workspace=workspace, is_active=True,
     ).filter(
         Q(expires_at__isnull=True) | Q(expires_at__gt=now),
     )
 
-    deny_match = None
     allow_match = None
+    deny_match = None
     for rule in rules:
         if not ip_matches_cidr(ip, rule.ip_or_cidr):
             continue
-        if rule.action == 'deny' and deny_match is None:
-            deny_match = rule
         if rule.action == 'allow' and allow_match is None:
             allow_match = rule
-
-    if deny_match:
-        return {
-            'is_bot': True,
-            'reason': f'IPRule: deny ({deny_match.reason})' if deny_match.reason else 'IPRule: deny',
-            'decision': 'blocked',
-            'matched_rule': str(deny_match.ip_or_cidr),
-        }
+        if rule.action == 'deny' and deny_match is None:
+            deny_match = rule
 
     if allow_match:
         return {
@@ -104,6 +140,14 @@ def classify_request(link, ip, user_agent, workspace):
             'reason': f'IPRule: allow ({allow_match.reason})' if allow_match.reason else 'IPRule: allow',
             'decision': 'allowed',
             'matched_rule': str(allow_match.ip_or_cidr),
+        }
+
+    if deny_match:
+        return {
+            'is_bot': True,
+            'reason': f'IPRule: deny ({deny_match.reason})' if deny_match.reason else 'IPRule: deny',
+            'decision': 'blocked',
+            'matched_rule': str(deny_match.ip_or_cidr),
         }
 
     is_bot_ua = is_likely_bot_ua(user_agent)

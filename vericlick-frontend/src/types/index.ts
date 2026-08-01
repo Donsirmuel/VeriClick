@@ -26,6 +26,8 @@ export interface ActivityEntry {
   id: string
   ip: string
   country: string
+  region: string
+  city: string
   device: string
   reason: string | null
   time: string
@@ -57,9 +59,18 @@ export interface Domain {
   id: string
   domain: string
   healthStatus: HealthStatus
+  verified: boolean
   lastChecked: string | null
   linksCount: number
   createdAt: string
+}
+
+export interface Workspace {
+  id: string
+  name: string
+  trackerSecret: string
+  safeDestination: string
+  lastDomainScanAt: string | null
 }
 
 export interface AuthUser {
@@ -107,6 +118,8 @@ export interface BlockedIPEntry {
   matchedRule: string
   slug: string
   country: string
+  region: string
+  city: string
   createdAt: string
 }
 

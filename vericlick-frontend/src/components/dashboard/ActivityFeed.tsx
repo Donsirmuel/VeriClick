@@ -29,16 +29,16 @@ export function ActivityFeed({ activity }: { activity: ActivityEntry[] }) {
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">
                 <span className="font-mono text-sm font-bold text-slate-900">{entry.ip}</span>
-                {entry.isBot && (
-                  <span className="px-1.5 py-0.5 rounded-md bg-error text-[10px] font-bold text-white uppercase tracking-wider">
-                    {entry.reason || 'Bot'}
-                  </span>
-                )}
+                <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${
+                  entry.isBot ? 'bg-error text-white' : 'bg-success/10 text-success'
+                }`}>
+                  {entry.isBot ? (entry.reason || 'Bot') : 'Human'}
+                </span>
               </div>
               <div className="flex items-center gap-3 text-xs text-muted">
                 <div className="flex items-center gap-1">
                   <HugeiconsIcon icon={MapPinIcon} className="w-3 h-3" />
-                  {entry.country}
+                  {[entry.city, entry.region, entry.country].filter(Boolean).join(', ') || 'Unknown location'}
                 </div>
                 <span>•</span>
                 <span className="font-mono">{entry.slug}</span>
