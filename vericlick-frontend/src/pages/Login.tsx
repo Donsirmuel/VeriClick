@@ -43,9 +43,11 @@ export default function Login() {
         <div className="scan-line pointer-events-none" />
         <div className="relative z-10">
           <div className="mb-12">
-            <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-white/10">
-              <Logo variant="dark" className="w-8 h-8" />
-            </div>
+            <Link to="/" className="inline-block">
+              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-white/10 hover:scale-105 transition-transform">
+                <Logo variant="dark" className="w-8 h-8" />
+              </div>
+            </Link>
             <h2 className="text-4xl font-bold mb-4 leading-tight text-white">
               Verify every click.<br />Block every bot.
             </h2>
@@ -97,7 +99,10 @@ export default function Login() {
             </Link>
           </div>
 
-          <div className="mb-10">
+          <div className="mb-8">
+            <Link to="/" className="inline-flex items-center gap-1.5 text-sm text-neutral-500 hover:text-white transition-colors mb-6">
+              <span aria-hidden>←</span> Back to home
+            </Link>
             <h1 className="text-3xl font-bold text-white mb-2">Welcome back</h1>
             <p className="text-neutral-400">Sign in to your workspace to manage your links and traffic.</p>
           </div>

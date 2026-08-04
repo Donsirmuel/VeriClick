@@ -7,30 +7,32 @@ import { StatCard } from '@/components/dashboard/StatCard'
 import { TrafficChart } from '@/components/dashboard/TrafficChart'
 import { ActivityFeed } from '@/components/dashboard/ActivityFeed'
 import { DomainHealthWidget } from '@/components/dashboard/DomainHealthWidget'
+import { BlockedQueueWidget } from '@/components/dashboard/BlockedQueueWidget'
 import { fetchDashboardStats, fetchTrafficData, fetchActivity } from '@/api/dashboard'
 import { fetchDomains } from '@/api/domains'
+import { DashboardSkeleton } from '@/components/ui/DashboardSkeleton'
 import type { TimeRange } from '@/types'
 
 export default function DashboardPage() {
   const [range, setRange] = useState<TimeRange>('7d')
   const navigate = useNavigate()
 
-  const { data: stats } = useQuery({
+  const { data: stats, isLoading: statsLoading } = useQuery({
     queryKey: ['dashboard-stats'],
     queryFn: fetchDashboardStats,
   })
 
-  const { data: trafficData } = useQuery({
+  const { data: trafficData, isFetching: trafficFetching } = useQuery({
     queryKey: ['traffic', range],
     queryFn: () => fetchTrafficData(range),
   })
 
-  const { data: activity } = useQuery({
+  const { data: activity, isLoading: activityLoading } = useQuery({
     queryKey: ['activity'],
     queryFn: fetchActivity,
   })
 
-  const { data: domains } = useQuery({
+  const { data: domains, isLoading: domainsLoading } = useQuery({
     queryKey: ['domains'],
     queryFn: fetchDomains,
   })
@@ -38,6 +40,10 @@ export default function DashboardPage() {
   const totalClicks = stats?.totalClicks24h ?? 0
   const activeLinks = stats?.activeLinks ?? 0
   const hasData = totalClicks > 0 || activeLinks > 0
+
+  if (statsLoading || activityLoading || domainsLoading) {
+    return <DashboardSkeleton />
+  }
 
   if (!hasData && stats) {
     const domainsCount =
@@ -56,7 +62,7 @@ export default function DashboardPage() {
       {
         n: 2,
         title: 'Verify your domain',
-        desc: 'VeriClick checks the address resolves so your links work. Click “Recheck” on a domain to verify it.',
+        desc: 'Add the DNS TXT record VeriClick gives you to prove you own the domain. The “Verify ownership” button walks you through it.',
         to: '/app/domains',
         icon: CheckmarkCircle02Icon,
         done: hasVerifiedDomain,
@@ -189,6 +195,7 @@ export default function DashboardPage() {
             data={trafficData ?? []}
             range={range}
             onRangeChange={setRange}
+            loading={trafficFetching && (trafficData?.length ?? 0) === 0}
           />
         </div>
         <div className="lg:col-span-1">
@@ -198,6 +205,9 @@ export default function DashboardPage() {
             blacklisted={stats?.domainsBlacklisted ?? 0}
             lastScan={stats?.lastDomainScan ?? null}
           />
+          <div className="mt-6">
+            <BlockedQueueWidget activity={activity ?? []} />
+          </div>
         </div>
       </div>
 

@@ -47,14 +47,31 @@ class RegisterSerializer(serializers.ModelSerializer):
 
 class DomainRegistrySerializer(serializers.ModelSerializer):
     links_count = serializers.SerializerMethodField()
+    verification_record = serializers.CharField(read_only=True)
 
     class Meta:
         model = DomainRegistry
-        fields = ['id', 'domain', 'health_status', 'verified', 'last_checked', 'links_count', 'created_at']
-        read_only_fields = ['id', 'health_status', 'verified', 'last_checked', 'links_count', 'created_at']
+        fields = [
+            'id', 'domain', 'health_status', 'verified', 'verification_token',
+            'verification_record', 'last_checked', 'links_count', 'created_at',
+        ]
+        read_only_fields = [
+            'id', 'health_status', 'verified', 'verification_token',
+            'verification_record', 'last_checked', 'links_count', 'created_at',
+        ]
 
     def get_links_count(self, obj):
         return obj.links.count()
+
+    def validate_domain(self, value):
+        value = (value or '').strip().lower()
+        if not value:
+            raise serializers.ValidationError('Enter a domain name.')
+        if '://' in value:
+            raise serializers.ValidationError('Enter just the domain, without http:// or https://.')
+        if any(ch.isspace() for ch in value):
+            raise serializers.ValidationError('Domain name cannot contain spaces.')
+        return value.rstrip('/')
 
 
 class TrackingLinkSerializer(serializers.ModelSerializer):
@@ -89,13 +106,18 @@ class TrackingLinkSerializer(serializers.ModelSerializer):
 class ClickLogSerializer(serializers.ModelSerializer):
     slug = serializers.CharField(source='link.slug', read_only=True)
     time = serializers.DateTimeField(source='created_at', read_only=True)
+    reason_label = serializers.SerializerMethodField()
 
     class Meta:
         model = ClickLog
         fields = [
             'id', 'ip', 'country', 'region', 'city', 'device', 'reason',
-            'is_bot', 'decision', 'matched_rule', 'slug', 'time', 'created_at',
+            'reason_label', 'is_bot', 'decision', 'matched_rule', 'slug', 'time', 'created_at',
         ]
+
+    def get_reason_label(self, obj):
+        from .services import reason_label
+        return reason_label(obj.decision, obj.reason, obj.matched_rule)
 
 
 class IPRuleSerializer(serializers.ModelSerializer):
@@ -123,10 +145,15 @@ class TrackerEventSerializer(serializers.ModelSerializer):
 
 class BlockedIPSerializer(serializers.ModelSerializer):
     slug = serializers.CharField(source='link.slug', read_only=True)
+    reason_label = serializers.SerializerMethodField()
 
     class Meta:
         model = ClickLog
         fields = [
-            'id', 'ip', 'reason', 'decision', 'is_bot',
+            'id', 'ip', 'reason', 'reason_label', 'decision', 'is_bot',
             'matched_rule', 'slug', 'country', 'region', 'city', 'created_at',
         ]
+
+    def get_reason_label(self, obj):
+        from .services import reason_label
+        return reason_label(obj.decision, obj.reason, obj.matched_rule)

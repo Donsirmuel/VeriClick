@@ -4,11 +4,14 @@ import { HugeiconsIcon } from '@hugeicons/react'
 import { Globe02Icon, PlusSignIcon, RefreshIcon, Search01Icon, Edit01Icon, Cancel01Icon, Clock03Icon, LinkSquare02Icon } from '@hugeicons/core-free-icons'
 import toast from 'react-hot-toast'
 import { AddDomainDialog } from '@/components/domains/AddDomainDialog'
+import { VerifyDomainDialog } from '@/components/domains/VerifyDomainDialog'
 import { fetchDomains, createDomain, updateDomain, deleteDomain, recheckDomain } from '@/api/domains'
 import { formatRelativeTime } from '@/lib/utils'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { HelpTooltip } from '@/components/ui/HelpTooltip'
+import { TableSkeleton } from '@/components/ui/TableSkeleton'
+import type { Domain } from '@/types'
 
 function healthBadge(status: string) {
   const styles: Record<string, string> = {
@@ -36,8 +39,9 @@ export default function DomainsPage() {
   const [deleteName, setDeleteName] = useState('')
   const [editTarget, setEditTarget] = useState<{ id: string; domain: string } | null>(null)
   const [editValue, setEditValue] = useState('')
+  const [verifyTarget, setVerifyTarget] = useState<Domain | null>(null)
 
-  const { data: domains = [] } = useQuery({
+  const { data: domains = [], isLoading } = useQuery({
     queryKey: ['domains'],
     queryFn: fetchDomains,
   })
@@ -96,12 +100,17 @@ export default function DomainsPage() {
     deleteMutation.mutate(deleteTarget)
   }
 
+  const handleVerified = () => {
+    queryClient.invalidateQueries({ queryKey: ['domains'] })
+    queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Domain Registry</h1>
-          <p className="text-sm text-muted mt-1 max-w-3xl">Domains are the branded URLs your links live on. Each link belongs to a domain — e.g. link <code className="text-xs bg-neutral-100 px-1.5 py-0.5 rounded">your.domain/r/summer23</code> uses domain <code className="text-xs bg-neutral-100 px-1.5 py-0.5 rounded">your.domain</code>. Domains are health-checked automatically every 15 minutes, and the recheck button verifies a domain immediately.</p>
+          <p className="text-sm text-muted mt-1 max-w-3xl">Domains are the branded URLs your links live on. Each link belongs to a domain — e.g. link <code className="text-xs bg-neutral-100 px-1.5 py-0.5 rounded">your.domain/r/summer23</code> uses domain <code className="text-xs bg-neutral-100 px-1.5 py-0.5 rounded">your.domain</code>. Domains are health-checked automatically every 15 minutes. <strong>Resolves</strong> means the domain points somewhere; <strong>Verified</strong> means you proved ownership with a TXT record — both matter before a domain is fully trusted.</p>
         </div>
         <button
           onClick={() => setShowAddDialog(true)}
@@ -125,12 +134,14 @@ export default function DomainsPage() {
         />
       </div>
 
-      {domains.length === 0 ? (
+      {isLoading ? (
+        <TableSkeleton rows={6} columns={5} />
+      ) : domains.length === 0 ? (
         <div className="bg-white border border-neutral-200 rounded-2xl">
           <EmptyState
             icon={Globe02Icon}
             title="No domains registered"
-            description="Add your first tracking domain to start routing traffic. You'll need to verify ownership by adding a TXT record."
+            description="Add your first tracking domain to start routing traffic. Then prove ownership with a TXT record to get the 'Verified' badge."
             action={{ label: 'Add your first domain', onClick: () => setShowAddDialog(true) }}
           />
         </div>
@@ -151,7 +162,7 @@ export default function DomainsPage() {
                 <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">
                   <span className="flex items-center gap-1.5">
                     Status
-                    <HelpTooltip text="Healthy: Domain resolves correctly. Degraded: DNS issues detected. Blacklisted: Domain flagged on RBLs. Verified: a health check confirmed the domain resolves." />
+                    <HelpTooltip text="Status shows whether the domain resolves (Healthy/Degraded/Blacklisted). Verified is separate: it proves you own the domain by adding a TXT record. A domain must resolve AND be verified before it is fully trusted." />
                   </span>
                 </th>
                 <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Last Checked</th>
@@ -188,9 +199,13 @@ export default function DomainsPage() {
                               Verified
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-warning bg-warning/10 px-2 py-0.5 rounded-full">
-                              Unverified
-                            </span>
+                            <button
+                              onClick={() => setVerifyTarget(domain)}
+                              className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-warning bg-warning/10 hover:bg-warning/20 px-2 py-0.5 rounded-full transition-colors"
+                              title="Verify ownership with a TXT record"
+                            >
+                              Verify ownership
+                            </button>
                           )}
                         </div>
                       )}
@@ -248,6 +263,14 @@ export default function DomainsPage() {
           onClose={() => setShowAddDialog(false)}
           onSubmit={(domain) => createMutation.mutate(domain)}
           loading={createMutation.isPending}
+        />
+      )}
+
+      {verifyTarget && (
+        <VerifyDomainDialog
+          domain={verifyTarget}
+          onClose={() => setVerifyTarget(null)}
+          onVerified={handleVerified}
         />
       )}
 

@@ -7,6 +7,7 @@ import { fetchIPRules, createIPRule, updateIPRule, deleteIPRule } from '@/api/ip
 import { EmptyState } from '@/components/ui/EmptyState'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { HelpTooltip } from '@/components/ui/HelpTooltip'
+import { TableSkeleton } from '@/components/ui/TableSkeleton'
 import type { IPRule, IPRuleAction } from '@/types'
 
 function formatRemaining(iso: string): string {
@@ -26,7 +27,7 @@ export default function IpRulesPage() {
   const [editTarget, setEditTarget] = useState<IPRule | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<IPRule | null>(null)
 
-  const { data: rulesData } = useQuery({
+  const { data: rulesData, isLoading } = useQuery({
     queryKey: ['ip-rules'],
     queryFn: fetchIPRules,
   })
@@ -190,7 +191,9 @@ export default function IpRulesPage() {
         </div>
       )}
 
-      {rules.length === 0 ? (
+      {isLoading ? (
+        <TableSkeleton rows={6} columns={6} />
+      ) : rules.length === 0 ? (
         <div className="bg-white border border-neutral-200 rounded-2xl">
           <EmptyState
             icon={ShieldIcon}

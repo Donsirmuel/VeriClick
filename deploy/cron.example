@@ -1,0 +1,11 @@
+# Cron alternative for running the VeriClick domain health scan every 15 minutes.
+# `check_domains --once` runs a single pass and exits, so cron is a reliable
+# scheduler (systemd timers or a PaaS cron are equally fine).
+#
+# 1) Edit your crontab:
+#      crontab -e
+# 2) Add a line like this, adjusting paths to your install:
+#
+#   */15 * * * *  cd /opt/vericlick/vericlick-backend/Vericlick_project && /opt/vericlick/.venv/bin/python manage.py check_domains --once >> /var/log/vericlick-domains.log 2>&1
+#
+# The trailing `--once` is important: without it the process would loop forever.

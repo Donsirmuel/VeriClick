@@ -13,6 +13,7 @@ import { fetchLinks, createLink, updateLink, deleteLink } from '@/api/links'
 import { fetchDomains } from '@/api/domains'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { TableSkeleton } from '@/components/ui/TableSkeleton'
 import type { TrackingLink, LinkCreateInput } from '@/types'
 
 export default function LinksPage() {
@@ -129,7 +130,7 @@ export default function LinksPage() {
       </div>
 
       {links.length === 0 && !linksData ? (
-        <div className="bg-white border border-neutral-200 rounded-2xl p-8 text-center text-sm text-muted">Loading...</div>
+        <TableSkeleton rows={6} columns={6} />
       ) : links.length === 0 ? (
         <div className="bg-white border border-neutral-200 rounded-2xl">
           <EmptyState

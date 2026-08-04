@@ -150,6 +150,40 @@ function LiveTerminal() {
   )
 }
 
+function HeroVisual() {
+  const [failed, setFailed] = useState(false)
+
+  return (
+    <div className="bg-black rounded-2xl border border-neutral-800 overflow-hidden shadow-2xl shadow-white/5">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-neutral-800/80 bg-neutral-900/30">
+        <div className="w-3 h-3 rounded-full bg-neutral-600" />
+        <div className="w-3 h-3 rounded-full bg-neutral-600" />
+        <div className="w-3 h-3 rounded-full bg-neutral-600" />
+        <span className="text-[10px] font-mono text-neutral-500 ml-2">vericlick-relay</span>
+        <span className="ml-auto text-[10px] font-mono text-neutral-600">live</span>
+      </div>
+      {failed ? (
+        <LiveTerminal />
+      ) : (
+        <video
+          className="w-full h-auto aspect-video object-cover bg-black"
+          autoPlay
+          muted
+          loop
+          playsInline
+          disablePictureInPicture
+          disableRemotePlayback
+          preload="auto"
+          poster="/hero_poster.jpg"
+          onError={() => setFailed(true)}
+        >
+          <source src="/hero_animation.mp4" type="video/mp4" />
+        </video>
+      )}
+    </div>
+  )
+}
+
 function FloatingParticles() {
   const particles = useRef(
     Array.from({ length: 25 }, (_, i) => ({
@@ -299,8 +333,8 @@ export default function Landing() {
               </div>
             </div>
 
-            <div className="opacity-0 hidden lg:block" style={{ animation: 'slide-in-right 0.8s ease-out 0.4s forwards' }}>
-              <LiveTerminal />
+            <div className="opacity-0" style={{ animation: 'slide-in-right 0.8s ease-out 0.4s forwards' }}>
+              <HeroVisual />
             </div>
           </div>
         </div>

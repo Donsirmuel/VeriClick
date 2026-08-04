@@ -1,6 +1,7 @@
 import json
 import uuid
 from datetime import timedelta
+from unittest.mock import patch
 from django.test import TestCase
 from django.contrib.auth.models import User
 from django.utils import timezone
@@ -623,6 +624,74 @@ class DomainsEndpointTests(APITestCase):
         self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
 
 
+class DomainVerificationTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='verify_user', password='testpass123')
+        self.client.force_authenticate(user=self.user)
+        self.workspace = Workspace.objects.get(owner=self.user)
+        self.domain = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='verify.example.com',
+        )
+
+    def test_domain_starts_unverified(self):
+        self.assertFalse(self.domain.verified)
+        self.assertIsNotNone(self.domain.verification_token)
+
+    def test_verification_record_value(self):
+        self.assertEqual(
+            self.domain.verification_record,
+            f'vericlick-verify={self.domain.verification_token}',
+        )
+
+    def test_health_check_does_not_mark_verified(self):
+        self.domain.run_health_check()
+        self.domain.refresh_from_db()
+        self.assertFalse(self.domain.verified)
+        self.assertIsNotNone(self.domain.last_checked)
+
+    def test_serializer_exposes_verification_record(self):
+        res = self.client.get(f'/api/domains/{self.domain.id}/')
+        body = res.json()
+        self.assertEqual(
+            body['verificationRecord'],
+            f'vericlick-verify={self.domain.verification_token}',
+        )
+        self.assertIn('verificationToken', body)
+
+    @patch('vericlick.views.verify_domain_ownership', return_value=True)
+    def test_verify_success_marks_verified(self, mock_verify):
+        res = self.client.post(f'/api/domains/{self.domain.id}/verify/')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        body = res.json()
+        self.assertTrue(body['verified'])
+        self.domain.refresh_from_db()
+        self.assertTrue(self.domain.verified)
+        mock_verify.assert_called_once_with(self.domain)
+
+    @patch('vericlick.views.verify_domain_ownership', return_value=False)
+    def test_verify_failure_returns_400(self, mock_verify):
+        res = self.client.post(f'/api/domains/{self.domain.id}/verify/')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.domain.refresh_from_db()
+        self.assertFalse(self.domain.verified)
+
+    def test_verify_cross_workspace_rejected(self):
+        other_user = User.objects.create_user(username='other_verify', password='testpass123')
+        other_ws = Workspace.objects.get(owner=other_user)
+        other_domain = DomainRegistry.objects.create(
+            workspace=other_ws, domain='other.example.com',
+        )
+        res = self.client.post(f'/api/domains/{other_domain.id}/verify/')
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+
+    @patch('vericlick.views.verify_domain_ownership', return_value=True)
+    def test_verify_requires_auth(self, mock_verify):
+        self.client.force_authenticate(user=None)
+        res = self.client.post(f'/api/domains/{self.domain.id}/verify/')
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+        mock_verify.assert_not_called()
+
+
 # IP Rules
 
 class IPRuleModelTests(TestCase):
@@ -801,6 +870,63 @@ class ServicesTests(TestCase):
         from .services import is_likely_bot_ua
         self.assertTrue(is_likely_bot_ua(''))
         self.assertTrue(is_likely_bot_ua('   '))
+
+    def test_verify_domain_ownership_matches_record(self):
+        from .services import verify_domain_ownership
+
+        class FakeRdata:
+            def to_text(self):
+                return f'"{self.domain.verification_record}"'
+
+        class FakeAnswers:
+            def __init__(self, records):
+                self._records = records
+
+            def __iter__(self):
+                return iter(self._records)
+
+        domain = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='verify-txt.example.com',
+        )
+        with patch('dns.resolver.resolve', return_value=FakeAnswers([FakeRdata()])):
+            FakeRdata.domain = domain
+            self.assertTrue(verify_domain_ownership(domain))
+
+    def test_verify_domain_ownership_no_match(self):
+        from .services import verify_domain_ownership
+        domain = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='verify-none.example.com',
+        )
+        with patch('dns.resolver.resolve', return_value=[]):
+            self.assertFalse(verify_domain_ownership(domain))
+
+    def test_verify_domain_ownership_dns_error(self):
+        from .services import verify_domain_ownership
+        domain = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='verify-fail.example.com',
+        )
+        with patch('dns.resolver.resolve', side_effect=Exception('NXDOMAIN')):
+            self.assertFalse(verify_domain_ownership(domain))
+
+    def test_reason_label_human(self):
+        from .services import reason_label
+        self.assertIn('Human', reason_label('allowed', ''))
+
+    def test_reason_label_deny_rule(self):
+        from .services import reason_label
+        self.assertIn('deny rule', reason_label('blocked', 'IPRule: deny (Test block)'))
+
+    def test_reason_label_suspicious_ua(self):
+        from .services import reason_label
+        self.assertIn('automated', reason_label('blocked', 'Suspicious UA'))
+
+    def test_reason_label_rate_limit(self):
+        from .services import reason_label
+        self.assertIn('too many requests', reason_label('challenged', 'Rate limit'))
+
+    def test_reason_label_allow_rule(self):
+        from .services import reason_label
+        self.assertIn('trusted-IP', reason_label('allowed', 'IPRule: allow (Trusted IP)'))
 
     def test_classify_human(self):
         from .services import classify_request

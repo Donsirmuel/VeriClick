@@ -1,11 +1,13 @@
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import type { TrafficData, TimeRange } from '@/types'
 import { formatNumber } from '@/lib/utils'
+import { Skeleton } from '@/components/ui/Skeleton'
 
 interface TrafficChartProps {
   data: TrafficData[]
   range: TimeRange
   onRangeChange: (range: TimeRange) => void
+  loading?: boolean
 }
 
 const CustomTooltip = ({ active, payload, label }: any) => {
@@ -24,7 +26,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   )
 }
 
-export function TrafficChart({ data, range, onRangeChange }: TrafficChartProps) {
+export function TrafficChart({ data, range, onRangeChange, loading = false }: TrafficChartProps) {
   return (
     <div className="bg-white p-6 rounded-2xl border border-border shadow-sm">
       <div className="flex items-center justify-between mb-6">
@@ -50,6 +52,12 @@ export function TrafficChart({ data, range, onRangeChange }: TrafficChartProps) 
       </div>
 
       <div className="h-[320px]">
+        {loading ? (
+          <div className="space-y-3 py-2" role="status" aria-label="Loading chart">
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="h-[220px] w-full rounded-xl" />
+          </div>
+        ) : (
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
             <defs>
@@ -101,6 +109,7 @@ export function TrafficChart({ data, range, onRangeChange }: TrafficChartProps) 
             />
           </AreaChart>
         </ResponsiveContainer>
+        )}
       </div>
     </div>
   )

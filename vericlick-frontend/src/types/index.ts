@@ -30,6 +30,7 @@ export interface ActivityEntry {
   city: string
   device: string
   reason: string | null
+  reasonLabel: string
   time: string
   slug: string
   isBot: boolean
@@ -60,6 +61,8 @@ export interface Domain {
   domain: string
   healthStatus: HealthStatus
   verified: boolean
+  verificationToken: string
+  verificationRecord: string
   lastChecked: string | null
   linksCount: number
   createdAt: string
@@ -113,6 +116,7 @@ export interface BlockedIPEntry {
   id: string
   ip: string
   reason: string
+  reasonLabel: string
   decision: 'blocked'
   isBot: boolean
   matchedRule: string

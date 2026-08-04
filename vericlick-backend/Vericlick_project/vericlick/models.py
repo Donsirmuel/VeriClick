@@ -44,7 +44,15 @@ class DomainRegistry(models.Model):
     )
     verified = models.BooleanField(
         default=False,
-        help_text='True once a health check confirms the domain resolves (DNS ownership check).',
+        help_text=(
+            'True only after the owner proves control by adding the TXT '
+            'verification record. Distinct from health_status, which only '
+            'confirms the domain resolves.'
+        ),
+    )
+    verification_token = models.CharField(
+        max_length=64, default=uuid.uuid4, editable=False,
+        help_text='Random token used to prove DNS ownership via a TXT record.',
     )
     last_checked = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -56,16 +64,25 @@ class DomainRegistry(models.Model):
     def __str__(self):
         return self.domain
 
+    @property
+    def verification_record(self):
+        # The exact TXT record value an owner publishes to prove they control
+        # the domain. Publishing this and running verify marks the domain
+        # ownership-verified in the dashboard.
+        return f'vericlick-verify={self.verification_token}'
+
     def run_health_check(self):
+        # Only confirms the domain resolves. Ownership verification is a
+        # separate step (DNS TXT record) so "resolves" and "verified" are
+        # never conflated in the UX.
         try:
             socket.getaddrinfo(self.domain, 80, proto=socket.IPPROTO_TCP)
             self.health_status = self.HealthStatus.HEALTHY
-            self.verified = True
         except Exception:
             self.health_status = self.HealthStatus.DEGRADED
         finally:
             self.last_checked = now()
-            self.save(update_fields=['health_status', 'last_checked', 'verified'])
+            self.save(update_fields=['health_status', 'last_checked'])
 
 
 class TrackingLink(models.Model):

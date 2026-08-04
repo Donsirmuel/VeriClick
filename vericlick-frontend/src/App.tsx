@@ -5,9 +5,11 @@ import { Toaster } from 'react-hot-toast'
 import { queryClient } from './lib/queryClient'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { SEOHead } from './components/SEOHead'
+import PublicOnly from './components/PublicOnly'
 import DashboardLayout from './components/layout/DashboardLayout'
+import { PageLoader } from './components/ui/PageLoader'
+import Landing from './pages/Landing'
 
-const Landing = lazy(() => import('./pages/Landing'))
 const Login = lazy(() => import('./pages/Login'))
 const Register = lazy(() => import('./pages/Register'))
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword'))
@@ -23,7 +25,7 @@ const Help = lazy(() => import('./pages/Help'))
 
 function withSuspense(el: React.ReactNode) {
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-sm text-muted">Loading…</div>}>
+    <Suspense fallback={<PageLoader />}>
       {el}
     </Suspense>
   )
@@ -35,11 +37,11 @@ function App() {
       <BrowserRouter>
         <SEOHead />
         <Routes>
-          <Route path="/" element={withSuspense(<Landing />)} />
-          <Route path="/auth/login" element={withSuspense(<Login />)} />
-          <Route path="/auth/register" element={withSuspense(<Register />)} />
-          <Route path="/auth/forgot-password" element={withSuspense(<ForgotPassword />)} />
-          <Route path="/auth/reset-password" element={withSuspense(<ResetPassword />)} />
+          <Route path="/" element={<PublicOnly><Landing /></PublicOnly>} />
+          <Route path="/auth/login" element={withSuspense(<PublicOnly><Login /></PublicOnly>)} />
+          <Route path="/auth/register" element={withSuspense(<PublicOnly><Register /></PublicOnly>)} />
+          <Route path="/auth/forgot-password" element={withSuspense(<PublicOnly><ForgotPassword /></PublicOnly>)} />
+          <Route path="/auth/reset-password" element={withSuspense(<PublicOnly><ResetPassword /></PublicOnly>)} />
           <Route path="/app" element={<DashboardLayout />}>
             <Route index element={<Navigate to="/app/dashboard" replace />} />
             <Route path="dashboard" element={withSuspense(<ErrorBoundary><Dashboard /></ErrorBoundary>)} />

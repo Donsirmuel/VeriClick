@@ -19,6 +19,42 @@ declare global {
   }
 }
 
+let gsiScriptPromise: Promise<boolean> | null = null
+
+function loadGsiScript(): Promise<boolean> {
+  if (gsiScriptPromise) return gsiScriptPromise
+  if (typeof window !== 'undefined' && window.google?.accounts?.id) {
+    gsiScriptPromise = Promise.resolve(true)
+    return gsiScriptPromise
+  }
+  gsiScriptPromise = new Promise((resolve) => {
+    const script = document.createElement('script')
+    script.src = 'https://accounts.google.com/gsi/client'
+    script.async = true
+    script.defer = true
+    script.onload = () => resolve(true)
+    script.onerror = () => resolve(false)
+    document.head.appendChild(script)
+  })
+  return gsiScriptPromise
+}
+
+let initializedClientId: string | null = null
+
+type CredentialHandler = (credential: string) => void
+let credentialHandler: CredentialHandler | null = null
+
+function ensureInitialized(clientId: string) {
+  if (!window.google || initializedClientId === clientId) return
+  window.google.accounts.id.initialize({
+    client_id: clientId,
+    callback: (response: { credential: string }) => {
+      credentialHandler?.(response.credential)
+    },
+  })
+  initializedClientId = clientId
+}
+
 function GoogleSvg() {
   return (
     <svg viewBox="0 0 24 24" className="w-5 h-5" aria-hidden>
@@ -40,44 +76,51 @@ export function GoogleSignInButton() {
   useEffect(() => {
     if (!clientId) return
 
-    const script = document.createElement('script')
-    script.src = 'https://accounts.google.com/gsi/client'
-    script.async = true
-    script.onload = () => {
-      if (!window.google) return
-      window.google.accounts.id.initialize({
-        client_id: clientId,
-        callback: async (response: { credential: string }) => {
-          setLoading(true)
-          try {
-            const res = await googleLogin(response.credential)
-            localStorage.setItem('token', res.access)
-            localStorage.setItem('refresh', res.refresh)
-            toast.success('Signed in with Google')
-            navigate('/app/dashboard')
-          } catch {
-            toast.error('Google sign-in failed')
-          } finally {
-            setLoading(false)
-          }
-        },
-      })
-      if (buttonRef.current) {
-        window.google.accounts.id.renderButton(buttonRef.current, {
-          theme: 'outline',
-          size: 'large',
-          width: '100%',
-          text: 'signin_with',
-          shape: 'rectangular',
-          logo_alignment: 'center',
+    const handler: CredentialHandler = (credential) => {
+      setLoading(true)
+      googleLogin(credential)
+        .then((res) => {
+          localStorage.setItem('token', res.access)
+          localStorage.setItem('refresh', res.refresh)
+          toast.success('Signed in with Google')
+          navigate('/app/dashboard')
         })
-      }
+        .catch(() => toast.error('Google sign-in failed'))
+        .finally(() => setLoading(false))
     }
-    document.body.appendChild(script)
+    credentialHandler = handler
+
+    let mounted = true
+    let observer: ResizeObserver | null = null
+
+    const renderButton = () => {
+      const el = buttonRef.current
+      if (!mounted || !el || !window.google) return
+      ensureInitialized(clientId)
+      const width = Math.round(Math.min(Math.max(el.clientWidth, 100), 400))
+      window.google.accounts.id.renderButton(el, {
+        theme: 'outline',
+        size: 'large',
+        width,
+        text: 'signin_with',
+        shape: 'rectangular',
+        logo_alignment: 'center',
+      })
+    }
+
+    loadGsiScript().then((ok) => {
+      if (!ok || !mounted) return
+      renderButton()
+      if (typeof ResizeObserver !== 'undefined') {
+        observer = new ResizeObserver(renderButton)
+        if (buttonRef.current) observer.observe(buttonRef.current)
+      }
+    })
 
     return () => {
-      const existing = document.querySelector('script[src="https://accounts.google.com/gsi/client"]')
-      if (existing) existing.remove()
+      mounted = false
+      observer?.disconnect()
+      if (credentialHandler === handler) credentialHandler = null
     }
   }, [clientId, navigate])
 
@@ -89,7 +132,7 @@ export function GoogleSignInButton() {
         </div>
       )}
       {clientId ? (
-        <div ref={buttonRef} className="w-full [&>div]:!w-full [&>div>iframe]:!w-full" />
+        <div ref={buttonRef} className="w-full flex justify-center" />
       ) : (
         <button
           type="button"

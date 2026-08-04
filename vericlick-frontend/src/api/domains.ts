@@ -22,11 +22,14 @@ export async function fetchDomain(id: string): Promise<Domain> {
 
 export async function createDomain(domain: string): Promise<Domain> {
   if (MOCK_MODE) {
+    const token = crypto.randomUUID()
     const newDomain: Domain = {
       id: crypto.randomUUID(),
       domain,
       healthStatus: 'healthy',
       verified: true,
+      verificationToken: token,
+      verificationRecord: `vericlick-verify=${token}`,
       lastChecked: null,
       linksCount: 0,
       createdAt: new Date().toISOString(),
@@ -59,5 +62,13 @@ export async function recheckDomain(id: string): Promise<{ status: string; lastC
     return mockFetch({ status: 'ok', lastChecked: new Date().toISOString() })
   }
   const { data } = await apiClient.post<{ status: string; lastChecked: string }>(`/domains/${id}/recheck/`)
+  return data
+}
+
+export async function verifyDomain(id: string): Promise<{ status: string; verified: boolean; verificationRecord: string }> {
+  if (MOCK_MODE) {
+    return mockFetch({ status: 'ok', verified: true, verificationRecord: 'vericlick-verify=mock-token' })
+  }
+  const { data } = await apiClient.post<{ status: string; verified: boolean; verificationRecord: string }>(`/domains/${id}/verify/`)
   return data
 }

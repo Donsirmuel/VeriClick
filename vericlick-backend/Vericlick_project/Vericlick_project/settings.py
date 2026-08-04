@@ -3,12 +3,31 @@ from pathlib import Path
 from datetime import timedelta
 from decouple import config, Csv
 import dj_database_url
+from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = config('SECRET_KEY')
 DEBUG = config('DEBUG', default='False', cast=bool)
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='*', cast=Csv())
+
+# Local dev runs without a .env file via safe fallbacks, while production
+# (DEBUG=False) requires explicit, non-default values so a leaked DEBUG=True or
+# missing secret can never silently weaken a deployment.
+if DEBUG:
+    SECRET_KEY = config(
+        'SECRET_KEY',
+        default='django-insecure-dev-only-not-for-production',
+    )
+    ALLOWED_HOSTS = config(
+        'ALLOWED_HOSTS', default='localhost,127.0.0.1,testserver', cast=Csv(),
+    )
+else:
+    SECRET_KEY = config('SECRET_KEY')
+    allowed_hosts = config('ALLOWED_HOSTS', default='')
+    if not allowed_hosts:
+        raise ImproperlyConfigured(
+            'ALLOWED_HOSTS must be set explicitly when DEBUG=False.'
+        )
+    ALLOWED_HOSTS = Csv()(allowed_hosts)
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -132,6 +151,11 @@ if not DEBUG:
     SECURE_CONTENT_TYPE_NOSNIFF = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
+    SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
+    # Only trust X-Forwarded-Proto when the app sits behind a proxy (nignx,
+    # a PaaS edge, etc.). Leave off when hitting Django directly.
+    if config('TRUST_X_FORWARDED_PROTO', default=False, cast=bool):
+        SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 
 # CORS
@@ -142,6 +166,10 @@ CORS_ALLOWED_ORIGINS = config(
     cast=Csv(),
 )
 CORS_ALLOW_CREDENTIALS = True
+
+# CSRF origins for the SPA origin(s) when session-based auth is used.
+
+CSRF_TRUSTED_ORIGINS = config('CSRF_TRUSTED_ORIGINS', default='', cast=Csv())
 
 
 # REST Framework

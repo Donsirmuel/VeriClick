@@ -89,6 +89,51 @@ def lookup_location(ip):
     return {'country': 'Unknown', 'region': '', 'city': ''}
 
 
+def verify_domain_ownership(domain):
+    # Proves control of a domain by looking for the published TXT record.
+    # Returns True only when the exact verification record is found in the
+    # domain's DNS TXT records. Any DNS error (NXDOMAIN, timeout, no such
+    # library) simply means "not verified yet".
+    try:
+        import dns.resolver
+    except ImportError:
+        return False
+
+    expected = domain.verification_record
+    try:
+        answers = dns.resolver.resolve(domain.domain, 'TXT', lifetime=10)
+    except Exception:
+        return False
+
+    for rdata in answers:
+        # rdata may contain multiple quoted strings; strip quotes so we match
+        # the published value regardless of chunking by the DNS provider.
+        if expected in rdata.to_text().replace('"', ''):
+            return True
+    return False
+
+
+def reason_label(decision, reason='', matched_rule=''):
+    # Plain-language summary of a click decision, so the dashboard explains
+    # bot-vs-human outcomes without reading technical logs. The raw `reason`
+    # stays available for detail.
+    if decision == 'allowed':
+        if reason and 'allow' in reason:
+            return 'Allowed by a trusted-IP rule'
+        return 'Human traffic — let through'
+    if decision == 'challenged':
+        return 'Temporarily slowed — too many requests from this address'
+    if decision == 'blocked':
+        if reason and 'IPRule: deny' in reason:
+            return 'Blocked by a deny rule you created'
+        if reason == 'Suspicious UA':
+            return 'Request looked automated (bot-like browser)'
+        if reason == 'Rate limit':
+            return 'Blocked — too many requests from this address'
+        return 'Blocked by automated detection'
+    return 'Flagged for review'
+
+
 def get_safe_destination(workspace, request=None):
     # Suspicious traffic is diverted here. Prefers the workspace-configured safe
     # destination; otherwise falls back to a neutral VeriClick page.

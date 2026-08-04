@@ -12,6 +12,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import api_view, permission_classes, action, throttle_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.exceptions import ValidationError, PermissionDenied
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -30,7 +31,12 @@ from .serializers import (
     BlockedIPSerializer,
 )
 from .version import get_version
-from .services import classify_request, lookup_location, get_safe_destination
+from .services import (
+    classify_request,
+    lookup_location,
+    get_safe_destination,
+    verify_domain_ownership,
+)
 
 
 def get_user_workspace(user):
@@ -432,15 +438,44 @@ class DomainRegistryViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         workspace = get_user_workspace(self.request.user)
         if not workspace:
-            raise PermissionError('No workspace found')
+            raise ValidationError({'detail': 'No workspace found for this account.'})
         domain = serializer.save(workspace=workspace)
-        domain.run_health_check()
+        try:
+            domain.run_health_check()
+        except Exception:
+            # A health check must never fail the create request.
+            domain.health_status = DomainRegistry.HealthStatus.DEGRADED
+            domain.last_checked = timezone.now()
+            domain.save(update_fields=['health_status', 'last_checked'])
 
     @action(detail=True, methods=['post'])
     def recheck(self, request, pk=None):
         domain = self.get_object()
         domain.run_health_check()
         return Response({'status': 'ok', 'health_status': domain.health_status, 'last_checked': domain.last_checked})
+
+    @action(detail=True, methods=['post'])
+    def verify(self, request, pk=None):
+        # DNS TXT ownership verification. The owner publishes the domain's
+        # verification_record as a TXT record, then calls this to confirm they
+        # control the domain. A domain can resolve (healthy) but only become
+        # 'verified' once ownership is proven.
+        domain = self.get_object()
+        if verify_domain_ownership(domain):
+            domain.verified = True
+            domain.save(update_fields=['verified'])
+            return Response({
+                'status': 'ok',
+                'verified': True,
+                'verificationRecord': domain.verification_record,
+            })
+        return Response(
+            {'errors': [{'field': 'domain', 'detail': (
+                'Verification TXT record not found yet. Add the record below, '
+                'wait for DNS to propagate, then try again.'
+            )}]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
 
 @api_view(['GET'])

@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { formatRelativeTime } from '@/lib/utils'
 import type { ActivityEntry } from '@/types'
 import { HugeiconsIcon } from '@hugeicons/react'
@@ -32,7 +33,7 @@ export function ActivityFeed({ activity }: { activity: ActivityEntry[] }) {
                 <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${
                   entry.isBot ? 'bg-error text-white' : 'bg-success/10 text-success'
                 }`}>
-                  {entry.isBot ? (entry.reason || 'Bot') : 'Human'}
+                  {entry.isBot ? 'Bot' : 'Human'}
                 </span>
               </div>
               <div className="flex items-center gap-3 text-xs text-muted">
@@ -43,6 +44,9 @@ export function ActivityFeed({ activity }: { activity: ActivityEntry[] }) {
                 <span>•</span>
                 <span className="font-mono">{entry.slug}</span>
               </div>
+              {entry.reasonLabel && (
+                <p className="text-xs text-slate-600 mt-1">{entry.reasonLabel}</p>
+              )}
             </div>
             <div className="text-right shrink-0">
               <div className="text-xs font-medium text-slate-900">{formatRelativeTime(entry.time)}</div>
@@ -51,9 +55,12 @@ export function ActivityFeed({ activity }: { activity: ActivityEntry[] }) {
         ))}
       </div>
 
-      <button className="w-full mt-6 py-3 text-sm font-bold text-black hover:bg-neutral-100 rounded-xl border border-neutral-200 transition-all">
+      <Link
+        to="/app/blocked-ips"
+        className="w-full mt-6 py-3 text-sm font-bold text-black hover:bg-neutral-100 rounded-xl border border-neutral-200 transition-all block text-center"
+      >
         View All Activity
-      </button>
+      </Link>
     </div>
   )
 }

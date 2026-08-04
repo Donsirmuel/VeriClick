@@ -12,9 +12,9 @@ interface DomainHealthWidgetProps {
 
 export function DomainHealthWidget({ healthy, degraded, blacklisted, lastScan }: DomainHealthWidgetProps) {
   const total = healthy + degraded + blacklisted
-  const healthyPct = Math.round((healthy / total) * 100)
-  const degradedPct = Math.round((degraded / total) * 100)
-  const blacklistedPct = 100 - healthyPct - degradedPct
+  const healthyPct = total > 0 ? Math.round((healthy / total) * 100) : 0
+  const degradedPct = total > 0 ? Math.round((degraded / total) * 100) : 0
+  const blacklistedPct = total > 0 ? 100 - healthyPct - degradedPct : 0
 
   return (
     <div className="bg-white p-6 rounded-2xl border border-border shadow-sm">
@@ -23,8 +23,7 @@ export function DomainHealthWidget({ healthy, degraded, blacklisted, lastScan }:
           <h3 className="text-lg font-bold text-slate-900">Domain Health</h3>
           <p className="text-sm text-muted mt-1 flex items-center gap-1.5">
             <HugeiconsIcon icon={Clock01Icon} className="w-3.5 h-3.5" />
-            Auto-checks every 15 min · last scan{' '}
-            {lastScan ? formatRelativeTime(lastScan) : 'never'}
+            Auto-checks every 15 min - last scan {lastScan ? formatRelativeTime(lastScan) : 'never'}
           </p>
         </div>
         <Link to="/app/domains" className="text-black hover:text-neutral-700 text-sm font-bold flex items-center gap-1">
@@ -32,7 +31,6 @@ export function DomainHealthWidget({ healthy, degraded, blacklisted, lastScan }:
         </Link>
       </div>
 
-      {/* Stacked bar */}
       <div className="h-4 rounded-full overflow-hidden flex bg-neutral-100 mb-6">
         <div className="bg-neutral-400 transition-all" style={{ width: `${healthyPct}%` }} />
         <div className="bg-neutral-300 transition-all" style={{ width: `${degradedPct}%` }} />

@@ -9,6 +9,7 @@ import toast from 'react-hot-toast'
 import { fetchBlockedIps, whitelistIp } from '@/api/ip_rules'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { TableSkeleton } from '@/components/ui/TableSkeleton'
 import type { BlockedIPEntry } from '@/types'
 
 const PAGE_SIZE = 50
@@ -74,7 +75,7 @@ export default function BlockedIPsPage() {
       </div>
 
       {isLoading ? (
-        <div className="bg-white border border-neutral-200 rounded-2xl p-8 text-center text-sm text-muted">Loading...</div>
+        <TableSkeleton rows={8} columns={7} />
       ) : blocked.length === 0 ? (
         <div className="bg-white border border-neutral-200 rounded-2xl">
           <EmptyState
@@ -93,7 +94,7 @@ export default function BlockedIPsPage() {
             <thead>
               <tr className="border-b border-neutral-200 bg-neutral-50/50">
                 <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">IP</th>
-                <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Reason</th>
+                <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Why it was blocked</th>
                 <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Bot / Human</th>
                 <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Matched Rule</th>
                 <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Slug</th>
@@ -113,7 +114,10 @@ export default function BlockedIPsPage() {
                     )}
                   </td>
                   <td className="px-6 py-4">
-                    <span className="text-sm text-muted">{entry.reason || <span className="italic text-neutral-300">No reason</span>}</span>
+                    <span className="text-sm text-slate-900 font-medium">{entry.reasonLabel || entry.reason || <span className="italic text-neutral-300">No reason</span>}</span>
+                    {entry.reason && entry.reason !== entry.reasonLabel && (
+                      <span className="block text-xs text-muted mt-0.5 font-mono">{entry.reason}</span>
+                    )}
                   </td>
                   <td className="px-6 py-4">
                     <span className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full ${

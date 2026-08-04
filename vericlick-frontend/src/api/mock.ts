@@ -44,18 +44,18 @@ export const mockTrafficData: Record<string, TrafficData[]> = {
 }
 
 export const mockActivity: ActivityEntry[] = [
-  { id: uuid(), ip: '185.220.101.42', country: 'Germany', region: 'Berlin', city: 'Berlin', device: 'Desktop', reason: 'Tor Exit Node', time: '2026-07-22T06:10:00Z', slug: 'a8k3x2m', isBot: true },
-  { id: uuid(), ip: '104.28.31.5', country: 'United States', region: 'California', city: 'San Francisco', device: 'Mobile', reason: null, time: '2026-07-22T06:08:00Z', slug: 'a8k3x2m', isBot: false },
-  { id: uuid(), ip: '162.243.12.7', country: 'United States', region: 'New York', city: 'New York', device: 'Bot', reason: 'Bot Detected', time: '2026-07-22T06:05:00Z', slug: 'q7w9p1k', isBot: true },
-  { id: uuid(), ip: '91.108.56.23', country: 'Netherlands', region: 'North Holland', city: 'Amsterdam', device: 'Desktop', reason: null, time: '2026-07-22T06:02:00Z', slug: 'm4n8j5h', isBot: false },
-  { id: uuid(), ip: '45.155.205.18', country: 'Netherlands', region: 'South Holland', city: 'Rotterdam', device: 'Desktop', reason: 'Datacenter IP', time: '2026-07-22T05:58:00Z', slug: 'q7w9p1k', isBot: true },
-  { id: uuid(), ip: '176.32.100.14', country: 'Brazil', region: 'Sao Paulo', city: 'Sao Paulo', device: 'Mobile', reason: null, time: '2026-07-22T05:55:00Z', slug: 't3r7k9v', isBot: false },
-  { id: uuid(), ip: '109.70.100.93', country: 'Austria', region: 'Vienna', city: 'Vienna', device: 'Mobile', reason: 'VPN / Proxy', time: '2026-07-22T05:52:00Z', slug: 'a8k3x2m', isBot: true },
-  { id: uuid(), ip: '72.14.199.8', country: 'United States', region: 'California', city: 'Mountain View', device: 'Desktop', reason: null, time: '2026-07-22T05:48:00Z', slug: 'm4n8j5h', isBot: false },
-  { id: uuid(), ip: '185.220.102.244', country: 'Czechia', region: 'Prague', city: 'Prague', device: 'Desktop', reason: 'Headless Browser', time: '2026-07-22T05:45:00Z', slug: 'q7w9p1k', isBot: true },
-  { id: uuid(), ip: '203.0.113.42', country: 'Australia', region: 'New South Wales', city: 'Sydney', device: 'Tablet', reason: null, time: '2026-07-22T05:42:00Z', slug: 't3r7k9v', isBot: false },
-  { id: uuid(), ip: '23.129.64.211', country: 'United States', region: 'Texas', city: 'Dallas', device: 'Tablet', reason: 'Suspicious UA', time: '2026-07-22T05:38:00Z', slug: 'a8k3x2m', isBot: true },
-  { id: uuid(), ip: '88.99.177.34', country: 'United Kingdom', region: 'England', city: 'London', device: 'Desktop', reason: null, time: '2026-07-22T05:35:00Z', slug: 'm4n8j5h', isBot: false },
+  { id: uuid(), ip: '185.220.101.42', country: 'Germany', region: 'Berlin', city: 'Berlin', device: 'Desktop', reason: 'Tor Exit Node', reasonLabel: 'Blocked by automated detection', time: '2026-07-22T06:10:00Z', slug: 'a8k3x2m', isBot: true },
+  { id: uuid(), ip: '104.28.31.5', country: 'United States', region: 'California', city: 'San Francisco', device: 'Mobile', reason: null, reasonLabel: 'Human traffic — let through', time: '2026-07-22T06:08:00Z', slug: 'a8k3x2m', isBot: false },
+  { id: uuid(), ip: '162.243.12.7', country: 'United States', region: 'New York', city: 'New York', device: 'Bot', reason: 'Bot Detected', reasonLabel: 'Blocked by automated detection', time: '2026-07-22T06:05:00Z', slug: 'q7w9p1k', isBot: true },
+  { id: uuid(), ip: '91.108.56.23', country: 'Netherlands', region: 'North Holland', city: 'Amsterdam', device: 'Desktop', reason: null, reasonLabel: 'Human traffic — let through', time: '2026-07-22T06:02:00Z', slug: 'm4n8j5h', isBot: false },
+  { id: uuid(), ip: '45.155.205.18', country: 'Netherlands', region: 'South Holland', city: 'Rotterdam', device: 'Desktop', reason: 'Datacenter IP', reasonLabel: 'Blocked by automated detection', time: '2026-07-22T05:58:00Z', slug: 'q7w9p1k', isBot: true },
+  { id: uuid(), ip: '176.32.100.14', country: 'Brazil', region: 'Sao Paulo', city: 'Sao Paulo', device: 'Mobile', reason: null, reasonLabel: 'Human traffic — let through', time: '2026-07-22T05:55:00Z', slug: 't3r7k9v', isBot: false },
+  { id: uuid(), ip: '109.70.100.93', country: 'Austria', region: 'Vienna', city: 'Vienna', device: 'Mobile', reason: 'VPN / Proxy', reasonLabel: 'Blocked by automated detection', time: '2026-07-22T05:52:00Z', slug: 'a8k3x2m', isBot: true },
+  { id: uuid(), ip: '72.14.199.8', country: 'United States', region: 'California', city: 'Mountain View', device: 'Desktop', reason: null, reasonLabel: 'Human traffic — let through', time: '2026-07-22T05:48:00Z', slug: 'm4n8j5h', isBot: false },
+  { id: uuid(), ip: '185.220.102.244', country: 'Czechia', region: 'Prague', city: 'Prague', device: 'Desktop', reason: 'Headless Browser', reasonLabel: 'Blocked by automated detection', time: '2026-07-22T05:45:00Z', slug: 'q7w9p1k', isBot: true },
+  { id: uuid(), ip: '203.0.113.42', country: 'Australia', region: 'New South Wales', city: 'Sydney', device: 'Tablet', reason: null, reasonLabel: 'Human traffic — let through', time: '2026-07-22T05:42:00Z', slug: 't3r7k9v', isBot: false },
+  { id: uuid(), ip: '23.129.64.211', country: 'United States', region: 'Texas', city: 'Dallas', device: 'Tablet', reason: 'Suspicious UA', reasonLabel: 'Request looked automated (bot-like browser)', time: '2026-07-22T05:38:00Z', slug: 'a8k3x2m', isBot: true },
+  { id: uuid(), ip: '88.99.177.34', country: 'United Kingdom', region: 'England', city: 'London', device: 'Desktop', reason: null, reasonLabel: 'Human traffic — let through', time: '2026-07-22T05:35:00Z', slug: 'm4n8j5h', isBot: false },
 ]
 
 export const mockLinks: TrackingLink[] = [
@@ -67,15 +67,30 @@ export const mockLinks: TrackingLink[] = [
   { id: uuid(), slug: 'p9u3v6n', destinationUrl: 'https://example.com/offer/campaign-zeta', domain: 'go.linkshield.io', domainHealth: 'healthy', trackingUrl: 'https://go.linkshield.io/p9u3v6n', totalClicks: 756, botClicks: 151, status: 'active', createdAt: '2026-07-18T11:20:00Z' },
 ]
 
+function mockDomain(domain: string, healthStatus: Domain['healthStatus'], verified: boolean, lastChecked: string, linksCount: number): Domain {
+  const token = uuid()
+  return {
+    id: uuid(),
+    domain,
+    healthStatus,
+    verified,
+    verificationToken: token,
+    verificationRecord: `vericlick-verify=${token}`,
+    lastChecked,
+    linksCount,
+    createdAt: '2026-07-01T00:00:00Z',
+  }
+}
+
 export const mockDomains: Domain[] = [
-  { id: uuid(), domain: 'click.tracking-d.com', healthStatus: 'healthy', verified: true, lastChecked: '2026-07-22T06:00:00Z', linksCount: 8, createdAt: '2026-07-01T00:00:00Z' },
-  { id: uuid(), domain: 'go.linkshield.io', healthStatus: 'healthy', verified: true, lastChecked: '2026-07-22T05:45:00Z', linksCount: 12, createdAt: '2026-07-02T00:00:00Z' },
-  { id: uuid(), domain: 'safe.route.net', healthStatus: 'degraded', verified: false, lastChecked: '2026-07-22T05:30:00Z', linksCount: 4, createdAt: '2026-07-05T00:00:00Z' },
-  { id: uuid(), domain: 'blacked.listed.xyz', healthStatus: 'blacklisted', verified: true, lastChecked: '2026-07-22T04:00:00Z', linksCount: 2, createdAt: '2026-07-08T00:00:00Z' },
-  { id: uuid(), domain: 'fresh.rotator.io', healthStatus: 'healthy', verified: true, lastChecked: '2026-07-22T06:10:00Z', linksCount: 6, createdAt: '2026-07-15T00:00:00Z' },
-  { id: uuid(), domain: 'pivot.switch.net', healthStatus: 'healthy', verified: true, lastChecked: '2026-07-22T05:55:00Z', linksCount: 3, createdAt: '2026-07-18T00:00:00Z' },
-  { id: uuid(), domain: 'edge.proxy.link', healthStatus: 'healthy', verified: true, lastChecked: '2026-07-22T06:05:00Z', linksCount: 5, createdAt: '2026-07-20T00:00:00Z' },
-  { id: uuid(), domain: 'relay.bounce.dev', healthStatus: 'healthy', verified: true, lastChecked: '2026-07-22T05:50:00Z', linksCount: 7, createdAt: '2026-07-12T00:00:00Z' },
+  mockDomain('click.tracking-d.com', 'healthy', true, '2026-07-22T06:00:00Z', 8),
+  mockDomain('go.linkshield.io', 'healthy', true, '2026-07-22T05:45:00Z', 12),
+  mockDomain('safe.route.net', 'degraded', false, '2026-07-22T05:30:00Z', 4),
+  mockDomain('blacked.listed.xyz', 'blacklisted', true, '2026-07-22T04:00:00Z', 2),
+  mockDomain('fresh.rotator.io', 'healthy', true, '2026-07-22T06:10:00Z', 6),
+  mockDomain('pivot.switch.net', 'healthy', true, '2026-07-22T05:55:00Z', 3),
+  mockDomain('edge.proxy.link', 'healthy', true, '2026-07-22T06:05:00Z', 5),
+  mockDomain('relay.bounce.dev', 'healthy', true, '2026-07-22T05:50:00Z', 7),
 ]
 
 export async function mockFetch<T>(data: T, delay = 200): Promise<T> {

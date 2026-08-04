@@ -1,0 +1,21 @@
+# Runs the VeriClick domain health scan on a fixed 15-minute cadence.
+# Install: copy both files to /etc/systemd/system/, then:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now vericlick-domain-check.timer
+# Verify with: systemctl list-timers vericlick-domain-check.timer
+
+[Unit]
+Description=VeriClick domain health scanner (one pass)
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/vericlick/vericlick-backend/Vericlick_project
+ExecStart=/opt/vericlick/.venv/bin/python manage.py check_domains --once
+# Hardening: the scanner only needs read access to the DB/config.
+User=vericlick
+Group=vericlick
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/vericlick/vericlick-backend/Vericlick_project

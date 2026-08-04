@@ -23,7 +23,7 @@ export function AddDomainDialog({ onClose, onSubmit, loading }: AddDomainDialogP
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md border border-neutral-200">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-neutral-200">
-          <h2 className="text-lg font-bold text-slate-900">Add Tracking Domain</h2>
+          <h2 className="text-lg font-bold text-slate-900">Add Domain</h2>
           <button onClick={onClose} className="p-2 rounded-lg hover:bg-neutral-100 transition-colors">
             <HugeiconsIcon icon={Cancel01Icon} className="w-5 h-5 text-muted" />
           </button>
@@ -36,12 +36,12 @@ export function AddDomainDialog({ onClose, onSubmit, loading }: AddDomainDialogP
               <HugeiconsIcon icon={ShieldIcon} className="w-5 h-5 text-black" />
             </div>
             <p className="text-xs text-slate-700 leading-relaxed">
-              Register a new domain to our monitoring engine. We will automatically start checking for RBLs, blacklists, and security gateway flags every 15 minutes.
+              Add a domain you own. VeriClick will check whether it resolves every 15 minutes and let you verify ownership with a DNS TXT record.
             </p>
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-700 ml-1">Domain Name</label>
+            <label className="text-sm font-medium text-slate-700 ml-1">Domain</label>
             <div className="relative group">
               <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-neutral-400 group-focus-within:text-black transition-colors">
                 <HugeiconsIcon icon={Globe02Icon} className="w-5 h-5" />
@@ -56,7 +56,7 @@ export function AddDomainDialog({ onClose, onSubmit, loading }: AddDomainDialogP
                 onChange={(e) => setDomain(e.target.value)}
               />
             </div>
-            <p className="text-[10px] text-muted ml-1">Do not include http:// or https://</p>
+            <p className="text-[10px] text-muted ml-1">Do not include http:// or https://.</p>
           </div>
 
           <div className="flex items-center justify-end gap-3 pt-4">
