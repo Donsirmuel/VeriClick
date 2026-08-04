@@ -1,6 +1,6 @@
 # VeriClick
 
-Link protection for real traffic. VeriClick verifies every click in under 50ms, blocks bots and automated traffic before they reach your pages, and shows a plain-language reason for every decision.
+Link protection for real traffic. VeriClick checks every click against your IP rules and bot detection before it reaches your page, and shows a plain-language reason for every decision.
 
 ## How it works
 
@@ -8,7 +8,11 @@ Link protection for real traffic. VeriClick verifies every click in under 50ms, 
 2. **Every click is classified** — allow/deny IP rules first, then browser/UA heuristics, then rate limiting. Humans are 302-routed to the real destination; flagged traffic is diverted to your `safe_destination` (or VeriClick's built-in protected page) — never a 403, never the real page.
 3. **Monitor** — dashboard stats, traffic chart, live activity feed, domain health, and a blocked-IP review queue. Each blocked entry explains *why* in plain language.
 
-Domain health is scanned automatically (RBL/blacklist checks), and domain **ownership** is verified separately via a DNS TXT record (`vericlick-verify=<token>`) — a domain can be healthy without being verified, and the UI surfaces both states.
+Domain health is checked automatically from inside the app (stale domains are
+refreshed on demand when the dashboard or domain list is opened, plus an
+optional scheduled `check_domains` command), and domain **ownership** is
+verified separately via a DNS TXT record (`vericlick-verify=<token>`) — a
+domain can be healthy without being verified, and the UI surfaces both states.
 
 ## Repository layout
 
@@ -24,7 +28,7 @@ See `HANDOFF.md` for a deep technical handoff and `DEPLOYMENT.md` for the launch
 
 - Python 3.13, Django 6.0, DRF 3.16, SimpleJWT, dnspython
 - All JSON is camelCase on the wire (snake_case in Django)
-- 151 tests (`python manage.py test --settings=Vericlick_project.settings_test`)
+- 155 tests (`python manage.py test --settings=Vericlick_project.settings_test`)
 
 ```bash
 cd vericlick-backend/Vericlick_project
@@ -52,7 +56,12 @@ npm run dev
 
 ## Domain health scheduling
 
-Run scans on a loop with a process manager, or on a timer:
+Domain health checks run automatically in-app: `refresh_stale_domains`
+(`vericlick/services.py`) re-checks any domain whose last scan is older than
+15 minutes when the dashboard or domain list is requested — no scheduler needed
+for most deployments.
+
+For proactive checks you can still run scans on a loop or timer:
 
 ```bash
 python manage.py check_domains --interval 900    # loop every 15 min

@@ -3,7 +3,7 @@ import re
 from datetime import timedelta
 from django.db.models import Q
 from django.utils import timezone
-from .models import IPRule, ClickLog
+from .models import IPRule, ClickLog, DomainRegistry
 
 
 KNOWN_BOT_UA_PATTERNS = [
@@ -111,6 +111,31 @@ def verify_domain_ownership(domain):
         if expected in rdata.to_text().replace('"', ''):
             return True
     return False
+
+
+def refresh_stale_domains(workspace, max_age_minutes=15, limit=10):
+    # In-app domain health checking. Re-runs the health check for domains that
+    # haven't been checked in `max_age_minutes` (or never), so health statuses
+    # stay current without relying on an external cron/systemd scheduler. The
+    # workspace's last_domain_scan_at is bumped only when at least one domain
+    # was actually re-checked. `run_health_check()` confirms the domain
+    # resolves; ownership verification remains a separate DNS TXT step.
+    cutoff = timezone.now() - timedelta(minutes=max_age_minutes)
+    stale = list(
+        DomainRegistry.objects.filter(workspace=workspace).filter(
+            Q(last_checked__isnull=True) | Q(last_checked__lt=cutoff)
+        )[:limit]
+    )
+    for domain in stale:
+        try:
+            domain.run_health_check()
+        except Exception:
+            # A failed check must never break the request that triggered it.
+            continue
+    if stale:
+        workspace.last_domain_scan_at = timezone.now()
+        workspace.save(update_fields=['last_domain_scan_at'])
+    return stale
 
 
 def reason_label(decision, reason='', matched_rule=''):

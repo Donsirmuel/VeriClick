@@ -1213,6 +1213,51 @@ class DomainScanCommandTests(APITestCase):
             call_command('check_domains', interval=-1)
 
 
+# In-app domain health refresh (no external scheduler)
+
+class InAppDomainRefreshTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='inapp_scan_user')
+        self.workspace = Workspace.objects.get(owner=self.user)
+        self.domain = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='inapp-scan.example.com',
+        )
+        self.client.force_authenticate(self.user)
+
+    def test_refresh_stale_domains_checks_never_checked(self):
+        from .services import refresh_stale_domains
+        self.assertIsNone(self.domain.last_checked)
+        checked = refresh_stale_domains(self.workspace)
+        self.assertIn(self.domain, checked)
+        self.domain.refresh_from_db()
+        self.assertIsNotNone(self.domain.last_checked)
+        self.workspace.refresh_from_db()
+        self.assertIsNotNone(self.workspace.last_domain_scan_at)
+
+    def test_refresh_skips_recently_checked(self):
+        from .services import refresh_stale_domains
+        self.domain.run_health_check()
+        checked = refresh_stale_domains(self.workspace)
+        self.assertNotIn(self.domain, checked)
+
+    def test_list_endpoint_triggers_in_app_check(self):
+        self.assertIsNone(self.domain.last_checked)
+        res = self.client.get('/api/domains/')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.domain.refresh_from_db()
+        self.assertIsNotNone(self.domain.last_checked)
+        self.workspace.refresh_from_db()
+        self.assertIsNotNone(self.workspace.last_domain_scan_at)
+
+    def test_dashboard_stats_triggers_in_app_check(self):
+        self.assertIsNone(self.domain.last_checked)
+        res = self.client.get('/api/dashboard/stats/')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.domain.refresh_from_db()
+        self.assertIsNotNone(self.domain.last_checked)
+        self.assertIn('domainsHealthy', res.json())
+
+
 # Tracker Script
 
 class TrackerScriptTests(APITestCase):

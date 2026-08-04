@@ -48,19 +48,19 @@ export default function Register() {
               Protect your traffic<br />in under 2 minutes.
             </h2>
             <p className="text-neutral-400 text-lg leading-relaxed max-w-md">
-              Join 850+ operators who eliminated bot clicks and maximized their ROI with VeriClick.
+              Add a domain, prove you own it, create your first link — you'll be set up in minutes.
             </p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             {[
-              { value: '14.2M+', label: 'Humans verified' },
-              { value: '2.8M+', label: 'Bots blocked' },
-              { value: '99.2%', label: 'Accuracy rate' },
-              { value: '<50ms', label: 'Decision time' },
+              { value: 'Your rules', label: 'IP allow & deny lists' },
+              { value: 'Your domain', label: 'DNS ownership proof' },
+              { value: 'Explained', label: 'Every decision logged' },
+              { value: 'In-app', label: 'Health checks built in' },
             ].map((stat) => (
               <div key={stat.label} className="bg-black/60 backdrop-blur-sm rounded-xl border border-neutral-800 p-4">
-                <div className="text-2xl font-bold text-white mb-1">{stat.value}</div>
+                <div className="text-lg font-bold text-white mb-1">{stat.value}</div>
                 <div className="text-xs text-neutral-500">{stat.label}</div>
               </div>
             ))}
@@ -73,7 +73,7 @@ export default function Register() {
             </div>
             <div className="flex items-center gap-2">
               <div className="w-1.5 h-1.5 rounded-full bg-white" />
-              <span>Free tier available</span>
+              <span>Free during beta</span>
             </div>
           </div>
         </div>
@@ -162,9 +162,9 @@ export default function Register() {
                 <input type="checkbox" required className="mt-1 rounded border-neutral-700 bg-black text-white focus:ring-white/20" />
                 <span className="text-xs text-neutral-500 leading-relaxed">
                   I agree to the{' '}
-                  <a href="#" className="text-white hover:text-neutral-300 transition-colors">Terms of Service</a>
+                  <Link to="/terms" className="text-white hover:text-neutral-300 transition-colors">Terms of Service</Link>
                   {' '}and{' '}
-                  <a href="#" className="text-white hover:text-neutral-300 transition-colors">Privacy Policy</a>
+                  <Link to="/privacy" className="text-white hover:text-neutral-300 transition-colors">Privacy Policy</Link>
                 </span>
               </div>
 

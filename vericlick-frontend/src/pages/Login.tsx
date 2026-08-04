@@ -1,6 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { Mail01Icon, LockIcon, ArrowRight01Icon, ViewIcon, ViewOffIcon } from '@hugeicons/core-free-icons'
+import { Mail01Icon, LockIcon, ArrowRight01Icon, ViewIcon, ViewOffIcon, ShieldIcon, FingerPrintIcon, Globe02Icon } from '@hugeicons/core-free-icons'
 import { useState } from 'react'
 import toast from 'react-hot-toast'
 import { Logo } from '@/components/Logo'
@@ -52,37 +52,37 @@ export default function Login() {
               Verify every click.<br />Block every bot.
             </h2>
             <p className="text-neutral-400 text-lg leading-relaxed max-w-md">
-              Real-time traffic interception protecting 850+ domains with sub-50ms verification.
+              VeriClick checks every click against your rules before it reaches your page. Free during beta.
             </p>
           </div>
 
-          <div className="bg-black/60 backdrop-blur-sm rounded-2xl border border-neutral-800 p-6 font-mono text-xs">
-            <div className="flex items-center gap-2 mb-4 pb-3 border-b border-neutral-800/60">
-              <div className="w-2.5 h-2.5 rounded-full bg-neutral-600" />
-              <div className="w-2.5 h-2.5 rounded-full bg-neutral-600" />
-              <div className="w-2.5 h-2.5 rounded-full bg-neutral-600" />
-              <span className="text-[9px] text-neutral-500 ml-1">vericlick-relay</span>
+          <div className="space-y-4 max-w-md">
+            <div className="flex items-start gap-4 bg-black/60 backdrop-blur-sm rounded-2xl border border-neutral-800 p-5">
+              <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center shrink-0">
+                <HugeiconsIcon icon={ShieldIcon} className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <div className="text-sm font-bold text-white">IP allow &amp; deny rules</div>
+                <p className="text-xs text-neutral-400 mt-1 leading-relaxed">Whitelist always wins; denied IPs never reach your page.</p>
+              </div>
             </div>
-            <div className="space-y-1.5 text-neutral-500">
-              <div style={{ animation: 'fade-in-up 0.3s ease-out forwards' }}>{'>'} Connecting to relay...</div>
-              <div style={{ animation: 'fade-in-up 0.3s ease-out 0.3s forwards', opacity: 0 }}>{'>'} Fingerprint acquired</div>
-              <div style={{ animation: 'fade-in-up 0.3s ease-out 0.6s forwards', opacity: 0 }}>{'>'} Scoring 15 fraud signals</div>
-              <div className="text-white font-bold" style={{ animation: 'fade-in-up 0.3s ease-out 0.9s forwards', opacity: 0 }}>{'>'} Verdict: <span className="text-error">BOT</span> blocked in 34ms</div>
+            <div className="flex items-start gap-4 bg-black/60 backdrop-blur-sm rounded-2xl border border-neutral-800 p-5">
+              <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center shrink-0">
+                <HugeiconsIcon icon={FingerPrintIcon} className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <div className="text-sm font-bold text-white">Bot &amp; automation detection</div>
+                <p className="text-xs text-neutral-400 mt-1 leading-relaxed">Flagged traffic is diverted to your safe destination, never dropped silently.</p>
+              </div>
             </div>
-          </div>
-
-          <div className="flex items-center gap-8 mt-8 text-sm text-neutral-500">
-            <div className="flex items-center gap-2">
-              <div className="w-1.5 h-1.5 rounded-full bg-white" />
-              <span>99.2% accuracy</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-1.5 h-1.5 rounded-full bg-white" />
-              <span>&lt;50ms latency</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-1.5 h-1.5 rounded-full bg-white" />
-              <span>SOC 2 compliant</span>
+            <div className="flex items-start gap-4 bg-black/60 backdrop-blur-sm rounded-2xl border border-neutral-800 p-5">
+              <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center shrink-0">
+                <HugeiconsIcon icon={Globe02Icon} className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <div className="text-sm font-bold text-white">Own your domain</div>
+                <p className="text-xs text-neutral-400 mt-1 leading-relaxed">Health is checked in-app and ownership is proven with your own DNS record.</p>
+              </div>
             </div>
           </div>
         </div>
@@ -190,9 +190,8 @@ export default function Login() {
           </div>
 
           <div className="mt-8 flex items-center justify-center gap-6 text-xs text-neutral-500">
-            <a href="#" className="hover:text-white transition-colors">Security Policy</a>
-            <a href="#" className="hover:text-white transition-colors">System Status</a>
-            <a href="#" className="hover:text-white transition-colors">Terms of Service</a>
+            <Link to="/privacy" className="hover:text-white transition-colors">Privacy Policy</Link>
+            <Link to="/terms" className="hover:text-white transition-colors">Terms of Service</Link>
           </div>
         </div>
       </div>

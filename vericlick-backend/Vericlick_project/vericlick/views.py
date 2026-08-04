@@ -36,6 +36,7 @@ from .services import (
     lookup_location,
     get_safe_destination,
     verify_domain_ownership,
+    refresh_stale_domains,
 )
 
 
@@ -277,6 +278,10 @@ def dashboard_stats(request):
     if not workspace:
         return Response({'error': 'No workspace found'}, status=status.HTTP_404_NOT_FOUND)
 
+    # Refresh stale domain health from inside the app so the dashboard counts
+    # reflect current status without depending on an external scheduler.
+    refresh_stale_domains(workspace)
+
     now = timezone.now()
     twenty_four_hours_ago = now - timedelta(hours=24)
 
@@ -427,6 +432,14 @@ class TrackingLinkViewSet(viewsets.ModelViewSet):
 class DomainRegistryViewSet(viewsets.ModelViewSet):
     queryset = DomainRegistry.objects.all()
     serializer_class = DomainRegistrySerializer
+
+    def list(self, request, *args, **kwargs):
+        # Health checks run automatically in-app when a domain is stale, so
+        # no external cron/systemd job is required to keep statuses current.
+        workspace = get_user_workspace(self.request.user)
+        if workspace:
+            refresh_stale_domains(workspace)
+        return super().list(request, *args, **kwargs)
 
     def get_queryset(self):
         qs = super().get_queryset()

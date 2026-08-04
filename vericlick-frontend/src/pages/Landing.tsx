@@ -1,10 +1,13 @@
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
-  ArrowRight01Icon, ShieldIcon, ZapIcon, Globe02Icon, Chart03Icon, LockIcon, Copy01Icon,
-  Activity01Icon, ServerStackIcon, EyeIcon, FingerPrintIcon, Tick02Icon, UserGroupIcon, TradeUpIcon,
+  ArrowRight01Icon, ShieldIcon, ZapIcon, Globe02Icon, Chart03Icon, LockIcon,
+  Activity01Icon, ServerStackIcon, EyeIcon, FingerPrintIcon, Tick02Icon,
+  LinkSquare02Icon, CheckmarkCircle02Icon, Mail01Icon, UserGroupIcon,
 } from '@hugeicons/core-free-icons'
-import { Logo } from '@/components/Logo'
+import { PublicNav } from '@/components/PublicNav'
+import { PublicFooter } from '@/components/PublicFooter'
+import { CONTACT_EMAIL, contactMailto } from '@/lib/site'
 import { useState, useEffect, useRef } from 'react'
 
 function useInView(threshold = 0.15) {
@@ -53,47 +56,14 @@ function AnimatedBlock({ children, delay = 0, className = '' }: { children: Reac
   )
 }
 
-function useCountUp(end: number, duration = 2000) {
-  const [count, setCount] = useState(0)
-  const ref = useRef<HTMLDivElement>(null)
-  const hasAnimated = useRef(false)
-  useEffect(() => {
-    const node = ref.current
-    if (!node) return
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting && !hasAnimated.current) {
-          hasAnimated.current = true
-          const startTime = performance.now()
-          const animate = (currentTime: number) => {
-            const elapsed = currentTime - startTime
-            const progress = Math.min(elapsed / duration, 1)
-            const eased = 1 - Math.pow(1 - progress, 3)
-            setCount(Math.floor(eased * end))
-            if (progress < 1) requestAnimationFrame(animate)
-          }
-          requestAnimationFrame(animate)
-        }
-      },
-      { threshold: 0.3 }
-    )
-    observer.observe(node)
-    return () => observer.disconnect()
-  }, [end, duration])
-  return { count, ref }
-}
-
 const VERIFICATION_LINES = [
-  { text: '> Connecting to VeriClick relay...', delay: 0 },
-  { text: '> Fingerprint acquired: b07f1a2c', delay: 800 },
-  { text: '> Evaluating 15 fraud signals...', delay: 1600 },
-  { text: '  ├─ headless_browser: true', delay: 2000 },
-  { text: '  ├─ vpn_detected: true', delay: 2200 },
-  { text: '  └─ datacenter_ip: true', delay: 2400 },
-  { text: '> Risk score: 98/100', delay: 2800 },
-  { text: '> Verdict: BOT', delay: 3200 },
-  { text: '> Action: Redirected to safe page', delay: 3600 },
-  { text: '> Complete in 34ms', delay: 4000 },
+  { text: '> GET /r/7x9k2m', delay: 0 },
+  { text: '> IP rules: checked — no allow/deny match', delay: 700 },
+  { text: '> User agent: python-requests/2.31', delay: 1400 },
+  { text: '  └─ matches known bot signature', delay: 1800 },
+  { text: '> Decision: BLOCK (automated request)', delay: 2400 },
+  { text: '> Action: divert to safe page', delay: 3000 },
+  { text: '> Reason logged: "Request looked automated"', delay: 3600 },
 ]
 
 function LiveTerminal() {
@@ -132,13 +102,11 @@ function LiveTerminal() {
             style={{
               animation: 'fade-in-up 0.3s ease-out forwards',
               opacity: 0,
-              color: line.text.includes('Verdict:') || line.text.includes('Risk score:')
+              color: line.text.includes('Decision: BLOCK')
                 ? '#EF4444'
-                : line.text.includes('Complete')
-                  ? '#ffffff'
-                  : line.text.startsWith('  ')
-                    ? '#525252'
-                    : '#737373',
+                : line.text.startsWith('  ')
+                  ? '#525252'
+                  : '#737373',
             }}
           >
             {line.text}
@@ -215,67 +183,50 @@ function FloatingParticles() {
   )
 }
 
+const HERO_POINTS = [
+  { title: 'Free during beta', desc: 'No credit card required.' },
+  { title: 'IP allow/deny rules', desc: 'Allow rules always win.' },
+  { title: 'Domain health + ownership', desc: 'Checked in-app, proven via TXT.' },
+  { title: 'Every decision explained', desc: 'Plain-language reasons.' },
+]
+
 const FEATURES = [
-  { icon: FingerPrintIcon, title: 'Browser Fingerprinting', desc: 'Generate unique device fingerprints from 50+ signals to identify return visitors and botnets.' },
-  { icon: ShieldIcon, title: 'Real-time Scoring', desc: 'Score every click against 15+ fraud signals in under 50ms with zero impact on user experience.' },
-  { icon: Globe02Icon, title: 'Domain Rotation', desc: 'Automatically rotate across 850+ clean domains to maintain sender reputation and deliverability.' },
-  { icon: EyeIcon, title: 'Traffic Classification', desc: 'Instantly classify visitors as human, bot, crawler, or VPN/proxy with 99.2% accuracy.' },
-  { icon: ServerStackIcon, title: 'Safe Page Routing', desc: 'Silently redirect suspicious traffic to compliant safe pages while humans reach your destination.' },
-  { icon: Activity01Icon, title: 'Live Monitoring', desc: 'Watch traffic flow in real-time. Get instant alerts on bot spikes, domain blacklists, and anomalies.' },
+  { icon: LinkSquare02Icon, title: 'Tracked links', desc: 'Create a short link for any destination. Every click is logged, counted, and classified before it reaches your page.' },
+  { icon: FingerPrintIcon, title: 'Click verification', desc: 'Each request is checked against your IP rules, bot signatures, and rate limits — and every decision is recorded.' },
+  { icon: LockIcon, title: 'IP rules', desc: 'Allow trusted addresses through and deny known-bad ones. Allow rules are checked first and always win, so whitelisted IPs are never flagged again.' },
+  { icon: Globe02Icon, title: 'Domain health checks', desc: 'Your tracking domains are health-checked automatically from inside the app, and ownership is proven with a DNS TXT record.' },
+  { icon: ServerStackIcon, title: 'Safe routing', desc: 'Flagged traffic is diverted to a safe destination you control — never to your real page, never a 403.' },
+  { icon: Chart03Icon, title: 'Live dashboard', desc: 'Traffic chart, activity feed, domain health, and a blocked-IP review queue — with a plain-language reason for every decision.' },
 ]
 
 const STEPS = [
-  { step: 1, title: 'Link Created', desc: 'Generate a short link mapped to our rotating infrastructure. Zero setup required — just paste your destination URL.', icon: Globe02Icon },
-  { step: 2, title: 'Traffic Intercepted', desc: 'Our engine builds a unique fingerprint and scores 15+ fraud signals in real-time as each click arrives.', icon: ZapIcon },
-  { step: 3, title: 'Human Routed', desc: 'Humans reach your destination. Bots and crawlers are quietly routed to a safe page. Decision in <50ms.', icon: ShieldIcon },
+  { step: 1, title: 'Create a tracked link', desc: 'Paste any destination URL and get a short link. Optionally put it on a domain you own and prove ownership with a DNS TXT record.', icon: LinkSquare02Icon },
+  { step: 2, title: 'Every click is checked', desc: 'When someone clicks, VeriClick checks IP allow/deny rules first, then bot signatures, then rate limits.', icon: FingerPrintIcon },
+  { step: 3, title: 'The right traffic gets through', desc: 'Humans are redirected to your destination. Suspicious requests are diverted to your safe page — and the reason is logged.', icon: ShieldIcon },
 ]
 
 const USE_CASES = [
-  { title: 'Cold Email Outreach', desc: 'Shield your sender reputation from security gateway crawls and automated link analysis tools that flag cold campaigns.', icon: UserGroupIcon },
-  { title: 'Paid Advertising', desc: 'Ensure your ad pixel only fires for real human conversions. Stop paying for bot activity inflating your CPA.', icon: TradeUpIcon },
-  { title: 'SMS & Messaging', desc: 'Serve dynamic link previews to scrapers while keeping the real destination for actual users on messaging platforms.', icon: ZapIcon },
-  { title: 'Affiliate Tracking', desc: 'Protect your commission rates from non-human traffic and automated bot farms designed to steal attribution.', icon: LockIcon },
+  { title: 'Campaign links', desc: 'Protect the redirect links you put in emails, ads, and bios from scanners and automated previews.', icon: UserGroupIcon },
+  { title: 'Link operations', desc: 'Manage links, domains, and rules in one workspace, with a shared click history across everything.', icon: Activity01Icon },
+  { title: 'Traffic review', desc: 'Inspect who hit your links, see why anyone was blocked, and whitelist a mistake in one click.', icon: EyeIcon },
+  { title: 'Automation bursts', desc: 'Slow and divert bursts of automated requests with rate limiting so they never reach your real page.', icon: ZapIcon },
+]
+
+const REASON_LABELS = [
+  'Human traffic — let through',
+  'Allowed by a trusted-IP rule',
+  'Blocked by a deny rule you created',
+  'Request looked automated (bot-like browser)',
+  'Blocked — too many requests from this address',
+  'Blocked by automated detection',
 ]
 
 export default function Landing() {
-  const [demoUrl, setDemoUrl] = useState('')
   const heroStats = useInView(0.2)
-  const navigate = useNavigate()
-
-  useEffect(() => {
-    if (localStorage.getItem('token')) {
-      navigate('/app/dashboard', { replace: true })
-    }
-  }, [navigate])
-
-  const humans = useCountUp(14, 2000)
-  const bots = useCountUp(2, 2000)
-  const domains = useCountUp(850, 2000)
 
   return (
     <div className="bg-black text-white selection:bg-white selection:text-black">
-      {/* Navigation */}
-      <nav className="flex items-center justify-between px-6 py-4 max-w-7xl mx-auto border-b border-neutral-800/50">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center">
-            <Logo variant="dark" className="w-5 h-5 text-black" />
-          </div>
-          <span className="text-xl font-bold tracking-tight">VeriClick</span>
-        </div>
-        <div className="hidden md:flex items-center gap-8 text-sm font-medium text-neutral-400">
-          <Link to="/" className="hover:text-white transition-colors">Home</Link>
-          <Link to="/app/dashboard" className="hover:text-white transition-colors">Dashboard</Link>
-          <a href="#features" className="hover:text-white transition-colors">Features</a>
-          <a href="#" className="hover:text-white transition-colors">Pricing</a>
-          <a href="#" className="hover:text-white transition-colors">Docs</a>
-        </div>
-        <div className="flex items-center gap-3">
-          <Link to="/auth/login" className="hidden sm:block text-sm font-medium text-neutral-400 hover:text-white transition-colors">Log in</Link>
-          <Link to="/auth/login" className="bg-white hover:bg-neutral-200 text-black px-4 py-2 rounded-lg text-sm font-semibold transition-all">
-            Get Started
-          </Link>
-        </div>
-      </nav>
+      <PublicNav />
 
       {/* ─── Hero Section ─── */}
       <section className="relative min-h-[92vh] flex items-center px-6 overflow-hidden">
@@ -290,7 +241,7 @@ export default function Landing() {
             <div>
               <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-neutral-700/50 bg-neutral-900/60 backdrop-blur-sm text-xs font-bold text-neutral-300 uppercase tracking-wider mb-8 opacity-0" style={{ animation: 'fade-in-up 0.6s ease-out 0.1s forwards' }}>
                 <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse-dot" />
-                Real-time traffic verification
+                Link protection for real traffic
               </div>
 
               <h1 className="text-5xl md:text-6xl lg:text-[5.5rem] font-bold tracking-tight mb-8 leading-[0.95] opacity-0" style={{ animation: 'fade-in-up 0.7s ease-out 0.2s forwards' }}>
@@ -299,13 +250,14 @@ export default function Landing() {
               </h1>
 
               <p className="text-lg md:text-xl text-neutral-400 mb-10 leading-relaxed max-w-lg opacity-0" style={{ animation: 'fade-in-up 0.6s ease-out 0.35s forwards' }}>
-                Real-time traffic interception and domain rotation for elite operators.
-                Verify every click in &lt;50ms. Shield your sender reputation. Maximize your ROI.
+                VeriClick protects your links from bots and suspicious traffic. Create a tracked link,
+                and every click is checked — IP rules first, then bot detection, then rate limits.
+                Humans get through; flagged requests are diverted. Free during beta.
               </p>
 
               <div className="flex flex-col sm:flex-row items-center gap-4 mb-14 opacity-0" style={{ animation: 'fade-in-up 0.6s ease-out 0.45s forwards' }}>
-                <Link to="/auth/login" className="w-full sm:w-auto bg-white hover:bg-neutral-200 text-black px-8 py-4 rounded-xl text-lg font-bold flex items-center justify-center gap-2 transition-all group shadow-lg shadow-white/5">
-                  Start protecting now
+                <Link to="/auth/register" className="w-full sm:w-auto bg-white hover:bg-neutral-200 text-black px-8 py-4 rounded-xl text-lg font-bold flex items-center justify-center gap-2 transition-all group shadow-lg shadow-white/5">
+                  Get started free
                   <HugeiconsIcon icon={ArrowRight01Icon} className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                 </Link>
                 <Link to="/app/dashboard" className="w-full sm:w-auto bg-neutral-800/50 hover:bg-neutral-800 border border-neutral-700/50 px-8 py-4 rounded-xl text-lg font-bold transition-all text-center">
@@ -314,22 +266,15 @@ export default function Landing() {
               </div>
 
               <div ref={heroStats.ref} className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8 border-t border-neutral-800/60 pt-10 opacity-0" style={{ animation: 'fade-in-up 0.6s ease-out 0.55s forwards' }}>
-                <div ref={humans.ref}>
-                  <div className="text-3xl md:text-4xl font-bold text-white mb-1 tabular-nums">{humans.count}M+</div>
-                  <div className="text-[11px] text-neutral-500 uppercase tracking-wider font-medium">Humans Verified</div>
-                </div>
-                <div ref={bots.ref}>
-                  <div className="text-3xl md:text-4xl font-bold text-white mb-1 tabular-nums">{bots.count}.8M+</div>
-                  <div className="text-[11px] text-neutral-500 uppercase tracking-wider font-medium">Bots Intercepted</div>
-                </div>
-                <div ref={domains.ref}>
-                  <div className="text-3xl md:text-4xl font-bold text-white mb-1 tabular-nums">{domains.count}+</div>
-                  <div className="text-[11px] text-neutral-500 uppercase tracking-wider font-medium">Domains Rotated</div>
-                </div>
-                <div>
-                  <div className="text-3xl md:text-4xl font-bold text-white mb-1">&lt;50<span className="text-base text-neutral-500 font-normal">ms</span></div>
-                  <div className="text-[11px] text-neutral-500 uppercase tracking-wider font-medium">Avg Latency</div>
-                </div>
+                {HERO_POINTS.map((p) => (
+                  <div key={p.title}>
+                    <div className="flex items-center gap-2 mb-1">
+                      <HugeiconsIcon icon={CheckmarkCircle02Icon} className="w-4 h-4 text-neutral-400" />
+                      <div className="text-sm md:text-base font-bold text-white leading-tight">{p.title}</div>
+                    </div>
+                    <div className="text-[11px] text-neutral-500 leading-snug">{p.desc}</div>
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -343,52 +288,17 @@ export default function Landing() {
       {/* ─── Trust Bar ─── */}
       <div className="border-y border-neutral-800/50 bg-neutral-950/40">
         <div className="max-w-7xl mx-auto px-6 py-8">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-8">
-            <p className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Trusted by operators running</p>
-              <div className="flex items-center gap-10 text-neutral-500">
-              <div className="flex items-center gap-2 text-sm font-medium"><HugeiconsIcon icon={Tick02Icon} className="w-4 h-4 text-white/40" /> SOC 2 Compliant</div>
-              <div className="flex items-center gap-2 text-sm font-medium"><HugeiconsIcon icon={Tick02Icon} className="w-4 h-4 text-white/40" /> 99.98% Uptime</div>
-              <div className="flex items-center gap-2 text-sm font-medium"><HugeiconsIcon icon={Tick02Icon} className="w-4 h-4 text-white/40" /> GDPR Ready</div>
-              <div className="hidden sm:flex items-center gap-2 text-sm font-medium"><HugeiconsIcon icon={Tick02Icon} className="w-4 h-4 text-white/40" /> ISO 27001</div>
+          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+            <p className="text-xs font-bold text-neutral-500 uppercase tracking-widest">What sets VeriClick apart</p>
+            <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-3 text-neutral-500">
+              <div className="flex items-center gap-2 text-sm font-medium"><HugeiconsIcon icon={Tick02Icon} className="w-4 h-4 text-white/40" /> Built by DonLabs</div>
+              <div className="flex items-center gap-2 text-sm font-medium"><HugeiconsIcon icon={Tick02Icon} className="w-4 h-4 text-white/40" /> Free during beta</div>
+              <div className="flex items-center gap-2 text-sm font-medium"><HugeiconsIcon icon={Tick02Icon} className="w-4 h-4 text-white/40" /> Your domains, your links</div>
+              <div className="flex items-center gap-2 text-sm font-medium"><HugeiconsIcon icon={Tick02Icon} className="w-4 h-4 text-white/40" /> Every decision explained</div>
             </div>
           </div>
         </div>
       </div>
-
-      {/* ─── Live Demo ─── */}
-      <section className="py-28 px-6 bg-neutral-950/50">
-        <div className="max-w-4xl mx-auto text-center">
-          <AnimatedBlock>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-neutral-800/60 border border-neutral-700/40 text-neutral-300 text-xs font-bold uppercase tracking-wider mb-6">
-              <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse-dot" />
-              Live Demo
-            </div>
-          </AnimatedBlock>
-          <AnimatedBlock delay={80}>
-            <h2 className="text-3xl md:text-5xl font-bold mb-6">Test your traffic source</h2>
-          </AnimatedBlock>
-          <AnimatedBlock delay={160}>
-            <p className="text-neutral-400 mb-10 text-lg max-w-2xl mx-auto">
-              Paste any tracking URL to see how our fingerprinting engine classifies the request in real-time.
-            </p>
-          </AnimatedBlock>
-          <AnimatedBlock delay={240}>
-            <div className="flex flex-col sm:flex-row gap-3 max-w-2xl mx-auto">
-              <input
-                type="text"
-                placeholder="https://your-link.com/slug"
-                className="flex-1 bg-black border border-neutral-800 rounded-xl px-6 py-4 focus:outline-none focus:border-white/50 focus:ring-1 focus:ring-white/10 transition-all text-white placeholder:text-neutral-600 font-mono text-sm"
-                value={demoUrl}
-                onChange={(e) => setDemoUrl(e.target.value)}
-              />
-              <button className="bg-white hover:bg-neutral-200 text-black px-8 py-4 rounded-xl font-bold transition-all whitespace-nowrap flex items-center justify-center gap-2 group">
-                Verify Link
-                <HugeiconsIcon icon={ZapIcon} className="w-4 h-4 group-hover:scale-110 transition-transform" />
-              </button>
-            </div>
-          </AnimatedBlock>
-        </div>
-      </section>
 
       {/* ─── Features Grid ─── */}
       <section id="features" className="py-32 px-6">
@@ -404,7 +314,8 @@ export default function Landing() {
             </AnimatedBlock>
             <AnimatedBlock delay={160}>
               <p className="text-neutral-400 text-lg max-w-2xl mx-auto">
-                A full-stack traffic verification engine. From fingerprinting to domain rotation, every component is engineered for speed and accuracy.
+                Everything runs inside VeriClick — from click verification to domain health checks — with
+                a plain-language explanation for every decision it makes.
               </p>
             </AnimatedBlock>
           </div>
@@ -440,7 +351,8 @@ export default function Landing() {
             </AnimatedBlock>
             <AnimatedBlock delay={160}>
               <p className="text-neutral-400 text-lg max-w-2xl mx-auto">
-                VeriClick sits between your traffic source and your destination, making a split-second decision for every single visitor.
+                VeriClick sits between your traffic and your destination, making a split-second decision
+                for every single click.
               </p>
             </AnimatedBlock>
           </div>
@@ -468,7 +380,7 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ─── Use Cases + Code Block ─── */}
+      {/* ─── Use Cases + Reasons ─── */}
       <section className="py-32 px-6">
         <div className="max-w-7xl mx-auto">
           <div className="grid lg:grid-cols-2 gap-16 items-start">
@@ -479,7 +391,7 @@ export default function Landing() {
                 </div>
               </AnimatedBlock>
               <AnimatedBlock delay={60}>
-                <h2 className="text-4xl md:text-5xl font-bold mb-10 leading-tight">Built for high-stakes traffic operations.</h2>
+                <h2 className="text-4xl md:text-5xl font-bold mb-10 leading-tight">Where VeriClick fits.</h2>
               </AnimatedBlock>
               <div className="space-y-6">
                 {USE_CASES.map((uc, i) => (
@@ -509,51 +421,34 @@ export default function Landing() {
                     <div className="w-3 h-3 rounded-full bg-neutral-600" />
                     <div className="w-3 h-3 rounded-full bg-neutral-600" />
                   </div>
-                  <div className="text-xs font-mono text-neutral-500">POST /api/click → 200 OK</div>
+                  <div className="text-xs font-mono text-neutral-500">Every decision, explained</div>
                 </div>
-                <pre className="font-mono text-[13px] leading-relaxed overflow-x-auto px-6 py-5 relative z-10">
-                  <code className="text-neutral-300">
-{`{
-  "click_id": `}<span className="text-white">"1140655...d00d"</span>{`,
-  "verdict": `}<span className="text-error">"BOT"</span>{`,
-  "risk_score": `}<span className="text-error">98</span>{`,
-  "signals": {
-    "headless": true,
-    "vpn_proxy": true,
-    "datacenter": true
-  },
-  "action": `}<span className="text-white">"REDIRECT_TO_SAFE_PAGE"</span>{`,
-  "latency_ms": `}<span className="text-neutral-500">34</span>{`
-}`}
-                  </code>
-                </pre>
+                <div className="px-6 py-5 relative z-10 space-y-2.5">
+                  {REASON_LABELS.map((label) => (
+                    <div
+                      key={label}
+                      className={`flex items-center gap-3 text-sm font-mono px-4 py-2.5 rounded-lg border ${
+                        label.startsWith('Human') || label.startsWith('Allowed')
+                          ? 'text-neutral-200 border-neutral-800 bg-neutral-900/40'
+                          : 'text-neutral-400 border-neutral-800/70 bg-neutral-950/60'
+                      }`}
+                    >
+                      <HugeiconsIcon
+                        icon={label.startsWith('Human') || label.startsWith('Allowed') ? CheckmarkCircle02Icon : Tick02Icon}
+                        className={`w-4 h-4 shrink-0 ${label.startsWith('Human') || label.startsWith('Allowed') ? 'text-neutral-300' : 'text-neutral-600'}`}
+                      />
+                      <span className="text-xs">{label}</span>
+                    </div>
+                  ))}
+                </div>
                 <div className="flex items-center justify-between px-6 py-4 border-t border-neutral-800/60 bg-neutral-900/10">
-                  <div className="text-xs text-neutral-500 font-mono">Fingerprint: b07f1a2c...74a</div>
-                  <button className="text-neutral-500 hover:text-white transition-colors">
-                    <HugeiconsIcon icon={Copy01Icon} className="w-4 h-4" />
-                  </button>
+                  <div className="text-xs text-neutral-500 font-mono">These are the exact labels your dashboard shows.</div>
+                  <a href={contactMailto('Question about VeriClick')} className="text-neutral-500 hover:text-white transition-colors">
+                    <HugeiconsIcon icon={Mail01Icon} className="w-4 h-4" />
+                  </a>
                 </div>
               </div>
             </AnimatedBlock>
-          </div>
-        </div>
-      </section>
-
-      {/* ─── Stats Bar ─── */}
-      <section className="py-20 px-6 border-y border-neutral-800/50 bg-neutral-950/40">
-        <div className="max-w-7xl mx-auto">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-10 text-center">
-            {[
-              { value: '99.2%', label: 'Detection Accuracy' },
-              { value: '<50ms', label: 'Average Decision Time' },
-              { value: '2.8M+', label: 'Bots Blocked Monthly' },
-              { value: '14.2M+', label: 'Humans Verified' },
-            ].map((stat, i) => (
-              <AnimatedBlock key={stat.label} delay={i * 80}>
-                <div className="text-3xl md:text-4xl font-bold text-white mb-2">{stat.value}</div>
-                <div className="text-sm text-neutral-500 font-medium">{stat.label}</div>
-              </AnimatedBlock>
-            ))}
           </div>
         </div>
       </section>
@@ -563,91 +458,33 @@ export default function Landing() {
         <div className="max-w-4xl mx-auto text-center">
           <AnimatedBlock>
             <h2 className="text-4xl md:text-6xl font-bold mb-8 leading-tight">
-              Ready to eliminate<br />bot traffic?
+              Keep bots off<br />your links.
             </h2>
           </AnimatedBlock>
           <AnimatedBlock delay={100}>
             <p className="text-neutral-400 text-lg mb-12 max-w-xl mx-auto">
-              Join 850+ operators who protect their traffic with VeriClick. Setup takes less than 2 minutes — no credit card required.
+              Free during beta. Set up your first tracked link in minutes — no credit card required.
             </p>
           </AnimatedBlock>
           <AnimatedBlock delay={200}>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Link to="/auth/login" className="bg-white hover:bg-neutral-200 text-black px-10 py-4 rounded-xl text-lg font-bold flex items-center justify-center gap-2 transition-all group shadow-lg shadow-white/5">
+              <Link to="/auth/register" className="bg-white hover:bg-neutral-200 text-black px-10 py-4 rounded-xl text-lg font-bold flex items-center justify-center gap-2 transition-all group shadow-lg shadow-white/5">
                 Get started free
                 <HugeiconsIcon icon={ArrowRight01Icon} className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
               </Link>
-              <Link to="/app/dashboard" className="border border-neutral-700 hover:border-neutral-500 hover:bg-neutral-900/50 px-10 py-4 rounded-xl text-lg font-bold transition-all text-center">
-                View live dashboard
+              <Link to="/pricing" className="border border-neutral-700 hover:border-neutral-500 hover:bg-neutral-900/50 px-10 py-4 rounded-xl text-lg font-bold transition-all text-center">
+                View pricing
               </Link>
             </div>
+            <p className="text-sm text-neutral-500 mt-6">
+              Questions? Email{' '}
+              <a href={contactMailto()} className="text-neutral-300 hover:text-white transition-colors">{CONTACT_EMAIL}</a>
+            </p>
           </AnimatedBlock>
         </div>
       </section>
 
-      {/* ─── Footer ─── */}
-      <footer className="py-20 px-6 border-t border-neutral-800/50">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex flex-col md:flex-row justify-between gap-12 mb-16">
-            <div className="max-w-sm">
-              <div className="flex items-center gap-2.5 mb-6">
-                <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center">
-                  <Logo variant="dark" className="w-5 h-5 text-black" />
-                </div>
-                <span className="text-xl font-bold tracking-tight text-white">VeriClick</span>
-              </div>
-              <p className="text-neutral-400 leading-relaxed mb-8 text-sm">
-                The standard in link protection and traffic routing.
-                Built for those who demand total control over their traffic.
-              </p>
-              <div className="flex gap-3">
-                {[Globe02Icon, Chart03Icon, LockIcon].map((icon, i) => (
-                  <div key={i} className="w-9 h-9 rounded-full bg-neutral-800/50 border border-neutral-700/40 flex items-center justify-center hover:bg-neutral-700 cursor-pointer transition-colors">
-                    <HugeiconsIcon icon={icon} className="w-4 h-4 text-neutral-400" />
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-12">
-              <div>
-                <h5 className="font-bold text-white mb-5 text-sm">Product</h5>
-                <ul className="space-y-3 text-sm text-neutral-400">
-                  <li><Link to="/app/dashboard" className="hover:text-white transition-colors">Dashboard</Link></li>
-                  <li><a href="#features" className="hover:text-white transition-colors">Features</a></li>
-                  <li><a href="#" className="hover:text-white transition-colors">Pricing</a></li>
-                  <li><a href="#" className="hover:text-white transition-colors">API Reference</a></li>
-                  <li><a href="#" className="hover:text-white transition-colors">Changelog</a></li>
-                </ul>
-              </div>
-              <div>
-                <h5 className="font-bold text-white mb-5 text-sm">Company</h5>
-                <ul className="space-y-3 text-sm text-neutral-400">
-                  <li><a href="#" className="hover:text-white transition-colors">About Us</a></li>
-                  <li><a href="#" className="hover:text-white transition-colors">Blog</a></li>
-                  <li><a href="#" className="hover:text-white transition-colors">Careers</a></li>
-                  <li><a href="#" className="hover:text-white transition-colors">Contact</a></li>
-                </ul>
-              </div>
-              <div className="col-span-2 sm:col-span-1">
-                <h5 className="font-bold text-white mb-5 text-sm">Stay Updated</h5>
-                <p className="text-xs text-neutral-500 mb-4">Product updates and traffic security insights.</p>
-                <div className="flex gap-2">
-                  <input type="email" placeholder="you@company.com" className="bg-neutral-800/50 border border-neutral-700/40 rounded-lg px-3 py-2 text-xs w-full focus:outline-none focus:border-white/40 transition-colors placeholder:text-neutral-600" />
-                  <button className="bg-white hover:bg-neutral-200 text-black px-3 py-2 rounded-lg text-xs font-bold transition-colors shrink-0">Join</button>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="flex flex-col sm:flex-row items-center justify-between text-xs text-neutral-500 pt-8 border-t border-neutral-800/40 gap-4">
-            <span>&copy; 2026 VeriClick. All rights reserved.</span>
-            <div className="flex gap-6">
-              <a href="#" className="hover:text-white transition-colors">Privacy Policy</a>
-              <a href="#" className="hover:text-white transition-colors">Terms of Service</a>
-              <a href="#" className="hover:text-white transition-colors">Security</a>
-            </div>
-          </div>
-        </div>
-      </footer>
+      <PublicFooter />
     </div>
   )
 }

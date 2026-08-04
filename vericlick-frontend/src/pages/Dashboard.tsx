@@ -155,7 +155,7 @@ export default function DashboardPage() {
           <div className="w-2 h-2 rounded-full bg-neutral-400 animate-pulse" />
           {stats?.lastDomainScan
             ? `Last domain scan: ${new Date(stats.lastDomainScan).toLocaleString()}`
-            : 'All systems operational'}
+            : 'No domain scan yet'}
         </div>
       </div>
 

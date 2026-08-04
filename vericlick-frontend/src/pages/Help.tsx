@@ -1,11 +1,19 @@
 import { HugeiconsIcon } from '@hugeicons/react'
-import { Globe02Icon, LinkSquare02Icon, ShieldIcon, DashboardSquare01Icon, ArrowRight02Icon } from '@hugeicons/core-free-icons'
+import { Globe02Icon, LinkSquare02Icon, ShieldIcon, DashboardSquare01Icon, ArrowRight02Icon, Mail01Icon } from '@hugeicons/core-free-icons'
+import { CONTACT_EMAIL, COMPANY_NAME, contactMailto } from '@/lib/site'
 
 const sections = [
   {
     icon: Globe02Icon,
     title: 'Domains',
-    body: 'A domain is the web address your links live on (like your.domain). Add your domain first, then create links under it. A domain marked Verified means a scheduled health check confirmed it resolves.',
+    body: (
+      <>
+        A domain is the web address your links live on (like your.domain). Add your domain first, then create
+        links under it. A domain has two separate statuses: <strong>health</strong> (does it resolve to a server?)
+        and <strong>verified</strong> (did you prove you own it?). Health is checked automatically from inside the
+        app; ownership is proven separately by publishing a DNS TXT record.
+      </>
+    ),
   },
   {
     icon: LinkSquare02Icon,
@@ -72,17 +80,40 @@ export default function HelpPage() {
           </li>
           <li className="flex gap-3">
             <span className="w-6 h-6 rounded-full bg-white text-black text-xs font-bold flex items-center justify-center shrink-0">2</span>
-            <span>Go to <strong>Links</strong> and create your first link</span>
+            <span>Prove you own it by publishing the DNS TXT record, then click <strong>Verify ownership</strong></span>
           </li>
           <li className="flex gap-3">
             <span className="w-6 h-6 rounded-full bg-white text-black text-xs font-bold flex items-center justify-center shrink-0">3</span>
-            <span>Share the short URL — VeriClick handles the rest</span>
+            <span>Go to <strong>Links</strong> and create your first link</span>
           </li>
           <li className="flex gap-3">
             <span className="w-6 h-6 rounded-full bg-white text-black text-xs font-bold flex items-center justify-center shrink-0">4</span>
+            <span>Share the short URL — VeriClick handles the rest</span>
+          </li>
+          <li className="flex gap-3">
+            <span className="w-6 h-6 rounded-full bg-white text-black text-xs font-bold flex items-center justify-center shrink-0">5</span>
             <span>Check the <strong>Dashboard</strong> to see traffic and blocked bots</span>
           </li>
         </ol>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-border p-6 mt-6 shadow-sm">
+        <h2 className="text-lg font-bold text-slate-900 mb-3">Still stuck?</h2>
+        <p className="text-sm text-slate-700 leading-relaxed mb-4">
+          Ask the assistant (the chat bubble in the bottom-right corner) a question, or email a human
+          directly at{' '}
+          <a href={contactMailto('Help request')} className="font-bold text-slate-900 hover:underline">
+            {CONTACT_EMAIL}
+          </a>.
+          VeriClick is a product of {COMPANY_NAME} (donlabs.site).
+        </p>
+        <a
+          href={contactMailto('Help request')}
+          className="inline-flex items-center gap-2 bg-black hover:bg-neutral-800 text-white px-5 py-2.5 rounded-xl text-sm font-bold transition-colors"
+        >
+          <HugeiconsIcon icon={Mail01Icon} className="w-4 h-4" />
+          Email support
+        </a>
       </div>
     </div>
   )

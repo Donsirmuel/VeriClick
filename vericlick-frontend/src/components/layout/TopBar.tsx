@@ -1,9 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { Notification02Icon, Search01Icon, Menu01Icon, ChevronDownIcon, UserIcon, Settings01Icon, Logout01Icon } from '@hugeicons/core-free-icons'
+import { Menu01Icon, ChevronDownIcon, UserIcon, Settings01Icon, Logout01Icon } from '@hugeicons/core-free-icons'
 import { useQuery } from '@tanstack/react-query'
-import toast from 'react-hot-toast'
 import { fetchMe } from '@/api/auth'
 import { fetchWorkspace } from '@/api/workspace'
 
@@ -57,23 +56,6 @@ export function TopBar({ onMenuToggle }: { onMenuToggle: () => void }) {
       </div>
 
       <div className="flex items-center gap-2 md:gap-4">
-        <div className="hidden md:flex items-center gap-2 bg-neutral-100 rounded-lg px-3 py-2 w-64">
-          <HugeiconsIcon icon={Search01Icon} className="w-4 h-4 text-neutral-400" />
-          <input 
-            type="text" 
-            placeholder="Search links, domains..." 
-            className="bg-transparent border-none text-sm focus:outline-none w-full placeholder:text-muted"
-          />
-        </div>
-
-        <button
-          onClick={() => toast('No new notifications', { icon: '🔔' })}
-          className="relative p-2 rounded-lg hover:bg-neutral-100 transition-colors"
-        >
-          <HugeiconsIcon icon={Notification02Icon} className="w-5 h-5 text-neutral-400" />
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-error rounded-full" />
-        </button>
-
         <div className="relative" ref={dropdownRef}>
           <button
             onClick={() => setDropdownOpen(!dropdownOpen)}

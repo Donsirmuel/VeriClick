@@ -5,6 +5,7 @@ import { Toaster } from 'react-hot-toast'
 import { queryClient } from './lib/queryClient'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { SEOHead } from './components/SEOHead'
+import { ChatWidget } from './components/chat/ChatWidget'
 import PublicOnly from './components/PublicOnly'
 import DashboardLayout from './components/layout/DashboardLayout'
 import { PageLoader } from './components/ui/PageLoader'
@@ -14,6 +15,9 @@ const Login = lazy(() => import('./pages/Login'))
 const Register = lazy(() => import('./pages/Register'))
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword'))
 const ResetPassword = lazy(() => import('./pages/ResetPassword'))
+const Pricing = lazy(() => import('./pages/Pricing'))
+const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'))
+const TermsOfService = lazy(() => import('./pages/TermsOfService'))
 const Settings = lazy(() => import('./pages/Settings'))
 const NotFound = lazy(() => import('./pages/NotFound'))
 const Dashboard = lazy(() => import('./pages/Dashboard'))
@@ -38,6 +42,9 @@ function App() {
         <SEOHead />
         <Routes>
           <Route path="/" element={<PublicOnly><Landing /></PublicOnly>} />
+          <Route path="/pricing" element={withSuspense(<Pricing />)} />
+          <Route path="/privacy" element={withSuspense(<PrivacyPolicy />)} />
+          <Route path="/terms" element={withSuspense(<TermsOfService />)} />
           <Route path="/auth/login" element={withSuspense(<PublicOnly><Login /></PublicOnly>)} />
           <Route path="/auth/register" element={withSuspense(<PublicOnly><Register /></PublicOnly>)} />
           <Route path="/auth/forgot-password" element={withSuspense(<PublicOnly><ForgotPassword /></PublicOnly>)} />
@@ -55,6 +62,7 @@ function App() {
           <Route path="*" element={withSuspense(<NotFound />)} />
         </Routes>
       </BrowserRouter>
+      <ChatWidget />
       <Toaster position="top-right" />
     </QueryClientProvider>
   )

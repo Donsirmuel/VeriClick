@@ -48,8 +48,12 @@ The architecture: a **Django + DRF API** (`vericlick-backend/`) and a
    ```bash
    .venv/bin/gunicorn Vericlick_project.wsgi:application --workers 3 --bind 127.0.0.1:8000
    ```
-6. **Schedule the domain health scanner (REQUIRED).** The scanner flips domain
-   `verified`/`health_status` and updates scan timestamps. Pick one:
+6. **Domain health scanner (OPTIONAL).** Health checks now run automatically
+   from inside the app: whenever the dashboard or domain list is viewed, domains
+   whose last check is older than 15 minutes are refreshed on demand
+   (`refresh_stale_domains` in `services.py`). A background scheduler is no
+   longer required. If you still want proactive checks (so results are fresh even
+   before anyone opens the dashboard), pick one:
    - **systemd** — copy `deploy/systemd/vericlick-domain-check.{service,timer}`
      to `/etc/systemd/system/`, then `systemctl enable --now vericlick-domain-check.timer`
    - **cron** — see `deploy/cron.example` (`*/15 * * * * ... check_domains --once`)
@@ -101,8 +105,9 @@ Run through the release checklist once deployed:
 - [ ] `curl -A "python-requests" <tracked-url>` → redirected to the safe
       destination (or `/suspicious/`)
 - [ ] Whitelisting a blocked IP from the dashboard lets that IP through again
-- [ ] Domain scanner job is active (`systemctl list-timers` or the cron entry)
-      and `last_domain_scan_at` updates every 15 minutes
+- [ ] Domain health: open the dashboard, then open the Domains page — both
+      trigger a stale-domain refresh in-app, so `last_domain_scan_at` updates
+      and domain health stays current without a cron job
 - [ ] `robots.txt`/`sitemap.xml` on the public host use the deployed domain
 - [ ] CORS: browser requests from the SPA origin succeed, others are rejected
 - [ ] Secure headers present (HSTS, nosniff) when `DEBUG=False`

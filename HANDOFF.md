@@ -35,7 +35,7 @@ Vericlick_project/
 │   ├── management/commands/check_domains.py   # domain health scanner (--interval / --once); does NOT set verified
 │   ├── migrations/          # 0001..0007 (0007: DomainRegistry.verification_token + verified help_text)
 │   ├── utils.py             # CamelCaseJSON renderer/parser, custom exception handler
-│   ├── tests.py             # 151 tests (all test classes in this one file)
+│   ├── tests.py             # 155 tests (all test classes in this one file)
 │   └── version.py           # get_version() helper
 ├── manage.py
 └── db.sqlite3
@@ -97,10 +97,11 @@ All models use UUID primary keys and are scoped to a `Workspace` for data isolat
 - Safe diversion: `get_safe_destination(workspace, request)` returns the configured `safe_destination`, else the built-in `/suspicious/` neutral page; blocked/challenged clicks are 302-diverted (never a 403, never the real destination)
 
 ### Domain health scheduler & ownership verification
+- **In-app refresh is the default (no scheduler required):** `services.refresh_stale_domains(workspace, max_age_minutes=15, limit=10)` re-checks any domain whose last scan is older than 15 minutes (or that has never been scanned) and bumps `workspace.last_domain_scan_at`. It is invoked on `GET /api/dashboard/stats/` and `GET /api/domains/`, so health stays current as users open the app — no external cron/systemd job is required.
 - `python manage.py check_domains --once` — run a single scan (updates `last_checked` + `last_domain_scan_at`); **does not** set `verified`
-- `python manage.py check_domains --interval 900` — loop every 900s (rejects negative intervals); intended to run under a process manager in production
+- `python manage.py check_domains --interval 900` — loop every 900s (rejects negative intervals); optional proactive scanning under a process manager in production
 - **Ownership verification is separate and on-demand**: the frontend calls `POST /api/domains/{id}/verify/`, which resolves the domain's TXT records and matches against `verification_token`. Until the owner publishes `vericlick-verify=<token>`, the domain shows as healthy-but-unverified in the UI.
-- Command tests live in `DomainScanCommandTests`; ownership verification tests in `DomainVerificationTests`; reason-label tests in `ReasonLabelTests`
+- Command tests live in `DomainScanCommandTests`; ownership verification tests in `DomainVerificationTests`; in-app refresh tests in `InAppDomainRefreshTests`; reason-label tests in `ReasonLabelTests`
 
 ### Plain-language reason labels
 - `services.reason_label(decision, reason, matched_rule)` maps raw decision/reason codes to human-readable strings, e.g. `Tor Exit Node` → "Blocked by automated detection", `IPRule: deny` → "Blocked by a deny rule you created", `Rate limit` → "Blocked — too many requests from this address", allowed clicks → "Human traffic — let through"
@@ -112,7 +113,7 @@ All models use UUID primary keys and are scoped to a `Workspace` for data isolat
 - Template: `Vericlick_project/Vericlick_project/.env.example`
 
 ### Testing
-- 151 tests in `vericlick/tests.py`
+- 155 tests in `vericlick/tests.py`
 - Dev: `python manage.py test` (SQLite)
 - CI equivalent: `python manage.py test --settings=Vericlick_project.settings_test`
 - Covers: model tests, serializer camelCase, all endpoints (CRUD, auth, edge cases), redirect classification + safe diversion, neutral page, GeoIP lookup, allow-first precedence, SEO/robots, domain scan command, DNS TXT ownership verification (mocked dnspython), reason labels, tracker script + token-gated events, blocked-IP whitelist, workspace detail/PATCH
@@ -150,7 +151,9 @@ src/
 │   ├── SEOHead.tsx                    # robots noindex for /auth + /app
 │   ├── ErrorBoundary.tsx
 │   └── Logo.tsx
-├── lib/  (errors.ts, queryClient.ts, utils.ts)
+├── lib/  (errors.ts, queryClient.ts, utils.ts, site.ts, chat.ts)
+├── components/chat/ChatWidget.tsx     # floating FAQ assistant (rule-based, answers from lib/chat.ts; links out to contact email)
+├── components/{PublicNav,PublicFooter}.tsx  # shared marketing nav/footer used by Landing/Pricing/privacy/terms
 ├── pages/
 │   ├── Dashboard.tsx       # 5-step onboarding checklist (incl. "Verify your domain" → DNS TXT flow); stats/chart/feed/health + blocked-queue widgets
 │   ├── Links.tsx           # tracked-link table: copy tracked URL, preview destination, create/edit/delete
@@ -158,7 +161,7 @@ src/
 │   ├── IpRules.tsx         # allow/deny rules with expiration + remaining-time + "expire now"; help copy states allow-rule-checked-first precedence
 │   ├── BlockedIPs.tsx      # blocked-traffic queue: IP + location (region/city), plain-language "Why it was blocked", Bot/Human label, whitelist action (allow-first copy)
 │   ├── Settings.tsx        # rename workspace + safe destination field + Site Script tab (copy-ready <script> with data-site + data-token); Security items show "coming soon" toasts
-│   └── auth pages + Landing + NotFound
+│   └── auth pages + Landing + Pricing + PrivacyPolicy + TermsOfService + NotFound
 ├── types/index.ts          # TrackingLink, Domain (verified + verificationToken + verificationRecord), DashboardStats, IPRule, BlockedIP (region/city + reasonLabel), ActivityEntry (reasonLabel), Workspace (safeDestination), TimeRange
 ├── App.tsx                 # routes; all pages React.lazy code-split with Suspense fallback
 └── main.tsx
@@ -168,6 +171,7 @@ src/
 | Path | Page | Notes |
 |---|---|---|
 | `/` | Landing | Public |
+| `/pricing`, `/privacy`, `/terms` | Pricing / Privacy Policy / Terms of Service | Public |
 | `/auth/login`, `/auth/register`, `/auth/forgot-password`, `/auth/reset-password` | Auth pages | Public |
 | `/app/dashboard` | Dashboard | Protected; guided 5-step onboarding checklist until first link/verified domain/click exist |
 | `/app/links` | Links | Protected |
@@ -226,7 +230,7 @@ Environment variables (`.env`): `VITE_MOCK_MODE=false`, `VITE_API_BASE_URL=http:
 ### Production Checklist
 - [ ] Set `DEBUG=False`, strong `SECRET_KEY`, production `ALLOWED_HOSTS` + `CORS_ALLOWED_ORIGINS` (app refuses to boot with `DEBUG=False` unless both are set)
 - [ ] Run `python manage.py migrate` (includes `0007` DomainRegistry.verification_token) and `collectstatic`
-- [ ] Run `python manage.py check_domains --interval 900` under a process manager (systemd/cron/supervisor) — see `deploy/systemd/vericlick-domain-check.{service,timer}` and `deploy/cron.example`
+- [ ] Domain health stays current via the in-app stale-refresh (dashboard + domain list); the scheduled `check_domains` loop is optional — see `deploy/systemd/vericlick-domain-check.{service,timer}` and `deploy/cron.example`
 - [ ] Verify domain ownership per domain via the UI (`POST /api/domains/{id}/verify/`); the health scan no longer flips `verified`
 - [ ] Configure a `safe_destination` per workspace (Settings) so blocked traffic diverts to a neutral page you control; `/suspicious/` is the built-in fallback
 - [ ] Configure real email backend for password reset
