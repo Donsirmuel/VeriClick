@@ -1,5 +1,3 @@
-import { CONTACT_EMAIL, contactMailto } from './site'
-
 export interface ChatTopic {
   id: string
   keywords: string[]
@@ -31,16 +29,16 @@ const TOPICS: ChatTopic[] = [
   {
     id: 'what-is',
     keywords: ['what is', 'whats', "what's", 'vericlick', 'about', 'product', 'do you do', 'purpose', 'tool'],
-    answer: `VeriClick is a link protector built by ${'DonLabs'}. You create a short tracked link for any destination URL, and every click on it is checked before it reaches your page: IP allow/deny rules first, then bot detection, then rate limits. Humans are routed through; suspicious requests are diverted to a safe page instead. Every decision is recorded and explained in plain language on your dashboard.`,
+    answer: `VeriClick is a link protector. You create a short tracked link for any destination URL, and every click on it is checked before it reaches your page: IP allow/deny rules first, then bot detection, then rate limits. Humans are routed through; suspicious requests are diverted to a safe page instead. Every decision is recorded and explained in plain language on your dashboard.`,
   },
   {
     id: 'how-it-works',
-    keywords: ['how', 'works', 'work', 'function', 'mechanism', 'process', 'flow', 'what happens'],
+    keywords: ['how', 'works', 'work', 'function', 'mechanism', 'process', 'flow', 'what happens', 'step by step'],
     answer: `Here's the flow: 1) Create a tracked link pointing at your destination. 2) Share the short link. 3) When someone clicks it, VeriClick checks the request against your IP rules, bot signatures, and rate limits. 4) Real visitors are redirected to your destination; flagged requests are diverted to your safe destination (or a built-in neutral page). You see all of it — clicks, verdicts, and reasons — on the dashboard.`,
   },
   {
     id: 'create-link',
-    keywords: ['create link', 'add link', 'new link', 'make link', 'tracking link', 'short link', 'shorten', 'destination', 'slug', 'links'],
+    keywords: ['create link', 'create a link', 'add link', 'new link', 'make link', 'tracking link', 'short link', 'shorten', 'destination', 'slug', 'link'],
     answer: `Go to Links in your workspace and click "Create Link". Paste the destination URL, optionally pick a domain, and VeriClick generates a short slug (or you can set your own). Once created you'll get a tracked URL to share. Any visitor clicking it is verified before being redirected.`,
   },
   {
@@ -55,7 +53,7 @@ const TOPICS: ChatTopic[] = [
   },
   {
     id: 'ip-rules',
-    keywords: ['ip rule', 'ip rules', 'allow', 'deny', 'whitelist', 'blacklist', 'cidr', 'address', 'block ip', 'allowlist', 'denylist'],
+    keywords: ['ip rule', 'ip rules', 'allow', 'deny', 'whitelist', 'blacklist', 'cidr', 'address', 'block ip', 'allowlist', 'denylist', 'rule'],
     answer: `IP rules let you control which addresses can reach your links. An Allow rule always wins — those IPs are never flagged. A Deny rule blocks matching IPs/CIDR blocks. Rules can be set to expire, and you can whitelist an IP straight from the blocked-IPs review queue.`,
   },
   {
@@ -70,8 +68,8 @@ const TOPICS: ChatTopic[] = [
   },
   {
     id: 'dashboard',
-    keywords: ['dashboard', 'stats', 'statistics', 'activity', 'traffic', 'chart', 'analytics', 'metrics', 'clicks'],
-    answer: `The dashboard shows your last 24 hours of clicks, how many were blocked as bots, active link count, domain health, a daily human/bot traffic chart, a live activity feed, and the blocked-IP review queue. Every entry explains why a request was let through or blocked.`,
+    keywords: ['dashboard', 'stats', 'statistics', 'activity', 'traffic', 'chart', 'analytics', 'metrics', 'click', 'clicks'],
+    answer: `The dashboard shows your last 24 hours of clicks, how many were blocked as bots, human click counts, active link count, domain health, a daily human/bot traffic chart, a live activity feed, and the blocked-IP review queue. Every entry explains why a request was let through or blocked.`,
   },
   {
     id: 'pricing',
@@ -95,8 +93,8 @@ const TOPICS: ChatTopic[] = [
   },
   {
     id: 'contact',
-    keywords: ['contact', 'support', 'help me', 'email', 'reach', 'reach out', 'talk', 'human', 'question', 'report', 'issue', 'bug', 'problem', 'helpdesk'],
-    answer: `If the help docs and I can't answer your question, email ${CONTACT_EMAIL} and a human will get back to you. VeriClick is a product of DonLabs (donlabs.site).`,
+    keywords: ['contact', 'support', 'help me', 'email', 'reach', 'reach out', 'talk', 'human', 'report', 'issue', 'bug', 'problem', 'helpdesk'],
+    answer: `You can reach a human through the Contact page on the site (link in the footer, or the "Contact" link at the top of this widget). For instant answers, I can help right here — just ask about links, domains, IP rules, blocked traffic, or pricing.`,
   },
   {
     id: 'data-privacy',
@@ -106,11 +104,22 @@ const TOPICS: ChatTopic[] = [
   {
     id: 'technical',
     keywords: ['api', 'integration', 'developers', 'webhook', 'http', 'endpoint', 'docs', 'documentation'],
-    answer: `VeriClick exposes a REST API (JWT-authenticated) for links, domains, IP rules, dashboard data, and the public redirect + tracker endpoints. The full endpoint list is in the project's HANDOFF.md and README. If you need developer help, email ${CONTACT_EMAIL}.`,
+    answer: `VeriClick exposes a REST API (JWT-authenticated) for links, domains, IP rules, dashboard data, and the public redirect + tracker endpoints. The full endpoint list is in the project's HANDOFF.md and README. If you need developer help, use the contact page.`,
   },
 ]
 
-const FALLBACK_ANSWER = `I'm not sure I can answer that one yet. I'm best with questions about links, domains, verification, IP rules, blocked traffic, the dashboard, pricing, and account setup. For anything else, email ${CONTACT_EMAIL} (a human from DonLabs will reply) or open the Help page in your dashboard.`
+const FALLBACK_ANSWER = `I'm not sure I can answer that one yet. I'm best with questions about links, domains, verification, IP rules, blocked traffic, the dashboard, pricing, and account setup. For anything else, use the Contact page (link in the footer) or open the Help page in your dashboard.`
+
+function tokenize(text: string): Set<string> {
+  return new Set(text.split(' ').filter(Boolean))
+}
+
+function tokensMatch(a: string, b: string): boolean {
+  if (a === b) return true
+  if (a.length >= 4 && b.length >= 4 && (a.startsWith(b) || b.startsWith(a))) return true
+  const stripS = (w: string) => (w.length > 3 && w.endsWith('s') ? w.slice(0, -1) : w)
+  return stripS(a) === stripS(b)
+}
 
 function normalize(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim()
@@ -120,14 +129,27 @@ export function answerQuestion(question: string): ChatAnswer {
   const query = normalize(question)
   if (!query) return { text: FALLBACK_ANSWER }
 
+  const queryTokens = tokenize(query)
+
   let best: ChatTopic | null = null
   let bestScore = 0
 
   for (const topic of TOPICS) {
     let score = 0
     for (const keyword of topic.keywords) {
-      if (query.includes(keyword)) {
-        score += keyword.split(' ').length
+      const keywordTokens = tokenize(keyword)
+      const exactPhrase = query.includes(keyword)
+      if (exactPhrase) {
+        score += keywordTokens.size * 3
+        continue
+      }
+      for (const kw of keywordTokens) {
+        for (const qt of queryTokens) {
+          if (tokensMatch(qt, kw)) {
+            score += 1
+            break
+          }
+        }
       }
     }
     if (score > bestScore) {
@@ -147,13 +169,11 @@ export function initialBotMessage(): ChatMessage {
   return {
     id: 'welcome',
     role: 'bot',
-    text: `Hi! I'm the VeriClick assistant. Ask me about links, domains, IP rules, blocked traffic, pricing, or how to get started. If I can't help, I'll point you to a human at ${CONTACT_EMAIL}.`,
+    text: `Hi! I'm the VeriClick assistant. Ask me about links, domains, IP rules, blocked traffic, pricing, or how to get started. If I can't help, I'll point you to the Contact page.`,
     suggestions: QUICK_QUESTIONS,
   }
 }
 
 export function contactMessage(): string {
-  return `You can reach us anytime at ${CONTACT_EMAIL} or via the contact links on the site. A product of DonLabs (donlabs.site).`
+  return `You can reach a human through the Contact page on the site — the link is in the footer or at the top of this widget.`
 }
-
-export { CONTACT_EMAIL, contactMailto }

@@ -45,6 +45,7 @@ export interface TrackingLink {
   trackingUrl: string
   totalClicks: number
   botClicks: number
+  humanClicks: number
   status: LinkStatus
   createdAt: string
 }
@@ -74,6 +75,37 @@ export interface Workspace {
   trackerSecret: string
   safeDestination: string
   lastDomainScanAt: string | null
+  plan: string | null
+  planName: string | null
+  domainLimit: number | null
+  domainsUsed: number
+  canAddDomain: boolean
+  betaFreeMode: boolean
+}
+
+export interface Plan {
+  code: string
+  name: string
+  monthlyPrice: number
+  domainLimit: number | null
+  features: string[]
+  sortOrder: number
+}
+
+export interface PricingResponse {
+  betaFreeMode: boolean
+  plans: Plan[]
+}
+
+export interface SiteConfig {
+  betaFreeMode: boolean
+  signupsOpen: boolean
+}
+
+export interface DiscountCodeValidation {
+  valid: boolean
+  code?: string
+  discountPercent?: number
 }
 
 export interface AuthUser {

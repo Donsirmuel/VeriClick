@@ -12,6 +12,11 @@ router.register(r'ip-rules', views.IPRuleViewSet, basename='ip-rule')
 urlpatterns = [
     # Health
     path('health/', views.health_check, name='health-check'),
+    # Pricing & discounts
+    path('pricing/', views.pricing, name='pricing'),
+    path('site-config/', views.site_config, name='site-config'),
+    path('upgrade/', views.upgrade_workspace, name='upgrade'),
+    path('discount-codes/validate/', views.discount_code_validate, name='discount-code-validate'),
     # Auth
     path('auth/register/', views.register, name='register'),
     path('auth/google/', views.google_login, name='google-login'),

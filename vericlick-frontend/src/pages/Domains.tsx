@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Globe02Icon, PlusSignIcon, RefreshIcon, Search01Icon, Edit01Icon, Cancel01Icon, Clock03Icon, LinkSquare02Icon } from '@hugeicons/core-free-icons'
@@ -6,6 +7,7 @@ import toast from 'react-hot-toast'
 import { AddDomainDialog } from '@/components/domains/AddDomainDialog'
 import { VerifyDomainDialog } from '@/components/domains/VerifyDomainDialog'
 import { fetchDomains, createDomain, updateDomain, deleteDomain, recheckDomain } from '@/api/domains'
+import { fetchWorkspace } from '@/api/workspace'
 import { formatRelativeTime } from '@/lib/utils'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
@@ -45,6 +47,21 @@ export default function DomainsPage() {
     queryKey: ['domains'],
     queryFn: fetchDomains,
   })
+
+  const { data: workspace } = useQuery({
+    queryKey: ['workspace'],
+    queryFn: fetchWorkspace,
+  })
+
+  const planLabel = workspace?.betaFreeMode
+    ? 'Free beta'
+    : workspace?.planName ?? 'Free'
+  const domainUsage = workspace
+    ? workspace.domainLimit
+      ? `${workspace.domainsUsed} / ${workspace.domainLimit}`
+      : `${workspace.domainsUsed} / unlimited`
+    : null
+  const atLimit = Boolean(workspace && !workspace.betaFreeMode && !workspace.canAddDomain)
 
   const createMutation = useMutation({
     mutationFn: createDomain,
@@ -112,13 +129,36 @@ export default function DomainsPage() {
           <h1 className="text-2xl font-bold text-slate-900">Domain Registry</h1>
           <p className="text-sm text-muted mt-1 max-w-3xl">Domains are the branded URLs your links live on. Each link belongs to a domain — e.g. link <code className="text-xs bg-neutral-100 px-1.5 py-0.5 rounded">your.domain/r/summer23</code> uses domain <code className="text-xs bg-neutral-100 px-1.5 py-0.5 rounded">your.domain</code>. Domains are health-checked automatically every 15 minutes. <strong>Resolves</strong> means the domain points somewhere; <strong>Verified</strong> means you proved ownership with a TXT record — both matter before a domain is fully trusted.</p>
         </div>
-        <button
-          onClick={() => setShowAddDialog(true)}
-          className="bg-black hover:bg-neutral-800 text-white px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-sm"
-        >
-          <HugeiconsIcon icon={PlusSignIcon} className="w-4 h-4" />
-          Add Domain
-        </button>
+        <div className="flex items-center gap-3">
+          {domainUsage && (
+            <span className={`inline-flex items-center gap-2 text-xs font-bold px-3 py-2 rounded-xl border ${
+              atLimit
+                ? 'text-warning bg-warning/10 border-warning/20'
+                : 'text-slate-700 bg-neutral-100 border-neutral-200'
+            }`}>
+              <HugeiconsIcon icon={Globe02Icon} className="w-4 h-4" />
+              {planLabel}: {domainUsage}{' '}
+              {workspace?.betaFreeMode ? 'domains' : workspace?.domainLimit ? 'domains used' : 'domains'}
+            </span>
+          )}
+          {atLimit && (
+            <Link
+              to="/pricing"
+              className="inline-flex items-center gap-2 bg-black hover:bg-neutral-800 text-white px-4 py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm"
+            >
+              Upgrade plan
+            </Link>
+          )}
+          <button
+            onClick={() => setShowAddDialog(true)}
+            disabled={atLimit}
+            title={atLimit ? 'You reached the domain limit for your plan. Upgrade to add more.' : undefined}
+            className="bg-black hover:bg-neutral-800 disabled:bg-neutral-300 disabled:cursor-not-allowed text-white px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-sm"
+          >
+            <HugeiconsIcon icon={PlusSignIcon} className="w-4 h-4" />
+            Add Domain
+          </button>
+        </div>
       </div>
 
       <div className="relative max-w-md mb-6">
@@ -155,7 +195,8 @@ export default function DomainsPage() {
         </div>
       ) : (
         <div className="bg-white border border-neutral-200 rounded-2xl overflow-hidden">
-          <table className="w-full">
+          <div className="overflow-x-auto">
+          <table className="min-w-[860px] w-full">
             <thead>
               <tr className="border-b border-neutral-200 bg-neutral-50/50">
                 <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Domain</th>
@@ -255,6 +296,7 @@ export default function DomainsPage() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 

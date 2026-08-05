@@ -1,6 +1,5 @@
 import { PublicNav } from '@/components/PublicNav'
 import { PublicFooter } from '@/components/PublicFooter'
-import { CONTACT_EMAIL, COMPANY_NAME, contactMailto } from '@/lib/site'
 
 const SECTIONS = [
   {
@@ -29,7 +28,7 @@ const SECTIONS = [
   },
   {
     title: 'Changes & contact',
-    body: `We may update these terms as the product evolves. Material changes will be announced. Questions go to ${CONTACT_EMAIL}.`,
+    body: `We may update these terms as the product evolves. Material changes will be announced. Questions can be sent through the contact button below.`,
   },
 ]
 
@@ -58,9 +57,7 @@ export default function TermsOfService() {
 
         <div className="mt-14 bg-neutral-950 border border-neutral-800 rounded-2xl p-6">
           <p className="text-sm text-neutral-400 leading-relaxed">
-            Questions about these terms? Email{' '}
-            <a href={contactMailto('Terms question')} className="text-white hover:text-neutral-300 font-medium">{CONTACT_EMAIL}</a>.
-            VeriClick is a product of {COMPANY_NAME} (donlabs.site).
+            Questions about these terms? Use the contact button below.
           </p>
         </div>
       </section>

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { ChatBotIcon, Cancel01Icon, ArrowUpIcon, SparklesIcon, UserIcon } from '@hugeicons/core-free-icons'
-import { answerQuestion, initialBotMessage, contactMailto, type ChatMessage } from '@/lib/chat'
-import { PRODUCT_NAME, COMPANY_NAME } from '@/lib/site'
+import { answerQuestion, initialBotMessage, type ChatMessage } from '@/lib/chat'
+import { PRODUCT_NAME } from '@/lib/site'
 import { cn } from '@/lib/utils'
 
 let messageId = 0
@@ -103,7 +104,7 @@ export function ChatWidget() {
   return (
     <>
       {open && (
-        <div className="fixed bottom-24 right-4 md:right-6 z-[100] w-[calc(100vw-2rem)] max-w-[400px] h-[560px] max-h-[calc(100vh-8rem)] bg-white rounded-2xl border border-neutral-200 shadow-2xl flex flex-col overflow-hidden">
+        <div className="fixed bottom-24 right-4 md:right-6 z-100 w-[calc(100vw-2rem)] max-w-100 h-140 max-h-[calc(100vh-8rem)] bg-white rounded-2xl border border-neutral-200 shadow-2xl flex flex-col overflow-hidden">
           <div className="bg-neutral-950 text-white px-4 py-3.5 flex items-center gap-3 shrink-0">
             <div className="w-9 h-9 rounded-xl bg-white text-black flex items-center justify-center">
               <HugeiconsIcon icon={ChatBotIcon} className="w-5 h-5" />
@@ -111,15 +112,15 @@ export function ChatWidget() {
             <div className="flex-1 min-w-0">
               <div className="text-sm font-bold leading-tight">{PRODUCT_NAME} Assistant</div>
               <div className="text-[11px] text-neutral-400 leading-tight truncate">
-                Free during beta · a {COMPANY_NAME} product
+                Free during beta
               </div>
             </div>
-            <a
-              href={contactMailto('VeriClick support request')}
+            <Link
+              to="/contact"
               className="text-[11px] font-semibold text-neutral-300 hover:text-white transition-colors hidden sm:block"
             >
-              Email us
-            </a>
+              Contact
+            </Link>
             <button
               onClick={() => setOpen(false)}
               className="p-1.5 rounded-lg hover:bg-neutral-800 text-neutral-400 hover:text-white transition-colors"
@@ -167,7 +168,7 @@ export function ChatWidget() {
       <button
         onClick={() => setOpen(!open)}
         className={cn(
-          'fixed bottom-6 right-4 md:right-6 z-[100] w-14 h-14 rounded-full shadow-xl flex items-center justify-center transition-all',
+          'fixed bottom-6 right-4 md:right-6 z-100 w-14 h-14 rounded-full shadow-xl flex items-center justify-center transition-all',
           open ? 'bg-neutral-800 hover:bg-neutral-700' : 'bg-neutral-900 hover:bg-neutral-700'
         )}
         aria-label={open ? 'Close chat assistant' : 'Open chat assistant'}

@@ -1,0 +1,8 @@
+# Logs (runtime output, never commit)
+*.log
+*.log.*
+
+# Local environment (never commit)
+.env
+.env.*
+!.env.example

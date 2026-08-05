@@ -90,7 +90,8 @@ export default function BlockedIPsPage() {
         </div>
       ) : (
         <div className="bg-white border border-neutral-200 rounded-2xl overflow-hidden">
-          <table className="w-full">
+          <div className="overflow-x-auto">
+          <table className="min-w-[1040px] w-full">
             <thead>
               <tr className="border-b border-neutral-200 bg-neutral-50/50">
                 <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">IP</th>
@@ -151,6 +152,7 @@ export default function BlockedIPsPage() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 

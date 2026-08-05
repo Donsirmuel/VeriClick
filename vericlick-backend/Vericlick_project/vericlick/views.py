@@ -18,7 +18,10 @@ from rest_framework.throttling import ScopedRateThrottle
 from rest_framework_simplejwt.tokens import RefreshToken
 from decouple import config
 
-from .models import Workspace, DomainRegistry, TrackingLink, ClickLog, IPRule, TrackerEvent
+from .models import (
+    Workspace, DomainRegistry, TrackingLink, ClickLog, IPRule, TrackerEvent,
+    Plan, DiscountCode, SiteConfig,
+)
 from .serializers import (
     UserSerializer,
     WorkspaceSerializer,
@@ -29,6 +32,7 @@ from .serializers import (
     IPRuleSerializer,
     TrackerEventSerializer,
     BlockedIPSerializer,
+    PlanSerializer,
 )
 from .version import get_version
 from .services import (
@@ -69,6 +73,91 @@ def workspace_detail(request):
 @permission_classes([AllowAny])
 def health_check(request):
     return Response({'status': 'ok', 'version': get_version()})
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def pricing(request):
+    # Public pricing data for the pricing page. During beta, SiteConfig marks
+    # the product free, so the page shows "free for now" while still advertising
+    # the upcoming paid tiers (admin-managed via SiteConfig.beta_free_mode).
+    plans = Plan.objects.filter(is_active=True).order_by('sort_order', 'code')
+    return Response({
+        'beta_free_mode': SiteConfig.is_beta_free_mode(),
+        'plans': PlanSerializer(plans, many=True).data,
+    })
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def site_config(request):
+    # Public, unauthenticated status flags mirror what the admin exposes. The
+    # frontend uses these to adapt copy and gate features (beta free mode, or
+    # signups closed).
+    return Response({
+        'beta_free_mode': SiteConfig.is_beta_free_mode(),
+        'signups_open': SiteConfig.signups_allowed(),
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def upgrade_workspace(request):
+    # Plan selection for a workspace (the "checkout gating" hook). Today this
+    # just assigns the chosen paid plan, which then enforces that plan's domain
+    # limit via Workspace.effective_domain_limit. A payment provider (e.g.
+    # Stripe checkout session) can be wired in here later without changing the
+    # contract: the frontend sends plan_code and gets the updated workspace back.
+    workspace = get_user_workspace(request.user)
+    if not workspace:
+        return Response({'error': 'No workspace found'}, status=status.HTTP_404_NOT_FOUND)
+
+    code = (request.data.get('plan_code') or '').strip()
+    try:
+        plan = Plan.objects.get(code=code, is_active=True)
+    except Plan.DoesNotExist:
+        return Response(
+            {'errors': [{'field': 'plan_code', 'detail': 'That plan is not available.'}]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    workspace.plan = plan
+    workspace.save(update_fields=['plan'])
+    return Response(WorkspaceSerializer(workspace).data)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def discount_code_validate(request):
+    # Validates an admin-created discount code. Returns the discount percent
+    # when the code is usable, plus a plain-language message otherwise. It does
+    # not consume the code — consumption happens when a checkout exists.
+    raw_code = (request.data.get('code') or '').strip()
+    if not raw_code:
+        return Response(
+            {'errors': [{'field': 'code', 'detail': 'Discount code is required.'}]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        discount = DiscountCode.objects.get(code__iexact=raw_code)
+    except DiscountCode.DoesNotExist:
+        return Response(
+            {'errors': [{'field': 'code', 'detail': 'That discount code is not valid.'}]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if not discount.is_usable():
+        return Response(
+            {'errors': [{'field': 'code', 'detail': 'That discount code has expired or is no longer available.'}]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    return Response({
+        'valid': True,
+        'code': discount.code,
+        'discount_percent': discount.discount_percent,
+    })
 
 
 @api_view(['GET'])
@@ -145,6 +234,11 @@ def receive_tracker_event(request):
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def register(request):
+    if not SiteConfig.signups_allowed():
+        return Response(
+            {'errors': [{'field': 'email', 'detail': 'New sign-ups are currently paused. Please try again later.'}]},
+            status=status.HTTP_403_FORBIDDEN,
+        )
     serializer = RegisterSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     user = serializer.save()
@@ -198,6 +292,12 @@ def google_login(request):
     try:
         user = User.objects.get(email=email)
     except User.DoesNotExist:
+        # New-account creation via Google also respects the admin signups toggle.
+        if not SiteConfig.signups_allowed():
+            return Response(
+                {'errors': [{'field': 'email', 'detail': 'New sign-ups are currently paused. Please try again later.'}]},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         base = email.split('@')[0]
         username = base
         suffix = 1
@@ -452,6 +552,14 @@ class DomainRegistryViewSet(viewsets.ModelViewSet):
         workspace = get_user_workspace(self.request.user)
         if not workspace:
             raise ValidationError({'detail': 'No workspace found for this account.'})
+        if not workspace.can_add_domain:
+            limit = workspace.effective_domain_limit
+            raise ValidationError({
+                'detail': (
+                    f'You have reached the {limit}-domain limit for your plan. '
+                    'Remove a domain or upgrade to a higher plan to add more.'
+                )
+            })
         domain = serializer.save(workspace=workspace)
         try:
             domain.run_health_check()
@@ -474,7 +582,8 @@ class DomainRegistryViewSet(viewsets.ModelViewSet):
         # control the domain. A domain can resolve (healthy) but only become
         # 'verified' once ownership is proven.
         domain = self.get_object()
-        if verify_domain_ownership(domain):
+        verified, detail = verify_domain_ownership(domain)
+        if verified:
             domain.verified = True
             domain.save(update_fields=['verified'])
             return Response({
@@ -483,10 +592,7 @@ class DomainRegistryViewSet(viewsets.ModelViewSet):
                 'verificationRecord': domain.verification_record,
             })
         return Response(
-            {'errors': [{'field': 'domain', 'detail': (
-                'Verification TXT record not found yet. Add the record below, '
-                'wait for DNS to propagate, then try again.'
-            )}]},
+            {'errors': [{'field': 'domain', 'detail': detail}]},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
@@ -534,35 +640,10 @@ def redirect_click(request, slug):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def neutral_page(request):
-    html = """<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="robots" content="noindex" />
-  <title>Link Protected</title>
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-           background: #fafafa; color: #171717; display: grid; place-items: center;
-           min-height: 100vh; margin: 0; padding: 24px; }
-    .card { text-align: center; max-width: 420px; }
-    .shield { width: 64px; height: 64px; margin: 0 auto 20px; border-radius: 20px;
-              background: #111; color: #fff; display: grid; place-items: center;
-              font-size: 28px; }
-    h1 { font-size: 20px; margin: 0 0 8px; }
-    p { color: #737373; font-size: 14px; line-height: 1.6; margin: 0; }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <div class="shield">&#128737;</div>
-    <h1>This link is protected</h1>
-    <p>The destination was not shown because this request looked automated or suspicious.
-       If you are a person, try opening the link again from your normal browser.</p>
-  </div>
-</body>
-</html>"""
-    return HttpResponse(html, content_type='text/html')
+    # Built-in safe destination: suspicious/automated traffic is bounced to the
+    # configured default rather than shown an in-house page. Workspaces can
+    # override this entirely by setting their own safe_destination.
+    return HttpResponseRedirect(redirect_to=getattr(settings, 'NEUTRAL_DEFAULT_DESTINATION', 'https://google.com'))
 
 
 class IPRuleViewSet(viewsets.ModelViewSet):

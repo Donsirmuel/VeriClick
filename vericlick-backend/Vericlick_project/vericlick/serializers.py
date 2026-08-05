@@ -2,7 +2,10 @@ import secrets
 import string
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import Workspace, DomainRegistry, TrackingLink, ClickLog, IPRule, TrackerEvent
+from .models import (
+    Workspace, DomainRegistry, TrackingLink, ClickLog, IPRule, TrackerEvent,
+    Plan, DiscountCode, SiteConfig,
+)
 
 
 def _generate_slug(length=7):
@@ -20,13 +23,52 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class WorkspaceSerializer(serializers.ModelSerializer):
+    plan = serializers.CharField(source='plan.code', read_only=True, default=None)
+    plan_name = serializers.CharField(source='plan.name', read_only=True, default=None)
+    domain_limit = serializers.SerializerMethodField()
+    domains_used = serializers.SerializerMethodField()
+    can_add_domain = serializers.SerializerMethodField()
+    beta_free_mode = serializers.SerializerMethodField()
+
     class Meta:
         model = Workspace
         fields = [
             'id', 'name', 'tracker_secret', 'safe_destination',
-            'created_at', 'last_domain_scan_at',
+            'created_at', 'last_domain_scan_at', 'plan', 'plan_name',
+            'domain_limit', 'domains_used', 'can_add_domain', 'beta_free_mode',
         ]
-        read_only_fields = ['id', 'tracker_secret', 'created_at', 'last_domain_scan_at']
+        read_only_fields = [
+            'id', 'tracker_secret', 'created_at', 'last_domain_scan_at',
+            'plan', 'plan_name', 'domain_limit', 'domains_used',
+            'can_add_domain', 'beta_free_mode',
+        ]
+
+    def get_domain_limit(self, obj):
+        return obj.effective_domain_limit
+
+    def get_domains_used(self, obj):
+        return obj.domains_in_use()
+
+    def get_can_add_domain(self, obj):
+        return obj.can_add_domain
+
+    def get_beta_free_mode(self, obj):
+        return SiteConfig.is_beta_free_mode()
+
+
+class PlanSerializer(serializers.ModelSerializer):
+    monthly_price = serializers.DecimalField(max_digits=8, decimal_places=2, coerce_to_string=False)
+
+    class Meta:
+        model = Plan
+        fields = ['code', 'name', 'monthly_price', 'domain_limit', 'features', 'sort_order']
+
+
+class DiscountCodeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DiscountCode
+        fields = ['code', 'discount_percent', 'is_active', 'max_uses', 'uses_count', 'expires_at']
+        read_only_fields = ['discount_percent', 'is_active', 'max_uses', 'uses_count', 'expires_at']
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -83,19 +125,26 @@ class TrackingLinkSerializer(serializers.ModelSerializer):
     )
     slug = serializers.CharField(required=False, allow_blank=True, max_length=100)
     tracking_url = serializers.SerializerMethodField()
+    human_clicks = serializers.SerializerMethodField()
 
     class Meta:
         model = TrackingLink
         fields = [
             'id', 'slug', 'destination_url', 'domain', 'domain_health',
-            'tracking_url', 'total_clicks', 'bot_clicks', 'status',
+            'tracking_url', 'total_clicks', 'bot_clicks', 'human_clicks', 'status',
             'created_at', 'updated_at',
         ]
-        read_only_fields = ['id', 'tracking_url', 'total_clicks', 'bot_clicks', 'created_at', 'updated_at']
+        read_only_fields = [
+            'id', 'tracking_url', 'total_clicks', 'bot_clicks', 'human_clicks',
+            'created_at', 'updated_at',
+        ]
 
     def get_tracking_url(self, obj):
         from .services import get_public_tracking_url
         return get_public_tracking_url(obj, self.context.get('request'))
+
+    def get_human_clicks(self, obj):
+        return max(obj.total_clicks - obj.bot_clicks, 0)
 
     def create(self, validated_data):
         if not validated_data.get('slug'):

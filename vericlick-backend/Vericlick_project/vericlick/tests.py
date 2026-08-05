@@ -7,7 +7,10 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 from rest_framework.test import APITestCase, APIClient
 from rest_framework import status
-from .models import Workspace, DomainRegistry, TrackingLink, ClickLog, IPRule, TrackerEvent
+from .models import (
+    Workspace, DomainRegistry, TrackingLink, ClickLog, IPRule, TrackerEvent,
+    Plan, DiscountCode, SiteConfig,
+)
 from .utils import snake_to_camel, camel_to_snake, transform_keys
 
 
@@ -407,6 +410,7 @@ class LinksEndpointTests(APITestCase):
         self.assertIsNone(body['domainHealth'])
         self.assertEqual(body['totalClicks'], 0)
         self.assertEqual(body['botClicks'], 0)
+        self.assertEqual(body['humanClicks'], 0)
 
     def test_create_link_with_domain(self):
         domain = DomainRegistry.objects.create(
@@ -511,7 +515,7 @@ class LinksEndpointTests(APITestCase):
         )
         res = self.client.get(f'/api/links/{link.id}/')
         self.assertEqual(res.status_code, status.HTTP_200_OK)
-        self.assertEqual(res.json()['trackingUrl'], 'http://testserver/r/track-url')
+        self.assertEqual(res.json()['trackingUrl'], 'http://testserver/r/track-url/')
 
     def test_tracking_url_uses_custom_domain(self):
         domain = DomainRegistry.objects.create(
@@ -522,7 +526,20 @@ class LinksEndpointTests(APITestCase):
             slug='dom-url', destination_url='https://example.com',
         )
         res = self.client.get(f'/api/links/{link.id}/')
-        self.assertEqual(res.json()['trackingUrl'], 'https://link.example.com/dom-url')
+        self.assertEqual(res.json()['trackingUrl'], 'https://link.example.com/r/dom-url/')
+
+    def test_tracking_url_falls_back_when_domain_is_not_healthy(self):
+        domain = DomainRegistry.objects.create(
+            workspace=self.workspace,
+            domain='stale.example.com',
+            health_status=DomainRegistry.HealthStatus.DEGRADED,
+        )
+        link = TrackingLink.objects.create(
+            workspace=self.workspace, domain=domain,
+            slug='stale-url', destination_url='https://example.com',
+        )
+        res = self.client.get(f'/api/links/{link.id}/')
+        self.assertEqual(res.json()['trackingUrl'], 'http://testserver/r/stale-url/')
 
 
 class DomainsEndpointTests(APITestCase):
@@ -658,7 +675,7 @@ class DomainVerificationTests(APITestCase):
         )
         self.assertIn('verificationToken', body)
 
-    @patch('vericlick.views.verify_domain_ownership', return_value=True)
+    @patch('vericlick.views.verify_domain_ownership', return_value=(True, ''))
     def test_verify_success_marks_verified(self, mock_verify):
         res = self.client.post(f'/api/domains/{self.domain.id}/verify/')
         self.assertEqual(res.status_code, status.HTTP_200_OK)
@@ -668,7 +685,7 @@ class DomainVerificationTests(APITestCase):
         self.assertTrue(self.domain.verified)
         mock_verify.assert_called_once_with(self.domain)
 
-    @patch('vericlick.views.verify_domain_ownership', return_value=False)
+    @patch('vericlick.views.verify_domain_ownership', return_value=(False, 'Not found yet'))
     def test_verify_failure_returns_400(self, mock_verify):
         res = self.client.post(f'/api/domains/{self.domain.id}/verify/')
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
@@ -684,7 +701,7 @@ class DomainVerificationTests(APITestCase):
         res = self.client.post(f'/api/domains/{other_domain.id}/verify/')
         self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
 
-    @patch('vericlick.views.verify_domain_ownership', return_value=True)
+    @patch('vericlick.views.verify_domain_ownership', return_value=(True, ''))
     def test_verify_requires_auth(self, mock_verify):
         self.client.force_authenticate(user=None)
         res = self.client.post(f'/api/domains/{self.domain.id}/verify/')
@@ -890,7 +907,9 @@ class ServicesTests(TestCase):
         )
         with patch('dns.resolver.resolve', return_value=FakeAnswers([FakeRdata()])):
             FakeRdata.domain = domain
-            self.assertTrue(verify_domain_ownership(domain))
+            verified, detail = verify_domain_ownership(domain)
+            self.assertTrue(verified)
+            self.assertEqual(detail, '')
 
     def test_verify_domain_ownership_no_match(self):
         from .services import verify_domain_ownership
@@ -898,7 +917,9 @@ class ServicesTests(TestCase):
             workspace=self.workspace, domain='verify-none.example.com',
         )
         with patch('dns.resolver.resolve', return_value=[]):
-            self.assertFalse(verify_domain_ownership(domain))
+            verified, detail = verify_domain_ownership(domain)
+            self.assertFalse(verified)
+            self.assertTrue(detail)
 
     def test_verify_domain_ownership_dns_error(self):
         from .services import verify_domain_ownership
@@ -906,7 +927,9 @@ class ServicesTests(TestCase):
             workspace=self.workspace, domain='verify-fail.example.com',
         )
         with patch('dns.resolver.resolve', side_effect=Exception('NXDOMAIN')):
-            self.assertFalse(verify_domain_ownership(domain))
+            verified, detail = verify_domain_ownership(domain)
+            self.assertFalse(verified)
+            self.assertTrue(detail)
 
     def test_reason_label_human(self):
         from .services import reason_label
@@ -1103,10 +1126,10 @@ class RedirectEndpointTests(APITestCase):
         self.assertEqual(res.status_code, status.HTTP_302_FOUND)
         self.assertTrue(res.url.endswith('/suspicious/'))
 
-    def test_neutral_page_renders(self):
+    def test_neutral_page_redirects_to_default(self):
         res = self.client.get('/suspicious/')
-        self.assertEqual(res.status_code, status.HTTP_200_OK)
-        self.assertIn('protected', res.content.decode())
+        self.assertEqual(res.status_code, status.HTTP_302_FOUND)
+        self.assertEqual(res.url, 'https://google.com')
 
     def test_redirect_ip_rule_allow_overrides_bot_ua(self):
         IPRule.objects.create(
@@ -1469,3 +1492,175 @@ class BlockedIPTests(APITestCase):
         )
         rule = IPRule.objects.get(workspace=self.workspace, ip_or_cidr='203.0.113.5')
         self.assertTrue(rule.is_active)
+
+
+class PricingEndpointTests(APITestCase):
+    def test_pricing_returns_seeded_plans_and_beta_free(self):
+        res = self.client.get('/api/pricing/')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        body = res.json()
+        self.assertTrue(body['betaFreeMode'])
+        codes = [p['code'] for p in body['plans']]
+        self.assertEqual(codes, ['basic', 'plus', 'pro'])
+        by_code = {p['code']: p for p in body['plans']}
+        self.assertEqual(by_code['basic']['monthlyPrice'], 25)
+        self.assertEqual(by_code['basic']['domainLimit'], 5)
+        self.assertEqual(by_code['plus']['monthlyPrice'], 50)
+        self.assertEqual(by_code['plus']['domainLimit'], 10)
+        self.assertEqual(by_code['pro']['monthlyPrice'], 100)
+        self.assertEqual(by_code['pro']['domainLimit'], 20)
+
+    def test_pricing_hides_inactive_plans(self):
+        Plan.objects.filter(code='pro').update(is_active=False)
+        res = self.client.get('/api/pricing/')
+        codes = [p['code'] for p in res.json()['plans']]
+        self.assertNotIn('pro', codes)
+
+    def test_pricing_reflects_admin_beta_toggle(self):
+        SiteConfig.load()
+        SiteConfig.objects.update(beta_free_mode=False)
+        res = self.client.get('/api/pricing/')
+        self.assertFalse(res.json()['betaFreeMode'])
+
+
+class DiscountCodeEndpointTests(APITestCase):
+    def setUp(self):
+        DiscountCode.objects.create(
+            code='BETA20', discount_percent=20, max_uses=100,
+        )
+
+    def test_validate_valid_code(self):
+        res = self.client.post('/api/discount-codes/validate/', {'code': 'beta20'}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        body = res.json()
+        self.assertTrue(body['valid'])
+        self.assertEqual(body['discountPercent'], 20)
+
+    def test_validate_unknown_code(self):
+        res = self.client.post('/api/discount-codes/validate/', {'code': 'NOPE'}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_validate_inactive_code(self):
+        DiscountCode.objects.filter(code='BETA20').update(is_active=False)
+        res = self.client.post('/api/discount-codes/validate/', {'code': 'BETA20'}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_validate_exhausted_code(self):
+        DiscountCode.objects.filter(code='BETA20').update(uses_count=100)
+        res = self.client.post('/api/discount-codes/validate/', {'code': 'BETA20'}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_validate_missing_code(self):
+        res = self.client.post('/api/discount-codes/validate/', {}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+class SignupToggleTests(APITestCase):
+    def test_signups_closed_blocks_register(self):
+        SiteConfig.objects.update(signups_open=False)
+        res = self.client.post('/api/auth/register/', {
+            'username': 'blockeduser',
+            'email': 'blocked@example.com',
+            'password': 'strongpass123',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertFalse(User.objects.filter(username='blockeduser').exists())
+
+    def test_signups_open_allows_register(self):
+        res = self.client.post('/api/auth/register/', {
+            'username': 'alloweduser',
+            'email': 'allowed@example.com',
+            'password': 'strongpass123',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+
+
+class DomainLimitTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='limituser', password='testpass123')
+        self.client.force_authenticate(user=self.user)
+        self.workspace = Workspace.objects.get(owner=self.user)
+
+    def test_beta_free_mode_ignores_domain_limit(self):
+        plan = Plan.objects.get(code='basic')
+        self.workspace.plan = plan
+        self.workspace.save()
+        DomainRegistry.objects.create(workspace=self.workspace, domain='one.example.com')
+        res = self.client.post('/api/domains/', {'domain': 'two.example.com'}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+
+    def test_limit_enforced_when_beta_ends(self):
+        SiteConfig.objects.update(beta_free_mode=False)
+        plan = Plan.objects.get(code='basic')
+        self.workspace.plan = plan
+        self.workspace.save()
+        for i in range(5):
+            DomainRegistry.objects.create(workspace=self.workspace, domain=f'domain{i}.example.com')
+        res = self.client.post('/api/domains/', {'domain': 'overflow.example.com'}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(
+            DomainRegistry.objects.filter(workspace=self.workspace, domain='overflow.example.com').exists()
+        )
+
+    def test_workspace_serializer_exposes_plan_usage(self):
+        SiteConfig.objects.update(beta_free_mode=False)
+        plan = Plan.objects.get(code='plus')
+        self.workspace.plan = plan
+        self.workspace.save()
+        DomainRegistry.objects.create(workspace=self.workspace, domain='usage.example.com')
+        res = self.client.get('/api/workspace/')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        body = res.json()
+        self.assertEqual(body['plan'], 'plus')
+        self.assertEqual(body['domainLimit'], 10)
+        self.assertEqual(body['domainsUsed'], 1)
+        self.assertTrue(body['canAddDomain'])
+        self.assertFalse(body['betaFreeMode'])
+
+
+class SiteConfigEndpointTests(APITestCase):
+    def test_site_config_defaults(self):
+        res = self.client.get('/api/site-config/')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        body = res.json()
+        self.assertTrue(body['betaFreeMode'])
+        self.assertTrue(body['signupsOpen'])
+
+    def test_site_config_reflects_admin_changes(self):
+        SiteConfig.objects.update(beta_free_mode=False, signups_open=False)
+        res = self.client.get('/api/site-config/')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        body = res.json()
+        self.assertFalse(body['betaFreeMode'])
+        self.assertFalse(body['signupsOpen'])
+
+
+class UpgradeEndpointTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='upgradeuser', password='testpass123')
+        self.client.force_authenticate(user=self.user)
+        self.workspace = Workspace.objects.get(owner=self.user)
+
+    def test_upgrade_requires_auth(self):
+        self.client.force_authenticate(user=None)
+        res = self.client.post('/api/upgrade/', {'plan_code': 'basic'}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_upgrade_sets_plan(self):
+        SiteConfig.objects.update(beta_free_mode=False)
+        res = self.client.post('/api/upgrade/', {'plan_code': 'plus'}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        body = res.json()
+        self.assertEqual(body['plan'], 'plus')
+        self.assertEqual(body['domainLimit'], 10)
+        self.workspace.refresh_from_db()
+        self.assertEqual(self.workspace.plan.code, 'plus')
+
+    def test_upgrade_unknown_plan_rejected(self):
+        res = self.client.post('/api/upgrade/', {'plan_code': 'platinum'}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_upgrade_inactive_plan_rejected(self):
+        Plan.objects.filter(code='pro').update(is_active=False)
+        res = self.client.post('/api/upgrade/', {'plan_code': 'pro'}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)

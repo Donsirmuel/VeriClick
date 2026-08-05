@@ -5,6 +5,7 @@ import { Menu01Icon, ChevronDownIcon, UserIcon, Settings01Icon, Logout01Icon } f
 import { useQuery } from '@tanstack/react-query'
 import { fetchMe } from '@/api/auth'
 import { fetchWorkspace } from '@/api/workspace'
+import { Link } from 'react-router-dom'
 
 export function TopBar({ onMenuToggle }: { onMenuToggle: () => void }) {
   const { data: user } = useQuery({
@@ -53,6 +54,18 @@ export function TopBar({ onMenuToggle }: { onMenuToggle: () => void }) {
           <span className="text-muted">/</span>
           <span className="font-medium text-slate-900">{workspace?.name ?? 'Workspace'}</span>
         </div>
+
+        {workspace && (
+          <Link
+            to="/app/billing"
+            className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full bg-neutral-100 border border-neutral-200 text-slate-700 hover:border-neutral-400 transition-colors"
+          >
+            <span className={`w-1.5 h-1.5 rounded-full ${workspace.canAddDomain ? 'bg-success' : 'bg-warning'}`} />
+            {workspace.betaFreeMode
+              ? 'Free beta'
+              : `${workspace.planName ?? 'No plan'}${workspace.domainLimit ? ` · ${workspace.domainsUsed}/${workspace.domainLimit}` : ''}`}
+          </Link>
+        )}
       </div>
 
       <div className="flex items-center gap-2 md:gap-4">
@@ -66,7 +79,6 @@ export function TopBar({ onMenuToggle }: { onMenuToggle: () => void }) {
             </div>
             <div className="hidden md:block text-left">
               <div className="text-sm font-bold text-slate-900 leading-none">{user?.username ?? 'Operator'}</div>
-              <div className="text-[11px] text-muted leading-none mt-1">{user?.email ?? 'user@vericlick.io'}</div>
             </div>
             <HugeiconsIcon icon={ChevronDownIcon} className="w-4 h-4 text-neutral-400 group-hover:text-black transition-colors" />
           </button>
@@ -75,7 +87,6 @@ export function TopBar({ onMenuToggle }: { onMenuToggle: () => void }) {
             <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl border border-neutral-200 shadow-xl py-2 z-50">
               <div className="px-4 py-2 border-b border-neutral-100">
                 <div className="text-sm font-bold text-slate-900">{user?.username ?? 'Operator'}</div>
-                <div className="text-xs text-muted">{user?.email ?? 'user@vericlick.io'}</div>
               </div>
               <button
                 onClick={() => { navigate('/app/settings'); setDropdownOpen(false) }}

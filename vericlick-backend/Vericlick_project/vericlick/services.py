@@ -91,26 +91,36 @@ def lookup_location(ip):
 
 def verify_domain_ownership(domain):
     # Proves control of a domain by looking for the published TXT record.
-    # Returns True only when the exact verification record is found in the
-    # domain's DNS TXT records. Any DNS error (NXDOMAIN, timeout, no such
-    # library) simply means "not verified yet".
+    # Returns a (verified, detail) tuple: verified is True only when the exact
+    # verification record is found in the domain's DNS TXT records. Any DNS
+    # error returns a plain-language detail so the UI never exposes a raw
+    # developer message like a resolver timeout.
     try:
         import dns.resolver
     except ImportError:
-        return False
+        return False, 'DNS lookup is not available on this server. Please try again later.'
 
     expected = domain.verification_record
     try:
-        answers = dns.resolver.resolve(domain.domain, 'TXT', lifetime=10)
+        answers = dns.resolver.resolve(domain.domain, 'TXT', lifetime=5)
+    except dns.exception.Timeout:
+        return False, 'DNS lookup timed out. Your DNS provider may be slow — wait a few minutes and try again.'
+    except dns.resolver.NXDOMAIN:
+        return False, 'This domain does not resolve yet. Confirm it is spelled correctly and its DNS is active.'
+    except dns.resolver.NoAnswer:
+        return False, 'No TXT records found for this domain yet. Add the record and wait for it to propagate.'
     except Exception:
-        return False
+        return False, 'Could not check this domain right now. Please try again in a moment.'
 
     for rdata in answers:
         # rdata may contain multiple quoted strings; strip quotes so we match
         # the published value regardless of chunking by the DNS provider.
         if expected in rdata.to_text().replace('"', ''):
-            return True
-    return False
+            return True, ''
+    return False, (
+        'The TXT record was not found yet. Add it to your DNS provider, wait '
+        'for it to propagate (usually 5–30 minutes), then try again.'
+    )
 
 
 def refresh_stale_domains(workspace, max_age_minutes=15, limit=10):
@@ -171,13 +181,24 @@ def get_safe_destination(workspace, request=None):
 
 def get_public_tracking_url(link, request=None):
     # Single source of truth for the shareable tracked URL. A link on a custom
-    # domain resolves to https://<domain>/<slug> (DNS must point at VeriClick);
-    # otherwise it falls back to the API host's /r/<slug> redirect route.
-    if link.domain and link.domain.domain:
-        return f'https://{link.domain.domain}/{link.slug}'
+    # domain resolves to https://<domain>/r/<slug>/ only when that domain is
+    # currently healthy. If the domain is not yet live, the app falls back to
+    # the current request host or a configured public tracking base so copied
+    # links never point at a dead domain.
+    if (
+        link.domain
+        and link.domain.domain
+        and link.domain.health_status == DomainRegistry.HealthStatus.HEALTHY
+    ):
+        return f'https://{link.domain.domain}/r/{link.slug}/'
     if request is not None:
-        return request.build_absolute_uri(f'/r/{link.slug}')
-    return f'/r/{link.slug}'
+        return request.build_absolute_uri(f'/r/{link.slug}/')
+    from django.conf import settings as django_settings
+
+    base_url = getattr(django_settings, 'PUBLIC_TRACKING_BASE_URL', '').strip().rstrip('/')
+    if base_url:
+        return f'{base_url}/r/{link.slug}/'
+    return f'/r/{link.slug}/'
 
 
 def classify_request(link, ip, user_agent, workspace):

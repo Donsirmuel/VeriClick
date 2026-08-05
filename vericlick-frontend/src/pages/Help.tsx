@@ -1,6 +1,6 @@
+import { Link } from 'react-router-dom'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Globe02Icon, LinkSquare02Icon, ShieldIcon, DashboardSquare01Icon, ArrowRight02Icon, Mail01Icon } from '@hugeicons/core-free-icons'
-import { CONTACT_EMAIL, COMPANY_NAME, contactMailto } from '@/lib/site'
 
 const sections = [
   {
@@ -100,20 +100,16 @@ export default function HelpPage() {
       <div className="bg-white rounded-2xl border border-border p-6 mt-6 shadow-sm">
         <h2 className="text-lg font-bold text-slate-900 mb-3">Still stuck?</h2>
         <p className="text-sm text-slate-700 leading-relaxed mb-4">
-          Ask the assistant (the chat bubble in the bottom-right corner) a question, or email a human
-          directly at{' '}
-          <a href={contactMailto('Help request')} className="font-bold text-slate-900 hover:underline">
-            {CONTACT_EMAIL}
-          </a>.
-          VeriClick is a product of {COMPANY_NAME} (donlabs.site).
+          Ask the assistant (the chat bubble in the bottom-right corner) a question, or use the contact
+          button below to reach a human.
         </p>
-        <a
-          href={contactMailto('Help request')}
+        <Link
+          to="/contact"
           className="inline-flex items-center gap-2 bg-black hover:bg-neutral-800 text-white px-5 py-2.5 rounded-xl text-sm font-bold transition-colors"
         >
           <HugeiconsIcon icon={Mail01Icon} className="w-4 h-4" />
-          Email support
-        </a>
+          Contact us
+        </Link>
       </div>
     </div>
   )

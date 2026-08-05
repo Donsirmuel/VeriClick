@@ -1,6 +1,5 @@
 import { PublicNav } from '@/components/PublicNav'
 import { PublicFooter } from '@/components/PublicFooter'
-import { CONTACT_EMAIL, COMPANY_NAME, contactMailto } from '@/lib/site'
 
 const SECTIONS = [
   {
@@ -39,7 +38,7 @@ const SECTIONS = [
   {
     title: 'Contact',
     body: [
-      `VeriClick is a product of ${COMPANY_NAME} (donlabs.site). Questions about this policy or your data can be sent to ${CONTACT_EMAIL}.`,
+      'Questions about this policy or your data can be sent through the contact button below.',
     ],
   },
 ]
@@ -75,8 +74,7 @@ export default function PrivacyPolicy() {
 
         <div className="mt-14 bg-neutral-950 border border-neutral-800 rounded-2xl p-6">
           <p className="text-sm text-neutral-400 leading-relaxed">
-            Anything this page doesn't answer, email{' '}
-            <a href={contactMailto('Privacy question')} className="text-white hover:text-neutral-300 font-medium">{CONTACT_EMAIL}</a>.
+            Anything this page doesn't answer, use the contact button below.
           </p>
         </div>
       </section>

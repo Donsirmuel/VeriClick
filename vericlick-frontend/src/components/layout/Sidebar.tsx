@@ -1,9 +1,10 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useQuery } from '@tanstack/react-query'
-import { DashboardSquare01Icon, LinkSquare02Icon, Globe02Icon, Settings01Icon, Logout01Icon, HelpCircleIcon, ChevronRightIcon, ShieldIcon, BlockedIcon } from '@hugeicons/core-free-icons'
+import { DashboardSquare01Icon, LinkSquare02Icon, Globe02Icon, Settings01Icon, Logout01Icon, HelpCircleIcon, ChevronRightIcon, ShieldIcon, BlockedIcon, Wallet01Icon } from '@hugeicons/core-free-icons'
 import { cn } from '@/lib/utils'
 import { Logo } from '@/components/Logo'
+import { BetaBadge } from '@/components/BetaBadge'
 import { fetchWorkspace } from '@/api/workspace'
 
 interface NavItemProps {
@@ -51,7 +52,7 @@ export function Sidebar({ onClose: _onClose }: { onClose: () => void }) {
           <Logo variant="dark" className="w-6 h-6" />
         </div>
         <div>
-          <h2 className="text-xl font-bold text-white tracking-tight leading-none mb-1">VeriClick</h2>
+          <h2 className="text-xl font-bold text-white tracking-tight leading-none mb-1 flex items-center gap-2">VeriClick <BetaBadge /></h2>
           <p className="text-[10px] text-neutral-400 font-bold uppercase tracking-widest">{workspace?.name ?? 'Workspace'}</p>
         </div>
       </div>
@@ -93,21 +94,53 @@ export function Sidebar({ onClose: _onClose }: { onClose: () => void }) {
           label="Settings" 
           active={location.pathname === '/app/settings'}
         />
+        <NavItem 
+          to="/app/billing" 
+          icon={Wallet01Icon} 
+          label="Billing & Plan" 
+          active={location.pathname === '/app/billing'}
+        />
       </nav>
 
       <div className="mt-auto space-y-2">
-        <Link
-          to="/pricing"
-          className="block p-4 bg-neutral-800/50 rounded-2xl mb-6 border border-neutral-700/50 hover:border-neutral-600 transition-colors"
-        >
-          <div className="flex items-center gap-2 mb-2">
-            <div className="w-2 h-2 rounded-full bg-white animate-pulse-dot" />
-            <span className="text-xs font-bold text-white uppercase tracking-wider">Free during beta</span>
-          </div>
-          <p className="text-[11px] text-neutral-400 leading-relaxed">
-            VeriClick is free right now. No card, no limits — see the pricing page for details.
-          </p>
-        </Link>
+        {workspace?.betaFreeMode ? (
+          <Link
+            to="/pricing"
+            className="block p-4 bg-neutral-800/50 rounded-2xl mb-6 border border-neutral-700/50 hover:border-neutral-600 transition-colors"
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-2 h-2 rounded-full bg-white animate-pulse-dot" />
+              <span className="text-xs font-bold text-white uppercase tracking-wider">Free during beta</span>
+            </div>
+            <p className="text-[11px] text-neutral-400 leading-relaxed">
+              VeriClick is free right now. No card, no limits — see the pricing page for details.
+            </p>
+          </Link>
+        ) : (
+          <Link
+            to="/app/billing"
+            className="block p-4 bg-neutral-800/50 rounded-2xl mb-6 border border-neutral-700/50 hover:border-neutral-600 transition-colors"
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-xs font-bold text-white uppercase tracking-wider">Current plan</span>
+            </div>
+            <div className="flex items-center justify-between text-sm font-bold text-white mb-1">
+              <span>{workspace?.planName ?? 'No plan'}</span>
+              {workspace?.domainLimit && (
+                <span className={`text-[11px] font-bold ${
+                  workspace.canAddDomain ? 'text-neutral-400' : 'text-warning'
+                }`}>
+                  {workspace.domainsUsed}/{workspace.domainLimit} domains
+                </span>
+              )}
+            </div>
+            <p className="text-[11px] text-neutral-400 leading-relaxed">
+              {workspace?.domainLimit
+                ? `${workspace.domainLimit} tracked domains on your plan.`
+                : 'Pick a plan to start adding tracked domains.'}
+            </p>
+          </Link>
+        )}
 
         <div className="text-[10px] text-neutral-600 font-mono px-4 py-1">v1.0.0</div>
         <Link to="/app/help" className="flex items-center gap-3 px-4 py-3 w-full text-neutral-400 hover:text-white transition-colors group">

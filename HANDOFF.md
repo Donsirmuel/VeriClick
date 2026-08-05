@@ -91,7 +91,7 @@ All models use UUID primary keys and are scoped to a `Workspace` for data isolat
 - All errors normalized to `{"errors": [{"field": ..., "detail": ...}]}` via `vericlick.utils.custom_exception_handler`
 - Throttling: anonymous 100 req/hr, authenticated 1000 req/hr, tracker events 600/min (scope `tracker`)
 - Production security headers when `DEBUG=False`: HSTS (1 year), SSL redirect, secure cookies, nosniff
-- CORS locked to configured origins (default: `localhost:5173,localhost:4173`)
+- CORS locked to configured origins (no origins allowed by default — set `CORS_ALLOWED_ORIGINS` in `.env`)
 - Tracker events are **token-gated**: payload must include the workspace's `tracker_secret` or the API returns 400
 - Bot detection: **allow-first** flow in `services.classify_request` — allow IP rule wins (highest priority), then deny IP rule, then UA heuristics, then rate limit, else default allow. `lookup_location(ip)` enriches country/region/city via optional GeoIP2 (set `GEOIP2_DB` in settings; otherwise offline fallback: Localhost / Private network / Reserved / Unknown)
 - Safe diversion: `get_safe_destination(workspace, request)` returns the configured `safe_destination`, else the built-in `/suspicious/` neutral page; blocked/challenged clicks are 302-diverted (never a 403, never the real destination)
@@ -113,7 +113,7 @@ All models use UUID primary keys and are scoped to a `Workspace` for data isolat
 - Template: `Vericlick_project/Vericlick_project/.env.example`
 
 ### Testing
-- 155 tests in `vericlick/tests.py`
+- 175 tests in `vericlick/tests.py`
 - Dev: `python manage.py test` (SQLite)
 - CI equivalent: `python manage.py test --settings=Vericlick_project.settings_test`
 - Covers: model tests, serializer camelCase, all endpoints (CRUD, auth, edge cases), redirect classification + safe diversion, neutral page, GeoIP lookup, allow-first precedence, SEO/robots, domain scan command, DNS TXT ownership verification (mocked dnspython), reason labels, tracker script + token-gated events, blocked-IP whitelist, workspace detail/PATCH
@@ -134,7 +134,6 @@ All models use UUID primary keys and are scoped to a `Workspace` for data isolat
 src/
 ├── api/
 │   ├── client.ts        # axios instance, token refresh interceptor, 401/429 handling
-│   ├── mock.ts          # mock data helper (stats incl. lastDomainScan; activity/blocked entries incl. region/city)
 │   ├── auth.ts          # login, register, refreshToken, forgotPassword, resetPassword, fetchMe, googleLogin
 │   ├── links.ts         # fetchLinks, createLink, updateLink, deleteLink
 │   ├── domains.ts       # fetchDomains, createDomain, updateDomain, deleteDomain, recheckDomain, verifyDomain
@@ -189,10 +188,9 @@ All page modules are loaded via `React.lazy(() => import('./pages/...'))` with a
 3. `DashboardLayout` checks token on mount; `TopBar` fetches `/auth/me/`
 4. Google OAuth via `GoogleSignInButton` (GIS when `VITE_GOOGLE_CLIENT_ID` set, otherwise a fallback button)
 
-### Mock Mode
-- `VITE_MOCK_MODE=false` (default in `.env`) uses the real API; any other value enables mock mode
+### API client
+- The frontend always calls the real backend — there is no mock layer. `api/mock.ts`, `MOCK_MODE`, and `VITE_MOCK_MODE` were removed for the production cut.
 - Frontend API client camelCases responses, so backend `tracker_secret` → `trackerSecret`, `tracking_url` → `trackingUrl`, etc.
-- Mock data (`api/mock.ts`) mirrors the real shapes incl. `verificationToken`/`verificationRecord` on domains and `reasonLabel` on activity entries
 
 ### SEO (env-driven)
 - `vite.config.ts` ships an inline `seoFiles()` plugin: on `npm run build` it writes `dist/robots.txt` + `dist/sitemap.xml` from `VITE_SITE_URL` (default `https://vericlick.io`). No static copies live in `public/` anymore — set `VITE_SITE_URL` to the deployed domain before building.
@@ -212,7 +210,7 @@ cp Vericlick_project/.env.example Vericlick_project/.env  # or edit existing
 ../.vericlick-venv/Scripts/python.exe manage.py migrate
 ../.vericlick-venv/Scripts/python.exe manage.py runserver
 ```
-Note: `.env` lives at `Vericlick_project/Vericlick_project/.env` (settings find it via decouple). `DEBUG=True`, `ALLOWED_HOSTS=*`, `DATABASE_URL=sqlite:///db.sqlite3`, `CORS_ALLOWED_ORIGINS=http://localhost:5173,http://localhost:4173`.
+Note: `.env` lives at `Vericlick_project/Vericlick_project/.env` (settings find it via decouple). Production is fail-closed: `DEBUG=False` by default and the app refuses to boot without explicit `SECRET_KEY` and `ALLOWED_HOSTS`. See `.env.example` for the full set of production keys.
 
 ### Frontend
 ```bash
@@ -220,11 +218,11 @@ cd vericlick-frontend
 npm install
 npm run dev
 ```
-Environment variables (`.env`): `VITE_MOCK_MODE=false`, `VITE_API_BASE_URL=http://localhost:8000/api`, `VITE_SITE_URL` (defaults to `https://vericlick.io`; drives build-time `robots.txt`/`sitemap.xml`), optional `VITE_GOOGLE_CLIENT_ID`. The Vite dev server proxies `/r/` to `http://localhost:8000`.
+Environment variables (`.env`, see `.env.example`): `VITE_API_BASE_URL=https://vendora.page/api`, `VITE_SITE_URL` (drives build-time `robots.txt`/`sitemap.xml`), `VITE_GOOGLE_CLIENT_ID`.
 
 ### Google OAuth Setup
 1. Google Cloud Console → Credentials → OAuth 2.0 Client ID (Web application)
-2. Add `http://localhost:5173` to Authorized JavaScript origins
+2. Add `https://vendora.page` and `https://www.vendora.page` to Authorized JavaScript origins
 3. Set `GOOGLE_CLIENT_ID` in backend `.env` and `VITE_GOOGLE_CLIENT_ID` in frontend `.env`
 
 ### Production Checklist

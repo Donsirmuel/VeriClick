@@ -168,6 +168,13 @@ export default function DashboardPage() {
           color="primary"
         />
         <StatCard
+          title="Human Clicks (24h)"
+          value={(stats?.allowed ?? 0).toLocaleString()}
+          subValue="Legitimate visitors"
+          icon={CheckmarkCircle02Icon}
+          color="success"
+        />
+        <StatCard
           title="Bots Blocked"
           value={(stats?.botTrafficBlocked ?? 0).toLocaleString()}
           subValue={`${stats?.botTrafficPercentage ?? 0}% of total traffic`}

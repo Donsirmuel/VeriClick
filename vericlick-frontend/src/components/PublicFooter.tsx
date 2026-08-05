@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Mail01Icon, ArrowUpRight01Icon } from '@hugeicons/core-free-icons'
 import { Logo } from '@/components/Logo'
-import { CONTACT_EMAIL, COMPANY_NAME, COMPANY_URL, contactMailto } from '@/lib/site'
+import { COMPANY_NAME, COMPANY_URL } from '@/lib/site'
 
 export function PublicFooter() {
   return (
@@ -20,11 +20,15 @@ export function PublicFooter() {
               Link protection for real traffic. VeriClick verifies every click on your tracked links,
               blocks bots and suspicious requests, and explains each decision in plain language.
             </p>
-            <div className="flex items-center gap-2 text-sm">
-              <HugeiconsIcon icon={Mail01Icon} className="w-4 h-4 text-neutral-500" />
-              <a href={contactMailto()} className="text-neutral-400 hover:text-white transition-colors">{CONTACT_EMAIL}</a>
-            </div>
+            <Link
+              to="/contact"
+              className="inline-flex items-center gap-2 rounded-lg border border-neutral-700 px-4 py-2 text-sm font-bold text-white transition-colors hover:border-neutral-500 hover:bg-neutral-800/50"
+            >
+              <HugeiconsIcon icon={Mail01Icon} className="w-4 h-4" />
+              Contact us
+            </Link>
           </div>
+
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-12">
             <div>
               <h5 className="font-bold text-white mb-5 text-sm">Product</h5>
@@ -35,34 +39,35 @@ export function PublicFooter() {
                 <li><Link to="/app/help" className="hover:text-white transition-colors">Help & Docs</Link></li>
               </ul>
             </div>
+
             <div>
               <h5 className="font-bold text-white mb-5 text-sm">Company</h5>
               <ul className="space-y-3 text-sm text-neutral-400">
                 <li>
                   <a href={COMPANY_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 hover:text-white transition-colors">
-                    {COMPANY_NAME} <HugeiconsIcon icon={ArrowUpRight01Icon} className="w-3.5 h-3.5" />
+                    Built by {COMPANY_NAME} <HugeiconsIcon icon={ArrowUpRight01Icon} className="w-3.5 h-3.5" />
                   </a>
                 </li>
-                <li><a href={contactMailto('VeriClick contact')} className="hover:text-white transition-colors">Contact</a></li>
               </ul>
             </div>
+
             <div className="col-span-2 sm:col-span-1">
               <h5 className="font-bold text-white mb-5 text-sm">Support</h5>
               <p className="text-xs text-neutral-500 leading-relaxed mb-4">
-                Free during beta. Ask the assistant (bottom-right) or email us — a human from
-                {` ${COMPANY_NAME} `} will get back to you.
+                Free during beta. Ask the assistant in the bottom-right or use the contact button.
               </p>
-              <a
-                href={contactMailto()}
-                className="inline-flex items-center gap-2 text-xs font-bold text-black bg-white hover:bg-neutral-200 px-4 py-2.5 rounded-lg transition-colors"
+              <Link
+                to="/contact"
+                className="inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2.5 text-xs font-bold text-black transition-colors hover:bg-neutral-200"
               >
                 <HugeiconsIcon icon={Mail01Icon} className="w-4 h-4" />
-                Email support
-              </a>
+                Contact support
+              </Link>
             </div>
           </div>
         </div>
-        <div className="flex flex-col sm:flex-row items-center justify-between text-xs text-neutral-500 pt-8 border-t border-neutral-800/40 gap-4">
+
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-neutral-800/40 pt-8 text-xs text-neutral-500">
           <span>© 2026 {COMPANY_NAME}. All rights reserved.</span>
           <div className="flex gap-6">
             <Link to="/privacy" className="hover:text-white transition-colors">Privacy Policy</Link>

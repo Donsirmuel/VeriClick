@@ -130,7 +130,7 @@ export default function LinksPage() {
       </div>
 
       {links.length === 0 && !linksData ? (
-        <TableSkeleton rows={6} columns={6} />
+        <TableSkeleton rows={6} columns={7} />
       ) : links.length === 0 ? (
         <div className="bg-white border border-neutral-200 rounded-2xl">
           <EmptyState
@@ -142,28 +142,34 @@ export default function LinksPage() {
         </div>
       ) : (
         <div className="bg-white border border-neutral-200 rounded-2xl overflow-hidden">
-          <table className="w-full">
+          <div className="overflow-x-auto">
+          <table className="min-w-245 w-full">
             <thead>
               <tr className="border-b border-neutral-200 bg-neutral-50/50">
                 <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Tracked link</th>
                 <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Destination</th>
                 <th className="text-center px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Clicks</th>
+                <th className="text-center px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Humans</th>
                 <th className="text-center px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Bots</th>
                 <th className="text-center px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Status</th>
                 <th className="text-right px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {links.map((link) => (
+              {links.map((link) => {
+                const humanClicks = link.humanClicks ?? Math.max((link.totalClicks ?? 0) - (link.botClicks ?? 0), 0)
+
+                return (
                 <tr key={link.id} className="border-b border-neutral-100 hover:bg-neutral-50/50 transition-colors">
                   <td className="px-6 py-4">
                     <span className="font-mono font-bold text-sm">{link.slug}</span>
-                    <span className="block text-xs text-muted truncate 55 mt-0.5" title={link.trackingUrl}>{link.trackingUrl}</span>
+                    <span className="mt-0.5 block max-w-[320px] truncate text-xs text-muted" title={link.trackingUrl}>{link.trackingUrl}</span>
                   </td>
                   <td className="px-6 py-4">
-                    <span className="text-sm text-muted truncate block max-w-50" title={link.destinationUrl}>{link.destinationUrl}</span>
+                    <span className="block max-w-[320px] truncate text-sm text-muted" title={link.destinationUrl}>{link.destinationUrl}</span>
                   </td>
                   <td className="px-6 py-4 text-center font-bold text-sm">{link.totalClicks.toLocaleString()}</td>
+                  <td className="px-6 py-4 text-center font-bold text-sm">{humanClicks.toLocaleString()}</td>
                   <td className="px-6 py-4 text-center">
                     <span className="text-sm font-medium text-error">{link.botClicks.toLocaleString()}</span>
                   </td>
@@ -198,9 +204,11 @@ export default function LinksPage() {
                     </div>
                   </td>
                 </tr>
-              ))}
+                )
+              })}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 

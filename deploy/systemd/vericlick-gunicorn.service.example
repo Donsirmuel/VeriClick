@@ -1,0 +1,19 @@
+[Unit]
+Description=VeriClick Gunicorn app server
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=vericlick
+Group=www-data
+WorkingDirectory=/opt/vericlick/vericlick-backend/Vericlick_project
+Environment="DJANGO_SETTINGS_MODULE=Vericlick_project.settings"
+EnvironmentFile=/opt/vericlick/vericlick-backend/Vericlick_project/Vericlick_project/.env
+ExecStart=/opt/vericlick/.venv/bin/gunicorn Vericlick_project.wsgi:application --workers 3 --bind 127.0.0.1:8000
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

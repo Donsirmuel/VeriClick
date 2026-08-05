@@ -28,7 +28,7 @@ See `HANDOFF.md` for a deep technical handoff and `DEPLOYMENT.md` for the launch
 
 - Python 3.13, Django 6.0, DRF 3.16, SimpleJWT, dnspython
 - All JSON is camelCase on the wire (snake_case in Django)
-- 155 tests (`python manage.py test --settings=Vericlick_project.settings_test`)
+- 175 tests (`python manage.py test --settings=Vericlick_project.settings_test`)
 
 ```bash
 cd vericlick-backend/Vericlick_project
@@ -38,7 +38,7 @@ python manage.py migrate
 python manage.py runserver
 ```
 
-Production config is fail-closed: with `DEBUG=False` the app refuses to boot without an explicit `SECRET_KEY` and `ALLOWED_HOSTS`.
+Production config is fail-closed: with `DEBUG=False` the app refuses to boot without an explicit `SECRET_KEY` and `ALLOWED_HOSTS`. For deployment on a VPS, use the local PostgreSQL instance on that server rather than an external hosted database.
 
 ## Frontend (React + Vite)
 
@@ -48,8 +48,7 @@ npm install
 npm run dev
 ```
 
-- `VITE_MOCK_MODE=false` — use the real backend (default); any other value uses seeded mock data
-- `VITE_API_BASE_URL=http://localhost:8000/api` — backend origin
+- `VITE_API_BASE_URL=https://vendora.page/api` — backend origin
 - `VITE_SITE_URL` — deployed domain; drives build-time `robots.txt` / `sitemap.xml` (default `https://vericlick.io`)
 
 `npm run build` runs `tsc -b && vite build` and emits per-route chunks; `npm run lint` runs oxlint. The build writes `dist/robots.txt` and `dist/sitemap.xml` from `VITE_SITE_URL`.
@@ -76,8 +75,18 @@ python manage.py check_domains --once             # single pass
 |---|---|---|
 | `SECRET_KEY` | backend `.env` | Django secret (required when `DEBUG=False`) |
 | `ALLOWED_HOSTS` | backend `.env` | Required when `DEBUG=False` |
+| `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_HOST` / `POSTGRES_PORT` | backend `.env` | Local PostgreSQL connection details for the VPS |
+| `PUBLIC_TRACKING_BASE_URL` | backend `.env` | Base URL used when generating tracked links |
 | `CORS_ALLOWED_ORIGINS` | backend `.env` | Frontend origins allowed to call the API |
+| `GOOGLE_CLIENT_ID` | backend `.env` | Google OAuth client ID; empty disables Google sign-in |
 | `GEOIP2_DB` | backend `.env` | Optional GeoIP2 database for country/region/city enrichment |
-| `VITE_MOCK_MODE` | frontend `.env` | `false` = real API |
+
+Business toggles are **admin-managed** (Jazzmin), not env-based: "beta free mode"
+(limits off, everything free) and "sign-ups open/closed" live in the
+`vericlick.SiteConfig` singleton at `/admin/vericlick/siteconfig/`. Plans and
+discount codes are also managed in the admin (`/admin/vericlick/plan/`,
+`/admin/vericlick/discountcode/`). `.env` is reserved for infrastructure and
+security settings only (secret, hosts, DB, CORS, OAuth, GeoIP).
 | `VITE_API_BASE_URL` | frontend `.env` | Backend URL |
 | `VITE_SITE_URL` | frontend `.env` | Deployed domain for SEO files |
+| `VITE_GOOGLE_CLIENT_ID` | frontend `.env` | Google OAuth client ID (must match backend `GOOGLE_CLIENT_ID`) |

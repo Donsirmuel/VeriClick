@@ -1,7 +1,5 @@
 import axios from 'axios'
 
-export const MOCK_MODE = import.meta.env.VITE_MOCK_MODE !== 'false'
-
 function isObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }

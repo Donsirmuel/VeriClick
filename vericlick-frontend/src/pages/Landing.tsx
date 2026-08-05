@@ -3,11 +3,11 @@ import { HugeiconsIcon } from '@hugeicons/react'
 import {
   ArrowRight01Icon, ShieldIcon, ZapIcon, Globe02Icon, Chart03Icon, LockIcon,
   Activity01Icon, ServerStackIcon, EyeIcon, FingerPrintIcon, Tick02Icon,
-  LinkSquare02Icon, CheckmarkCircle02Icon, Mail01Icon, UserGroupIcon,
+  LinkSquare02Icon, CheckmarkCircle02Icon, UserGroupIcon,
 } from '@hugeicons/core-free-icons'
 import { PublicNav } from '@/components/PublicNav'
 import { PublicFooter } from '@/components/PublicFooter'
-import { CONTACT_EMAIL, contactMailto } from '@/lib/site'
+import { useSiteConfig } from '@/hooks/useSiteConfig'
 import { useState, useEffect, useRef } from 'react'
 
 function useInView(threshold = 0.15) {
@@ -183,8 +183,10 @@ function FloatingParticles() {
   )
 }
 
-const HERO_POINTS = [
-  { title: 'Free during beta', desc: 'No credit card required.' },
+const HERO_POINTS = ({ betaFree }: { betaFree: boolean }) => [
+  betaFree
+    ? { title: 'Free during beta', desc: 'No credit card required.' }
+    : { title: 'Simple plans', desc: 'Basic, Plus, and Pro.' },
   { title: 'IP allow/deny rules', desc: 'Allow rules always win.' },
   { title: 'Domain health + ownership', desc: 'Checked in-app, proven via TXT.' },
   { title: 'Every decision explained', desc: 'Plain-language reasons.' },
@@ -223,6 +225,8 @@ const REASON_LABELS = [
 
 export default function Landing() {
   const heroStats = useInView(0.2)
+  const { data: site } = useSiteConfig()
+  const betaFree = site?.betaFreeMode ?? true
 
   return (
     <div className="bg-black text-white selection:bg-white selection:text-black">
@@ -252,12 +256,12 @@ export default function Landing() {
               <p className="text-lg md:text-xl text-neutral-400 mb-10 leading-relaxed max-w-lg opacity-0" style={{ animation: 'fade-in-up 0.6s ease-out 0.35s forwards' }}>
                 VeriClick protects your links from bots and suspicious traffic. Create a tracked link,
                 and every click is checked — IP rules first, then bot detection, then rate limits.
-                Humans get through; flagged requests are diverted. Free during beta.
+                Humans get through; flagged requests are diverted. {betaFree ? 'Free during beta.' : 'Simple plans, from just $25/month.'}
               </p>
 
               <div className="flex flex-col sm:flex-row items-center gap-4 mb-14 opacity-0" style={{ animation: 'fade-in-up 0.6s ease-out 0.45s forwards' }}>
                 <Link to="/auth/register" className="w-full sm:w-auto bg-white hover:bg-neutral-200 text-black px-8 py-4 rounded-xl text-lg font-bold flex items-center justify-center gap-2 transition-all group shadow-lg shadow-white/5">
-                  Get started free
+                  {betaFree ? 'Get started free' : 'Get started'}
                   <HugeiconsIcon icon={ArrowRight01Icon} className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                 </Link>
                 <Link to="/app/dashboard" className="w-full sm:w-auto bg-neutral-800/50 hover:bg-neutral-800 border border-neutral-700/50 px-8 py-4 rounded-xl text-lg font-bold transition-all text-center">
@@ -266,7 +270,7 @@ export default function Landing() {
               </div>
 
               <div ref={heroStats.ref} className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8 border-t border-neutral-800/60 pt-10 opacity-0" style={{ animation: 'fade-in-up 0.6s ease-out 0.55s forwards' }}>
-                {HERO_POINTS.map((p) => (
+                {HERO_POINTS({ betaFree }).map((p) => (
                   <div key={p.title}>
                     <div className="flex items-center gap-2 mb-1">
                       <HugeiconsIcon icon={CheckmarkCircle02Icon} className="w-4 h-4 text-neutral-400" />
@@ -291,8 +295,7 @@ export default function Landing() {
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <p className="text-xs font-bold text-neutral-500 uppercase tracking-widest">What sets VeriClick apart</p>
             <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-3 text-neutral-500">
-              <div className="flex items-center gap-2 text-sm font-medium"><HugeiconsIcon icon={Tick02Icon} className="w-4 h-4 text-white/40" /> Built by DonLabs</div>
-              <div className="flex items-center gap-2 text-sm font-medium"><HugeiconsIcon icon={Tick02Icon} className="w-4 h-4 text-white/40" /> Free during beta</div>
+              <div className="flex items-center gap-2 text-sm font-medium"><HugeiconsIcon icon={Tick02Icon} className="w-4 h-4 text-white/40" /> {betaFree ? 'Free during beta' : 'Simple, flat pricing'}</div>
               <div className="flex items-center gap-2 text-sm font-medium"><HugeiconsIcon icon={Tick02Icon} className="w-4 h-4 text-white/40" /> Your domains, your links</div>
               <div className="flex items-center gap-2 text-sm font-medium"><HugeiconsIcon icon={Tick02Icon} className="w-4 h-4 text-white/40" /> Every decision explained</div>
             </div>
@@ -443,9 +446,9 @@ export default function Landing() {
                 </div>
                 <div className="flex items-center justify-between px-6 py-4 border-t border-neutral-800/60 bg-neutral-900/10">
                   <div className="text-xs text-neutral-500 font-mono">These are the exact labels your dashboard shows.</div>
-                  <a href={contactMailto('Question about VeriClick')} className="text-neutral-500 hover:text-white transition-colors">
-                    <HugeiconsIcon icon={Mail01Icon} className="w-4 h-4" />
-                  </a>
+                  <Link to="/contact" className="inline-flex items-center gap-2 rounded-lg border border-neutral-700 px-3 py-1.5 text-xs font-bold text-neutral-300 hover:border-neutral-500 hover:text-white transition-colors">
+                    Contact us
+                  </Link>
                 </div>
               </div>
             </AnimatedBlock>
@@ -463,13 +466,15 @@ export default function Landing() {
           </AnimatedBlock>
           <AnimatedBlock delay={100}>
             <p className="text-neutral-400 text-lg mb-12 max-w-xl mx-auto">
-              Free during beta. Set up your first tracked link in minutes — no credit card required.
+              {betaFree
+                ? 'Free during beta. Set up your first tracked link in minutes — no credit card required.'
+                : 'Pick a plan, add your domain, and start protecting your links today.'}
             </p>
           </AnimatedBlock>
           <AnimatedBlock delay={200}>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <Link to="/auth/register" className="bg-white hover:bg-neutral-200 text-black px-10 py-4 rounded-xl text-lg font-bold flex items-center justify-center gap-2 transition-all group shadow-lg shadow-white/5">
-                Get started free
+                {betaFree ? 'Get started free' : 'Get started'}
                 <HugeiconsIcon icon={ArrowRight01Icon} className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
               </Link>
               <Link to="/pricing" className="border border-neutral-700 hover:border-neutral-500 hover:bg-neutral-900/50 px-10 py-4 rounded-xl text-lg font-bold transition-all text-center">
@@ -477,8 +482,7 @@ export default function Landing() {
               </Link>
             </div>
             <p className="text-sm text-neutral-500 mt-6">
-              Questions? Email{' '}
-              <a href={contactMailto()} className="text-neutral-300 hover:text-white transition-colors">{CONTACT_EMAIL}</a>
+              Questions? Use the contact button in the footer.
             </p>
           </AnimatedBlock>
         </div>
