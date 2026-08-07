@@ -10,6 +10,12 @@
 # 	email you@example.com
 # }
 
+# Always issue real (production) certificates. Without this, Caddy can fall back
+# to the Let's Encrypt STAGING CA, which browsers won't trust.
+{
+	acme_ca https://acme-v02.api.letsencrypt.org/directory
+}
+
 {$SITE_ADDRESSES} {
 	encode gzip
 
