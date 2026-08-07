@@ -48,7 +48,7 @@ export default function ResetPassword() {
           <p className="text-neutral-400">Must be at least 8 characters.</p>
         </div>
 
-        <div className="bg-neutral-950 border border-neutral-800 rounded-2xl p-8">
+        <div className="bg-neutral-950 border border-neutral-800 rounded-2xl p-6 sm:p-8">
           {!uid || !token ? (
             <div className="text-center py-4">
               <p className="text-error font-bold mb-4">Invalid or expired reset link.</p>

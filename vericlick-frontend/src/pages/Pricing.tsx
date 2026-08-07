@@ -28,7 +28,7 @@ const HIGHLIGHTS = [
 function PlanCard({ plan, popular }: { plan: Plan; popular?: boolean }) {
   return (
     <div
-      className={`relative flex flex-col bg-neutral-950 border rounded-3xl p-8 ${
+      className={`relative flex flex-col bg-neutral-950 border rounded-3xl p-6 sm:p-8 ${
         popular ? 'border-white shadow-xl shadow-white/5' : 'border-neutral-800'
       }`}
     >
@@ -163,7 +163,7 @@ export default function Pricing() {
             </div>
           )}
           {!isLoading && !isError && (
-          <div className="grid md:grid-cols-3 gap-6">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {plans.map((plan) => (
               <PlanCard key={plan.code} plan={plan} popular={plan.code === 'plus'} />
             ))}

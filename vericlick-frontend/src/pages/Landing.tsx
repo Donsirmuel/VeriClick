@@ -304,7 +304,7 @@ export default function Landing() {
       </div>
 
       {/* ─── Features Grid ─── */}
-      <section id="features" className="py-32 px-6">
+      <section id="features" className="py-16 sm:py-24 lg:py-32 px-6">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-20">
             <AnimatedBlock>
@@ -341,7 +341,7 @@ export default function Landing() {
       </section>
 
       {/* ─── How It Works ─── */}
-      <section className="py-32 px-6 bg-neutral-950/30">
+      <section className="py-16 sm:py-24 lg:py-32 px-6 bg-neutral-950/30">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-20">
             <AnimatedBlock>
@@ -384,8 +384,8 @@ export default function Landing() {
       </section>
 
       {/* ─── Use Cases + Reasons ─── */}
-      <section className="py-32 px-6">
-        <div className="max-w-7xl mx-auto">
+      <section className="py-16 sm:py-24 lg:py-32 px-6">
+        <div className="max-w-7xl mx-auto w-full">
           <div className="grid lg:grid-cols-2 gap-16 items-start">
             <div>
               <AnimatedBlock>
@@ -457,7 +457,7 @@ export default function Landing() {
       </section>
 
       {/* ─── CTA ─── */}
-      <section className="py-32 px-6">
+      <section className="py-16 sm:py-24 lg:py-32 px-6">
         <div className="max-w-4xl mx-auto text-center">
           <AnimatedBlock>
             <h2 className="text-4xl md:text-6xl font-bold mb-8 leading-tight">

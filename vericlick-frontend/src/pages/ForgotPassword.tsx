@@ -40,7 +40,7 @@ export default function ForgotPassword() {
           <p className="text-neutral-400">Enter your email and we'll send you a reset link.</p>
         </div>
 
-        <div className="bg-neutral-950 border border-neutral-800 rounded-2xl p-8">
+        <div className="bg-neutral-950 border border-neutral-800 rounded-2xl p-6 sm:p-8">
           {sent ? (
             <div className="text-center py-4">
               <div className="w-14 h-14 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-4">

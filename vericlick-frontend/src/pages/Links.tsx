@@ -95,7 +95,7 @@ export default function LinksPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Tracking Links</h1>
           <p className="text-sm text-muted mt-1">
@@ -104,7 +104,7 @@ export default function LinksPage() {
         </div>
         <button
           onClick={() => setShowCreateModal(true)}
-          className="bg-black hover:bg-neutral-800 text-white px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-sm"
+          className="bg-black hover:bg-neutral-800 text-white px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-sm shrink-0 self-start"
         >
           <HugeiconsIcon icon={PlusSignIcon} className="w-4 h-4" />
           Create Link

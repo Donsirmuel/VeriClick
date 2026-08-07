@@ -31,7 +31,7 @@ export function HelpTooltip({ text, side = 'top' }: HelpTooltipProps) {
       {show && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setShow(false)} />
-          <div className={`absolute z-50 ${sideClasses[side]} w-64 p-3 bg-slate-900 text-white text-xs leading-relaxed rounded-xl shadow-xl pointer-events-none`}>
+          <div className={`absolute z-50 ${sideClasses[side]} w-64 max-w-[calc(100vw-2rem)] p-3 bg-slate-900 text-white text-xs leading-relaxed rounded-xl shadow-xl pointer-events-none`}>
             {text}
             <div className={`absolute w-2 h-2 bg-slate-900 transform rotate-45 ${
               side === 'top' ? 'top-full -translate-x-1/2 left-1/2 -mt-1' :

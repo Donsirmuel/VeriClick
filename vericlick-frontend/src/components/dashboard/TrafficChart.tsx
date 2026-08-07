@@ -29,12 +29,12 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 export function TrafficChart({ data, range, onRangeChange, loading = false }: TrafficChartProps) {
   return (
     <div className="bg-white p-6 rounded-2xl border border-border shadow-sm">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
         <div>
           <h3 className="text-lg font-bold text-slate-900">Traffic Overview</h3>
           <p className="text-sm text-muted mt-1">Human vs Bot traffic over time</p>
         </div>
-        <div className="flex bg-neutral-100 rounded-lg p-1 gap-1">
+        <div className="flex self-start sm:self-auto bg-neutral-100 rounded-lg p-1 gap-1">
           {(['7d', '30d', '90d'] as TimeRange[]).map((r) => (
             <button
               key={r}

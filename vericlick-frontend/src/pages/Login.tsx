@@ -107,7 +107,7 @@ export default function Login() {
             <p className="text-neutral-400">Sign in to your workspace to manage your links and traffic.</p>
           </div>
 
-          <div className="bg-neutral-950 border border-neutral-800 rounded-2xl p-8">
+          <div className="bg-neutral-950 border border-neutral-800 rounded-2xl p-6 sm:p-8">
             <form onSubmit={handleSubmit} className="space-y-5">
               <div className="space-y-2">
                 <label className="text-sm font-medium text-neutral-300 ml-1">Username</label>

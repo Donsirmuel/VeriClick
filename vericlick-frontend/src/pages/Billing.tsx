@@ -80,7 +80,7 @@ export default function Billing() {
       {/* Plans */}
       <div>
         <h2 className="text-lg font-bold text-slate-900 mb-4">Choose your plan</h2>
-        <div className="grid md:grid-cols-3 gap-5">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {plans.map((plan: Plan) => {
             const isCurrentPlan = isCurrent(plan.code)
             return (

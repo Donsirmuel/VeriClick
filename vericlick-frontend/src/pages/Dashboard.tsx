@@ -146,16 +146,18 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-8">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
           <p className="text-sm text-muted mt-1">Traffic analytics and system overview</p>
         </div>
-        <div className="flex items-center gap-2 text-sm text-neutral-500 bg-neutral-100 px-3 py-1.5 rounded-lg">
-          <div className="w-2 h-2 rounded-full bg-neutral-400 animate-pulse" />
-          {stats?.lastDomainScan
-            ? `Last domain scan: ${new Date(stats.lastDomainScan).toLocaleString()}`
-            : 'No domain scan yet'}
+        <div className="inline-flex items-center gap-2 text-sm text-neutral-500 bg-neutral-100 px-3 py-1.5 rounded-lg max-w-full truncate">
+          <div className="w-2 h-2 rounded-full bg-neutral-400 animate-pulse shrink-0" />
+          <span className="truncate">
+            {stats?.lastDomainScan
+              ? `Last domain scan: ${new Date(stats.lastDomainScan).toLocaleString()}`
+              : 'No domain scan yet'}
+          </span>
         </div>
       </div>
 

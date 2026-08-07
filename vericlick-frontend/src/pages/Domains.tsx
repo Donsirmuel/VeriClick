@@ -124,12 +124,12 @@ export default function DomainsPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Domain Registry</h1>
           <p className="text-sm text-muted mt-1 max-w-3xl">Domains are the branded URLs your links live on. Each link belongs to a domain — e.g. link <code className="text-xs bg-neutral-100 px-1.5 py-0.5 rounded">your.domain/r/summer23</code> uses domain <code className="text-xs bg-neutral-100 px-1.5 py-0.5 rounded">your.domain</code>. Domains are health-checked automatically every 15 minutes. <strong>Resolves</strong> means the domain points somewhere; <strong>Verified</strong> means you proved ownership with a TXT record — both matter before a domain is fully trusted.</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           {domainUsage && (
             <span className={`inline-flex items-center gap-2 text-xs font-bold px-3 py-2 rounded-xl border ${
               atLimit

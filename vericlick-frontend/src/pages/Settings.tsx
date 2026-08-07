@@ -69,7 +69,7 @@ export default function SettingsPage() {
       </div>
 
       <div className="grid gap-6 max-w-3xl">
-        <section className="bg-white rounded-2xl border border-border p-8 shadow-sm space-y-6">
+        <section className="bg-white rounded-2xl border border-border p-6 sm:p-8 shadow-sm space-y-6">
           <div className="flex items-start gap-3">
             <div className="w-10 h-10 rounded-xl bg-neutral-100 flex items-center justify-center shrink-0">
               <HugeiconsIcon icon={Globe02Icon} className="w-5 h-5 text-slate-700" />
@@ -118,7 +118,7 @@ export default function SettingsPage() {
           </div>
         </section>
 
-        <section className="bg-white rounded-2xl border border-border p-8 shadow-sm space-y-6">
+        <section className="bg-white rounded-2xl border border-border p-6 sm:p-8 shadow-sm space-y-6">
           <div className="flex items-start gap-3">
             <div className="w-10 h-10 rounded-xl bg-neutral-100 flex items-center justify-center shrink-0">
               <HugeiconsIcon icon={CodeIcon} className="w-5 h-5 text-slate-700" />

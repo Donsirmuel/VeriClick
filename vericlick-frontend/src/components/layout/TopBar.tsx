@@ -58,12 +58,14 @@ export function TopBar({ onMenuToggle }: { onMenuToggle: () => void }) {
         {workspace && (
           <Link
             to="/app/billing"
-            className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full bg-neutral-100 border border-neutral-200 text-slate-700 hover:border-neutral-400 transition-colors"
+            className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 sm:px-3 py-1.5 rounded-full bg-neutral-100 border border-neutral-200 text-slate-700 hover:border-neutral-400 transition-colors max-w-[40vw] truncate"
           >
-            <span className={`w-1.5 h-1.5 rounded-full ${workspace.canAddDomain ? 'bg-success' : 'bg-warning'}`} />
+            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${workspace.canAddDomain ? 'bg-success' : 'bg-warning'}`} />
+            <span className="truncate">
             {workspace.betaFreeMode
               ? 'Free beta'
               : `${workspace.planName ?? 'No plan'}${workspace.domainLimit ? ` · ${workspace.domainsUsed}/${workspace.domainLimit}` : ''}`}
+            </span>
           </Link>
         )}
       </div>
