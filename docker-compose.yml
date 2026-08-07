@@ -8,6 +8,7 @@ services:
       # superuser + database from it on first start (see deploy/db-entrypoint.sh).
       DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
     entrypoint: ["/usr/local/bin/vericlick-db-entrypoint.sh"]
+    command: postgres
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./deploy/db-entrypoint.sh:/usr/local/bin/vericlick-db-entrypoint.sh:ro
