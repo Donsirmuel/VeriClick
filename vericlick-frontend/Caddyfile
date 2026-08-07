@@ -1,0 +1,45 @@
+# VeriClick frontend + reverse proxy (Caddy).
+#
+# Automatic HTTPS via Let's Encrypt: as long as SITE_ADDRESSES is a public
+# domain whose A/AAAA records point at this server and ports 80/443 are open,
+# Caddy obtains and renews the certificates on its own — nothing to manage.
+#
+# Optional: uncomment the global block below to receive Let's Encrypt expiry /
+# revocation notices at that address.
+# {
+# 	email you@example.com
+# }
+
+{$SITE_ADDRESSES} {
+	encode gzip
+
+	# ---- Django routes proxied to the backend service ----
+	handle /api/* {
+		reverse_proxy backend:8000
+	}
+	handle /admin/* {
+		reverse_proxy backend:8000
+	}
+	handle /static/* {
+		reverse_proxy backend:8000
+	}
+	handle /r/* {
+		reverse_proxy backend:8000
+	}
+	handle /suspicious* {
+		reverse_proxy backend:8000
+	}
+	handle /robots.txt {
+		reverse_proxy backend:8000
+	}
+	handle /sitemap.xml {
+		reverse_proxy backend:8000
+	}
+
+	# ---- Built SPA with client-side routing fallback ----
+	handle {
+		root * /usr/share/caddy
+		try_files {path} /index.html
+		file_server
+	}
+}

@@ -7,6 +7,71 @@ The architecture: a **Django + DRF API** (`vericlick-backend/`) and a
 
 ---
 
+## 0. Docker Compose (recommended)
+
+A single Compose file builds and runs the whole stack on the VPS:
+
+- `db` — PostgreSQL 16
+- `backend` — Django + Gunicorn on `:8000` (runs `migrate` then `collectstatic` on start; serves static via WhiteNoise)
+- `frontend` — multi-stage build: Vite compiles the SPA, then **Caddy** serves it, reverse-proxies the Django routes, and **auto-manages HTTPS** (Let's Encrypt certs, issued + renewed automatically) — no shared/InterServer cert dependency
+
+### Steps (InterServer VPS — everything happens on the server)
+
+1. **Prereqs:** Docker + Compose plugin installed on the VPS; `vendora.page` + `www` A records point at the VPS's public IP; ports **80 and 443 are open** (80 is used for the ACME HTTP challenge).
+2. **Clone the repo** onto the server and `cd` into it.
+3. **Create the environment:**
+   ```bash
+   cp .env.example .env
+   nano .env        # set SECRET_KEY, POSTGRES_PASSWORD, ALLOWED_HOSTS, CORS, origins, Google IDs, SITE_ADDRESSES
+   ```
+   The app is **fail-closed**: Compose refuses to start if `SECRET_KEY`,
+   `POSTGRES_PASSWORD`, `ALLOWED_HOSTS`, `CORS_ALLOWED_ORIGINS`,
+   `CSRF_TRUSTED_ORIGINS`, `PUBLIC_TRACKING_BASE_URL`, `VITE_API_BASE_URL`, and
+   `VITE_SITE_URL` are unset.
+4. **Build and start:**
+   ```bash
+   docker compose up -d --build
+   ```
+   First run pulls images and runs migrations automatically. Caddy then obtains
+   the HTTPS certificate for `SITE_ADDRESSES` on its own.
+5. **Verify:**
+   ```bash
+   docker compose ps                          # all three services 'Up' / 'healthy'
+   docker compose exec frontend ls /data/caddy/certificates   # ACME certs present
+   curl -I https://vendora.page               # 200 (HTTP/2 over TLS)
+   curl -s https://vendora.page/api/health/   # {"status":"ok",...}
+   ```
+6. **Keep it running across reboots:** InterServer's services manager or a
+   systemd unit runs `docker compose up -d`. Rebuilds deploy as
+   `docker compose up -d --build`. Certificates live in the `caddy_data` volume
+   and renew automatically (Caddy renews ~30 days before expiry).
+
+### Useful commands
+```bash
+docker compose logs -f api          # follow backend logs
+docker compose exec api python manage.py createsuperuser   # first admin
+docker compose exec db psql -U vericlick -d vericlick       # psql shell
+docker compose down                # stop (data in the pgdata volume persists)
+docker compose down -v             # stop AND delete the database (destructive)
+```
+
+> Data lives in the named `pgdata` volume, so `docker compose down` and rebuilds
+> do not lose your database. Back it up: `docker compose exec -T db pg_dump -U vericlick vericlick > backup.sql`. Certificates live in `caddy_data` — back that up too.
+
+> **TLS, self-contained (no need for InterServer's shared SSL):** Caddy handles
+> `443` for you and auto-provisions Let's Encrypt certificates for the
+> `SITE_ADDRESSES` you set. Requirements: the domain's A records point at the
+> VPS and ports 80/443 are open. Once provisioned, `caddy_data` keeps the keys
+> and Caddy renews automatically, so there is no manual cert step before launch.
+>
+> **Before DNS is live** (e.g. smoke-testing behind a `<IP>:443` or a not-yet-public
+> hostname), point `frontend`'s Caddyfile at `tls internal` instead — swap
+> `{$SITE_ADDRESSES} {` for `{$SITE_ADDRESSES} { tls internal` in
+> `vericlick-frontend/Caddyfile` to use Caddy's own internal CA (self-signed) and
+> accept the cert in your browser. Revert that line for the real public launch.
+
+---
+
 ## 1. Backend
 
 ### Prereqs

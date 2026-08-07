@@ -1,0 +1,10 @@
+# Local environment and secrets — never baked into the image.
+.env
+.vscode/
+.idea/
+__pycache__/
+*.py[cod]
+*.sqlite3
+.venv/
+.vericlick-venv/
+.git/

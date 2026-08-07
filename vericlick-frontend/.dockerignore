@@ -1,0 +1,9 @@
+# Node and build artifacts.
+node_modules/
+dist/
+.vscode/
+.idea/
+*.log
+.env*
+!.env.example
+.git/
