@@ -26,4 +26,10 @@ export POSTGRES_USER="${POSTGRES_USER:-$USER}"
 export POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-$PASS}"
 export POSTGRES_DB="${POSTGRES_DB:-$DB}"
 
+if [ -z "$POSTGRES_USER" ] || [ -z "$POSTGRES_PASSWORD" ] || [ -z "$POSTGRES_DB" ]; then
+  echo "vericlick-db-entrypoint: could not parse a user:password@host/db from DATABASE_URL ($URL)." >&2
+  echo "Check .env for duplicate DATABASE_URL lines or a missing password." >&2
+  exit 1
+fi
+
 exec /usr/local/bin/docker-entrypoint.sh "$@"
