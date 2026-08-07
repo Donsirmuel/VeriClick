@@ -49,7 +49,7 @@ services:
     environment:
       # Public hostname(s) this server answers for; Caddy auto-issues the
       # Let's Encrypt certificates for them.
-      SITE_ADDRESSES: ${SITE_ADDRESSES:vendora.page,www.vendora.page}
+      SITE_ADDRESSES: ${SITE_ADDRESSES:?set SITE_ADDRESSES in .env}
     volumes:
       # ACME certs + config persist across container restarts/updates.
       - caddy_data:/data
