@@ -89,6 +89,9 @@ openssl rand -hex 32                                                            
 | `VITE_SITE_URL`             | `https://vendora.page`                                                       |
 | `VITE_GOOGLE_CLIENT_ID`     | same client ID as `GOOGLE_CLIENT_ID`                                         |
 | `SITE_ADDRESSES`            | `vendora.page www.vendora.page` (space-separated — Caddy syntax)            |
+| `RESEND_API_KEY`            | transactional-email API key from Resend; blank skips all emails            |
+| `RESEND_FROM_EMAIL`         | `VeriClick <noreply@vendora.page>` (must be a verified sender in Resend)    |
+| `SITE_URL`                  | `https://vendora.page` (base URL used in email links)                       |
 
 > ⚠️ The two Google client-ID variables **must match**. The `VITE_GOOGLE_CLIENT_ID`
 > is baked into the frontend at **build time** — if you change it later you must

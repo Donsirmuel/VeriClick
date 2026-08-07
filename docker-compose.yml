@@ -32,6 +32,9 @@ services:
       PUBLIC_TRACKING_BASE_URL: ${PUBLIC_TRACKING_BASE_URL:?set PUBLIC_TRACKING_BASE_URL in .env}
       TRUST_X_FORWARDED_PROTO: "true"
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-VeriClick <noreply@vendora.page>}
+      SITE_URL: ${SITE_URL:-https://vendora.page}
     depends_on:
       db:
         condition: service_healthy

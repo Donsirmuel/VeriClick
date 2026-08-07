@@ -10,3 +10,4 @@ gunicorn==25.2.0
 whitenoise==6.8.2
 psycopg2-binary==2.9.11
 dnspython==2.7.0
+resend==2.34.0

@@ -35,6 +35,7 @@ from .serializers import (
     PlanSerializer,
 )
 from .version import get_version
+from .emails import send_welcome_email, send_password_reset_email, send_plan_upgraded_email
 from .services import (
     classify_request,
     lookup_location,
@@ -123,6 +124,7 @@ def upgrade_workspace(request):
 
     workspace.plan = plan
     workspace.save(update_fields=['plan'])
+    send_plan_upgraded_email(request.user, workspace, plan)
     return Response(WorkspaceSerializer(workspace).data)
 
 
@@ -242,6 +244,7 @@ def register(request):
     serializer = RegisterSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     user = serializer.save()
+    send_welcome_email(user)
     return Response(RegisterSerializer(user).data, status=status.HTTP_201_CREATED)
 
 
@@ -309,6 +312,7 @@ def google_login(request):
             email=email,
             password=secrets.token_urlsafe(16),
         )
+        send_welcome_email(user)
 
     refresh = RefreshToken.for_user(user)
     return Response({
@@ -336,9 +340,11 @@ def password_reset_request(request):
     try:
         user = User.objects.get(email=email)
         token = default_token_generator.make_token(user)
-        return Response({'token': token, 'uid': user.pk, 'email': email})
+        send_password_reset_email(user, user.pk, token)
     except User.DoesNotExist:
-        return Response({'error': 'No user with this email address'}, status=status.HTTP_400_BAD_REQUEST)
+        pass
+    # Generic response: never reveal whether an account exists for an email.
+    return Response({'status': 'ok', 'message': 'If an account exists for this email, a reset link has been sent.'})
 
 
 @api_view(['POST'])

@@ -226,6 +226,14 @@ NEUTRAL_DEFAULT_DESTINATION = 'https://google.com'
 
 # REST Framework
 
+# Transactional email (Resend). The key is blank by default so email sending is
+# a no-op until configured — no exceptions are raised for missing config.
+
+RESEND_API_KEY = _env_str('RESEND_API_KEY')
+RESEND_FROM_EMAIL = _env_str('RESEND_FROM_EMAIL', 'VeriClick <noreply@vendora.page>')
+SITE_URL = _env_str('SITE_URL', 'https://vendora.page').rstrip('/')
+
+
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
