@@ -11,8 +11,8 @@ ENV VITE_API_BASE_URL=${VITE_API_BASE_URL} \
     VITE_GOOGLE_CLIENT_ID=${VITE_GOOGLE_CLIENT_ID} \
     NODE_OPTIONS="--max-old-space-size=512"
 
-COPY package.json package-lock.json ./
-RUN npm ci
+COPY .npmrc package.json package-lock.json ./
+RUN npm install
 COPY . .
 RUN npm run build
 
