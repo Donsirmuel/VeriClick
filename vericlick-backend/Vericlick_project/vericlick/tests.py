@@ -709,6 +709,41 @@ class DomainVerificationTests(APITestCase):
         mock_verify.assert_not_called()
 
 
+# On-demand TLS gate (Caddy ask endpoint)
+
+class TlsAllowedTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='tls_user')
+        self.workspace = Workspace.objects.get(owner=self.user)
+        self.domain = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='brand.example.com',
+        )
+
+    def test_unregistered_domain_denied(self):
+        res = self.client.get('/api/internal/tls-allowed/', {'domain': 'not-ours.com'})
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_registered_but_unverified_denied(self):
+        self.domain.verified = False
+        self.domain.save(update_fields=['verified'])
+        res = self.client.get('/api/internal/tls-allowed/', {'domain': self.domain.domain})
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_registered_and_verified_allowed(self):
+        self.domain.verified = True
+        self.domain.save(update_fields=['verified'])
+        res = self.client.get('/api/internal/tls-allowed/', {'domain': self.domain.domain})
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+
+    def test_no_domain_returns_400(self):
+        res = self.client.get('/api/internal/tls-allowed/')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_does_not_require_auth(self):
+        res = self.client.get('/api/internal/tls-allowed/', {'domain': 'nonexistent.net'})
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+
+
 # IP Rules
 
 class IPRuleModelTests(TestCase):
@@ -1182,6 +1217,38 @@ class RedirectEndpointTests(APITestCase):
         self.assertEqual(ClickLog.objects.count(), 0)
         # Destination URL is external, so we don't expect a specific status
         # The key assertion is that no ClickLog was created
+
+    def test_redirect_forwards_utm_params(self):
+        res = self.client.get(
+            '/api/r/test-redirect/?utm_source=facebook&utm_campaign=summer&click_id=xyz123',
+            HTTP_USER_AGENT='Mozilla/5.0',
+        )
+        self.assertEqual(res.status_code, status.HTTP_302_FOUND)
+        self.assertEqual(
+            res.url,
+            'https://example.com/landing?utm_source=facebook&utm_campaign=summer&click_id=xyz123',
+        )
+
+    def test_redirect_keeps_existing_destination_params(self):
+        self.link.destination_url = 'https://example.com/landing?ref=web'
+        self.link.save(update_fields=['destination_url'])
+        res = self.client.get(
+            '/api/r/test-redirect/?utm_source=facebook',
+            HTTP_USER_AGENT='Mozilla/5.0',
+        )
+        self.assertEqual(res.status_code, status.HTTP_302_FOUND)
+        self.assertIn('ref=web', res.url)
+        self.assertIn('utm_source=facebook', res.url)
+
+    def test_redirect_forwards_params_to_safe_destination(self):
+        self.workspace.safe_destination = 'https://safety.example.com/honeypot'
+        self.workspace.save()
+        res = self.client.get(
+            '/api/r/test-redirect/?utm_source=botcampaign',
+            HTTP_USER_AGENT='Googlebot/2.1',
+        )
+        self.assertEqual(res.status_code, status.HTTP_302_FOUND)
+        self.assertEqual(res.url, 'https://safety.example.com/honeypot?utm_source=botcampaign')
 
 
 # SEO Endpoints

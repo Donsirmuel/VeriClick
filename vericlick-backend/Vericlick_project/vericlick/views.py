@@ -1,4 +1,5 @@
 from datetime import timedelta
+from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
 from django.db.models import Count, Q, F
 from django.db.models.functions import TruncDate
 from django.conf import settings
@@ -47,6 +48,20 @@ from .services import (
 
 def get_user_workspace(user):
     return Workspace.objects.filter(owner=user).first()
+
+
+def _merge_query_params(destination, incoming_query):
+    # Preserves UTM / campaign / click-id parameters on the tracked URL by
+    # appending them to whatever destination the visitor is routed to (target
+    # URL or the safe page). Incoming params win over destination defaults so
+    # attribution/funnel pixels keep firing on the final page.
+    if not incoming_query:
+        return destination
+    parts = list(urlparse(destination))
+    params = dict(parse_qsl(parts[4], keep_blank_values=True))
+    params.update({k: v[0] if isinstance(v, (list, tuple)) else v for k, v in incoming_query.items()})
+    parts[4] = urlencode(params)
+    return urlunparse(parts)
 
 
 class TrackerEventThrottle(ScopedRateThrottle):
@@ -160,6 +175,26 @@ def discount_code_validate(request):
         'code': discount.code,
         'discount_percent': discount.discount_percent,
     })
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+@throttle_classes([])
+def tls_allowed(request):
+    # Caddy on-demand TLS gate. Caddy calls this with ?domain=<hostname>
+    # before issuing a certificate for a host that isn't statically listed in
+    # SITE_ADDRESSES. We only say yes for domains a customer has registered AND
+    # proven ownership of (verified), so strangers can't make us mint Let's
+    # Encrypt certificates for domains they don't control.
+    host = (request.query_params.get('domain') or '').strip().lower().rstrip('.')
+    if not host:
+        return Response(status=status.HTTP_400_BAD_REQUEST)
+    allowed = DomainRegistry.objects.filter(
+        domain=host, verified=True,
+    ).exists()
+    if not allowed:
+        return Response(status=status.HTTP_403_FORBIDDEN)
+    return Response(status=status.HTTP_200_OK)
 
 
 @api_view(['GET'])
@@ -638,9 +673,10 @@ def redirect_click(request, slug):
     if result['decision'] in ('blocked', 'challenged'):
         # Divert suspicious traffic to the configured safe destination, falling
         # back to a neutral VeriClick page. Humans always reach the real URL.
-        return HttpResponseRedirect(redirect_to=get_safe_destination(workspace, request))
+        safe = _merge_query_params(get_safe_destination(workspace, request), request.query_params)
+        return HttpResponseRedirect(redirect_to=safe)
 
-    return HttpResponseRedirect(redirect_to=link.destination_url)
+    return HttpResponseRedirect(redirect_to=_merge_query_params(link.destination_url, request.query_params))
 
 
 @api_view(['GET'])

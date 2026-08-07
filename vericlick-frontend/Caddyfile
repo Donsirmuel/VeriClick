@@ -1,21 +1,39 @@
 # VeriClick frontend + reverse proxy (Caddy).
 #
-# Automatic HTTPS via Let's Encrypt: as long as SITE_ADDRESSES is a public
-# domain whose A/AAAA records point at this server and ports 80/443 are open,
-# Caddy obtains and renews the certificates on its own — nothing to manage.
+# TWO layers of HTTPS:
 #
-# Optional: uncomment the global block below to receive Let's Encrypt expiry /
-# revocation notices at that address.
-# {
-# 	email you@example.com
-# }
+# 1. Static product domains (vendora.page, etc.) — listed in SITE_ADDRESSES,
+#    certificates issued automatically on boot via Let's Encrypt.
+#
+# 2. Customer-owned custom tracking domains (the core product feature). Rather
+#    than hard-coding every customer domain into this file, a dedicated site
+#    block listens on :443 for ANY host and uses Caddy ON-DEMAND TLS: when a
+#    visitor lands on a host without a certificate, Caddy asks our backend
+#    (/api/internal/tls-allowed/) whether the domain is a registered AND
+#    verified VeriClick domain. Only then does it mint a certificate. This
+#    means a customer can point their own domain at this server and their
+#    tracked links just work — no per-domain config, no redeploys.
+#
+# Automatic HTTPS via Let's Encrypt: as long as a domain's A/AAAA records
+# point at this server and ports 80/443 are open, Caddy obtains and renews
+# the certificates on its own — nothing to manage.
 
-# Always issue real (production) certificates. Without this, Caddy can fall back
-# to the Let's Encrypt STAGING CA, which browsers won't trust.
 {
+	# Always issue real (production) certificates. Without this, Caddy can fall
+	# back to the Let's Encrypt STAGING CA, which browsers won't trust.
 	acme_ca https://acme-v02.api.letsencrypt.org/directory
+
+	# On-demand TLS gate. Caddy sends GET http://backend:8000/api/internal/tls-allowed/?domain=<host>
+	# before issuing a certificate for an unknown host and only proceeds on a
+	# 200. interval/burst throttle requests to protect the Let's Encrypt quota.
+	on_demand_tls {
+		ask http://backend:8000/api/internal/tls-allowed/
+		interval 10m
+		burst 10
+	}
 }
 
+# ---- Static product domains (SPA + product API + admin) ----
 {$SITE_ADDRESSES} {
 	encode gzip
 
@@ -48,4 +66,36 @@
 		try_files {path} /index.html
 		file_server
 	}
+}
+
+# ---- Catch-all for customer custom domains (on-demand TLS) ----
+#
+# Accepts ANY host on port 443. Only tracked-link redirection (/r/*) and the
+# suspicious-traffic diverter (/suspicious*) are proxied to Django; everything
+# else is a 404 so a random domain pointed at this server can't expose the SPA
+# or admin. Certificates are minted on first HTTPS visit — the first request is
+# slower, subsequent ones use the cached cert.
+https:// {
+	encode gzip
+
+	tls {
+		on_demand
+	}
+
+	handle /r/* {
+		reverse_proxy backend:8000
+	}
+	handle /suspicious* {
+		reverse_proxy backend:8000
+	}
+	handle {
+		respond "Not found" 404
+	}
+}
+
+# ---- Port 80: redirect to HTTPS, keeping ACME http-01 challenges working ----
+# Caddy serves /.well-known/acme-challenge/* automatically; everything else on
+# any host goes to https.
+:80 {
+	redir https://{host}{uri} permanent
 }

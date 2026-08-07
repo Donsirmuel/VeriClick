@@ -12,6 +12,9 @@ router.register(r'ip-rules', views.IPRuleViewSet, basename='ip-rule')
 urlpatterns = [
     # Health
     path('health/', views.health_check, name='health-check'),
+    # Caddy on-demand TLS gate (internal). Caddy asks this endpoint before
+    # issuing a certificate for a host not statically listed in SITE_ADDRESSES.
+    path('internal/tls-allowed/', views.tls_allowed, name='tls-allowed'),
     # Pricing & discounts
     path('pricing/', views.pricing, name='pricing'),
     path('site-config/', views.site_config, name='site-config'),

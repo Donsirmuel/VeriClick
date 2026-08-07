@@ -116,9 +116,9 @@ export default function DashboardPage() {
               onClick={() => navigate(step.to)}
               className="w-full flex items-start gap-4 p-4 bg-white border border-neutral-200 rounded-2xl text-left hover:border-neutral-400 hover:shadow-sm transition-all"
             >
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${step.done ? 'bg-success/10' : 'bg-neutral-100'}`}>
+              <div className={`relative w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${step.done ? 'bg-success-bright shadow-sm' : 'bg-neutral-100'}`}>
                 {step.done ? (
-                  <HugeiconsIcon icon={CheckmarkCircle02Icon} className="w-5 h-5 text-success" />
+                  <HugeiconsIcon icon={CheckmarkCircle02Icon} className="w-6 h-6 text-white" />
                 ) : (
                   <HugeiconsIcon icon={step.icon} className="w-5 h-5 text-muted" />
                 )}

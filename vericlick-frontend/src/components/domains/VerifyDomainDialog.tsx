@@ -85,18 +85,41 @@ export function VerifyDomainDialog({ domain, onClose, onVerified }: VerifyDomain
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700 ml-1">TXT record value</label>
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 bg-neutral-900 text-neutral-100 text-xs font-mono px-4 py-3 rounded-xl overflow-x-auto whitespace-nowrap">
-                    {domain.verificationRecord}
-                  </div>
-                  <button
-                    onClick={handleCopyRecord}
-                    className="p-3 bg-black hover:bg-neutral-800 text-white rounded-xl transition-colors shrink-0"
-                    title="Copy TXT record"
-                  >
-                    <HugeiconsIcon icon={Copy01Icon} className="w-4 h-4" />
-                  </button>
+                <label className="text-sm font-medium text-slate-700 ml-1">TXT record details</label>
+                <div className="overflow-hidden rounded-xl border border-neutral-200">
+                  <table className="w-full text-sm">
+                    <tbody>
+                      <tr className="border-b border-neutral-200">
+                        <th className="text-left text-xs font-bold text-muted uppercase tracking-wider bg-neutral-50 px-4 py-2.5 w-24">Type</th>
+                        <td className="px-4 py-2.5 font-mono text-xs">{'TXT'}</td>
+                      </tr>
+                      <tr className="border-b border-neutral-200">
+                        <th className="text-left text-xs font-bold text-muted uppercase tracking-wider bg-neutral-50 px-4 py-2.5 w-24">Host / Name</th>
+                        <td className="px-4 py-2.5 font-mono text-xs whitespace-nowrap overflow-x-auto">{'@'}</td>
+                      </tr>
+                      <tr className="border-b border-neutral-200">
+                        <th className="text-left text-xs font-bold text-muted uppercase tracking-wider bg-neutral-50 px-4 py-2.5 w-24">TTL</th>
+                        <td className="px-4 py-2.5 font-mono text-xs">{'300'}</td>
+                      </tr>
+                      <tr>
+                        <th className="text-left text-xs font-bold text-muted uppercase tracking-wider bg-neutral-50 px-4 py-2.5 w-24 align-top">Value</th>
+                        <td className="px-4 py-2.5">
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 bg-neutral-900 text-neutral-100 text-xs font-mono px-3 py-2.5 rounded-lg overflow-x-auto whitespace-nowrap">
+                              {domain.verificationRecord}
+                            </div>
+                            <button
+                              onClick={handleCopyRecord}
+                              className="p-2.5 bg-black hover:bg-neutral-800 text-white rounded-lg transition-colors shrink-0"
+                              title="Copy TXT record"
+                            >
+                              <HugeiconsIcon icon={Copy01Icon} className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
               </div>
 
@@ -104,8 +127,8 @@ export function VerifyDomainDialog({ domain, onClose, onVerified }: VerifyDomain
                 <h4 className="text-sm font-bold text-slate-900">How to add it</h4>
                 <ol className="list-decimal pl-5 text-sm text-muted space-y-1 leading-relaxed">
                   <li>Open your DNS provider (where the domain's DNS is managed).</li>
-                  <li>Create a new TXT record with <span className="font-mono text-xs bg-neutral-100 px-1 rounded">Type = TXT</span>.</li>
-                  <li>Paste the value above into the record's <span className="font-mono text-xs bg-neutral-100 px-1 rounded">Value</span>.</li>
+                  <li>Create a new TXT record with the Type, Host/Name, TTL and Value above (TTL 300 is the usual default).</li>
+                  <li>Leave the host as <span className="font-mono text-xs bg-neutral-100 px-1 rounded">@</span> so the record applies to the domain root.</li>
                   <li>Save, then click <strong>Check verification</strong> below (DNS can take a few minutes to propagate).</li>
                 </ol>
               </div>

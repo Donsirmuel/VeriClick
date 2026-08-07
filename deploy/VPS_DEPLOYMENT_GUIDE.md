@@ -246,7 +246,34 @@ Also run the automated check: `bash deploy.sh status`.
 
 ---
 
-## Step 11 — Backups and survival across reboots
+## Step 11 — Customer custom domains (core product feature)
+
+Tracked links are meant to live on your customer's *own* domain, e.g.
+`https://your-brand.com/r/<slug>`. This works **without** editing `SITE_ADDRESSES`
+or redeploying, thanks to Caddy on-demand TLS:
+
+1. A customer registers + **verifies** their domain in the app (the TXT-record
+   ownership step protects let's-encrypt from abuse — a domain must be `verified`
+   before we'll mint a cert for it).
+2. The customer points DNS at this server:
+   - **Subdomain (recommended)** → `CNAME go → vendora.page`
+   - **Apex domain** → `A @ → <VPS IP>`
+3. Caddy sees the new host and asks the backend
+   (`/api/internal/tls-allowed/`) whether it's a registered+verified domain.
+   Only then does it issue a Let's-Encrypt cert automatically. `/r/*` requests
+   are proxied to Django for redirect classification.
+
+Notes:
+- First visit to a new custom domain pays a cert-issuance delay (~seconds);
+  subsequent visits are fast.
+- Only `/r/*` and `/suspicious*` are proxied on custom domains — the SPA, admin,
+  and product API are *not* exposed on customer hosts.
+- The product's tracking URL logic still prefers the custom domain only when it
+  is healthy (`get_public_tracking_url` in `services.py`).
+
+---
+
+## Step 12 — Backups and survival across reboots
 
 ### Backups (run now, then automate)
 
