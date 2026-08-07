@@ -88,7 +88,7 @@ openssl rand -hex 32                                                            
 | `VITE_API_BASE_URL`         | `https://vendora.page/api`                                                   |
 | `VITE_SITE_URL`             | `https://vendora.page`                                                       |
 | `VITE_GOOGLE_CLIENT_ID`     | same client ID as `GOOGLE_CLIENT_ID`                                         |
-| `SITE_ADDRESSES`            | `vendora.page,www.vendora.page`                                              |
+| `SITE_ADDRESSES`            | `vendora.page www.vendora.page` (space-separated — Caddy syntax)            |
 
 > ⚠️ The two Google client-ID variables **must match**. The `VITE_GOOGLE_CLIENT_ID`
 > is baked into the frontend at **build time** — if you change it later you must
@@ -115,7 +115,9 @@ firewall-cmd --reload
 Confirm:
 
 ```bash
-firewall-cmd --list-services    # shows http https (if firewalld is running)
+firewall-cmd --permanent --add-service=http
+firewall-cmd --permanent --add-service=https
+firewall-cmd --reload    # shows http https (if firewalld is running)
 ```
 
 If no firewall is active, skip this step.
