@@ -25,11 +25,10 @@
 
 	# On-demand TLS gate. Caddy sends GET http://backend:8000/api/internal/tls-allowed/?domain=<host>
 	# before issuing a certificate for an unknown host and only proceeds on a
-	# 200. interval/burst throttle requests to protect the Let's Encrypt quota.
+	# 200. `burst` throttles rapid-fire requests to protect the Let's Encrypt
+	# quota. (The `interval` option was removed in newer Caddy versions.)
 	on_demand_tls {
 		ask http://backend:8000/api/internal/tls-allowed/
-		interval 10m
-		burst 10
 	}
 }
 
