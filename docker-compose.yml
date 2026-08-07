@@ -3,13 +3,16 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-vericlick}
-      POSTGRES_USER: ${POSTGRES_USER:-vericlick}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      # Single source of truth: this is the ONLY database value anywhere. The
+      # backend uses it to connect, and us db container seeds its initial
+      # superuser + database from it on first start (see deploy/db-entrypoint.sh).
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
+    entrypoint: ["/usr/local/bin/vericlick-db-entrypoint.sh"]
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./deploy/db-entrypoint.sh:/usr/local/bin/vericlick-db-entrypoint.sh:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vericlick} -d ${POSTGRES_DB:-vericlick}"]
+      test: ["CMD-SHELL", "pg_isready -h localhost"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -22,7 +25,7 @@ services:
       DEBUG: "false"
       SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:?set ALLOWED_HOSTS in .env}
-      DATABASE_URL: postgres://${POSTGRES_USER:-vericlick}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-vericlick}
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:?set CORS_ALLOWED_ORIGINS in .env}
       CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:?set CSRF_TRUSTED_ORIGINS in .env}
       PUBLIC_TRACKING_BASE_URL: ${PUBLIC_TRACKING_BASE_URL:?set PUBLIC_TRACKING_BASE_URL in .env}

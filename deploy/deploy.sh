@@ -26,7 +26,7 @@ require_env() {
     exit 1
   fi
   # Fail closed: make sure required secrets are not placeholders.
-  for key in SECRET_KEY POSTGRES_PASSWORD ALLOWED_HOSTS CORS_ALLOWED_ORIGINS \
+  for key in SECRET_KEY DATABASE_URL ALLOWED_HOSTS CORS_ALLOWED_ORIGINS \
              CSRF_TRUSTED_ORIGINS PUBLIC_TRACKING_BASE_URL VITE_API_BASE_URL VITE_SITE_URL; do
     if ! grep -qE "^${key}=.+" "$ENV_FILE"; then
       echo "ERROR: missing $key in $ENV_FILE (required)."
@@ -96,7 +96,10 @@ cmd_status() {
 cmd_backup() {
   require_docker
   mkdir -p backups
-  docker compose exec -T db pg_dump -U vericlick vericlick > "backups/vericlick-$(date +%F-%H%M).sql"
+  DB_URL="$(grep -E '^DATABASE_URL=' "$ENV_FILE" | head -1 | cut -d= -f2-)"
+  # from inside the db container, connect to localhost instead of the "db" host
+  DB_URL="${DB_URL//@db:5432/@localhost:5432}"
+  docker compose exec -T db pg_dump "$DB_URL" > "backups/vericlick-$(date +%F-%H%M).sql"
   echo "Postgres dumped to backups/vericlick-$(date +%F-%H%M).sql"
   docker compose exec -T frontend tar czf - /data > "backups/caddy-$(date +%F-%H%M).tgz"
   echo "Caddy certs dumped to backups/caddy-$(date +%F-%H%M).tgz"

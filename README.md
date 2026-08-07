@@ -75,7 +75,7 @@ python manage.py check_domains --once             # single pass
 |---|---|---|
 | `SECRET_KEY` | backend `.env` | Django secret (required when `DEBUG=False`) |
 | `ALLOWED_HOSTS` | backend `.env` | Required when `DEBUG=False` |
-| `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_HOST` / `POSTGRES_PORT` | backend `.env` | Local PostgreSQL connection details for the VPS |
+| `DATABASE_URL` | backend `.env` | Single PostgreSQL URL (Postgres runs in Docker and seeds from it) |
 | `PUBLIC_TRACKING_BASE_URL` | backend `.env` | Base URL used when generating tracked links |
 | `CORS_ALLOWED_ORIGINS` | backend `.env` | Frontend origins allowed to call the API |
 | `GOOGLE_CLIENT_ID` | backend `.env` | Google OAuth client ID; empty disables Google sign-in |

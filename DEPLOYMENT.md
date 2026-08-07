@@ -22,10 +22,10 @@ A single Compose file builds and runs the whole stack on the VPS:
 3. **Create the environment:**
    ```bash
    cp .env.example .env
-   nano .env        # set SECRET_KEY, POSTGRES_PASSWORD, ALLOWED_HOSTS, CORS, origins, Google IDs, SITE_ADDRESSES
+   nano .env        # set SECRET_KEY, DATABASE_URL, ALLOWED_HOSTS, CORS, origins, Google IDs, SITE_ADDRESSES
    ```
    The app is **fail-closed**: Compose refuses to start if `SECRET_KEY`,
-   `POSTGRES_PASSWORD`, `ALLOWED_HOSTS`, `CORS_ALLOWED_ORIGINS`,
+   `DATABASE_URL`, `ALLOWED_HOSTS`, `CORS_ALLOWED_ORIGINS`,
    `CSRF_TRUSTED_ORIGINS`, `PUBLIC_TRACKING_BASE_URL`, `VITE_API_BASE_URL`, and
    `VITE_SITE_URL` are unset.
 4. **Build and start:**
@@ -94,7 +94,7 @@ docker compose down -v             # stop AND delete the database (destructive)
    - `ALLOWED_HOSTS` — your real domains, e.g. `vendora.page,www.vendora.page`
    - `CORS_ALLOWED_ORIGINS` — the SPA origin(s), e.g. `https://vendora.page`
    - `CSRF_TRUSTED_ORIGINS` — same origins (needed for browser POSTs)
-   - `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_HOST` / `POSTGRES_PORT` — local PostgreSQL on the VPS
+   - `DATABASE_URL` — single PostgreSQL URL, e.g. `postgres://vericlick:pass@db:5432/vericlick`; Postgres runs in Docker and seeds itself from this URL (see `deploy/db-entrypoint.sh`)
    - `PUBLIC_TRACKING_BASE_URL=https://vendora.page`
    - `TRUST_X_FORWARDED_PROTO=True` only when behind a trusted proxy
    - `GOOGLE_CLIENT_ID` — see "Google sign-in setup" below
