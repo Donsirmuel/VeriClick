@@ -4,6 +4,7 @@ export type TimeRange = '7d' | '30d' | '90d'
 
 export interface DashboardStats {
   totalClicks24h: number
+  clicksTrend: number | null
   botTrafficBlocked: number
   blocked: number
   challenged: number

@@ -40,3 +40,7 @@ export async function googleLogin(idToken: string): Promise<LoginResponse> {
   const { data } = await apiClient.post<LoginResponse>('/auth/google/', { id_token: idToken })
   return data
 }
+
+export async function deleteAccount(confirmation: string): Promise<void> {
+  await apiClient.post('/auth/delete-account/', { confirmation })
+}

@@ -74,16 +74,16 @@ export function DnsSetupDialog({ domain, onClose, onRechecked }: DnsSetupDialogP
                   <HugeiconsIcon icon={Globe02Icon} className="w-5 h-5 text-black" />
                 </div>
                 <p className="text-xs text-slate-700 leading-relaxed">
-                  One small DNS record makes{' '}
+                  One small change makes{' '}
                   <span className="font-mono text-xs bg-white border border-neutral-200 px-1 rounded">{domain.domain}</span>{' '}
-                  face VeriClick. Then your links like{' '}
+                  work with VeriClick. After it, links like{' '}
                   <span className="font-mono text-xs bg-white border border-neutral-200 px-1 rounded">{domain.domain}/r/&lt;slug&gt;</span>{' '}
-                  work. Without this, links on this domain still work — they just use the VeriClick URL instead.
+                  use your own brand. Without this change, links still work — they just use the VeriClick URL instead.
                 </p>
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700 ml-1">DNS record to add</label>
+                <label className="text-sm font-medium text-slate-700 ml-1">The record to add</label>
                 <div className="overflow-hidden rounded-xl border border-neutral-200">
                   <table className="w-full text-sm">
                     <tbody>
@@ -92,11 +92,11 @@ export function DnsSetupDialog({ domain, onClose, onRechecked }: DnsSetupDialogP
                         <td className="px-4 py-2.5 font-mono text-xs">{record.label}</td>
                       </tr>
                       <tr className="border-b border-neutral-200">
-                        <th className="text-left text-xs font-bold text-muted uppercase tracking-wider bg-neutral-50 px-4 py-2.5 w-24">Host / Name</th>
+                        <th className="text-left text-xs font-bold text-muted uppercase tracking-wider bg-neutral-50 px-4 py-2.5 w-24">Name</th>
                         <td className="px-4 py-2.5">
                           <div className="flex items-center gap-2">
                             <span className="font-mono text-xs whitespace-nowrap overflow-x-auto flex-1">{record.host === '@' ? `${record.host} (@)` : record.host}</span>
-                            <button onClick={() => handleCopy(record.host, 'Host')} className="p-1.5 rounded-lg hover:bg-neutral-100 transition-colors" title="Copy host">
+                            <button onClick={() => handleCopy(record.host, 'Host')} className="p-1.5 rounded-lg hover:bg-neutral-100 transition-colors" title="Copy name">
                               <HugeiconsIcon icon={Copy01Icon} className="w-4 h-4 text-muted" />
                             </button>
                           </div>
@@ -129,14 +129,17 @@ export function DnsSetupDialog({ domain, onClose, onRechecked }: DnsSetupDialogP
               </div>
 
               <div className="p-4 rounded-xl border border-neutral-200 space-y-2">
-                <h4 className="text-sm font-bold text-slate-900">What does this do?</h4>
+                <h4 className="text-sm font-bold text-slate-900">How to do it</h4>
                 <ol className="list-decimal pl-5 text-sm text-muted space-y-1 leading-relaxed">
-                  <li>Open your DNS provider (where you manage <span className="font-mono text-xs bg-neutral-100 px-1 rounded">{domain.domain}</span>).</li>
-                  <li>Add a new <strong>{record.label}</strong> record using the Type, Host, TTL and Value above.</li>
-                  <li>{record.sentence}</li>
-                  <li>Save. DNS usually takes 5–30 minutes to spread worldwide.</li>
-                  <li>When you're ready, <strong>Check now</strong> below — we'll tell VeriClick to look again.</li>
+                  <li>Log in to the company you bought <span className="font-mono text-xs bg-neutral-100 px-1 rounded">{domain.domain}</span> from (like GoDaddy, Namecheap, or Cloudflare).</li>
+                  <li>Find the page called DNS or "Manage DNS".</li>
+                  <li>Add a new record ({record.label}). Fill in the boxes on the left ("Name" or "Host") and on the right ("Value") with the details above. If there's a TTL box, just use the default — you don't need to touch it.</li>
+                  <li>Save it.</li>
+                  <li>It usually takes a few minutes to a few hours before the change spreads across the internet. When you think it's ready, press <strong>Check again</strong> below.</li>
                 </ol>
+                <p className="text-xs text-muted leading-relaxed bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2">
+                  No idea where to find it? Ask the assistant (chat bubble, bottom-right) or contact us — happy to help.
+                </p>
               </div>
 
               {pointedAtServer && !domain.verified && (

@@ -38,7 +38,7 @@ function readyBadge() {
   return (
     <span className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full bg-success/10 text-success">
       <HugeiconsIcon icon={CheckmarkCircle02Icon} className="w-3.5 h-3.5" />
-      Ready to serve links
+      Ready for links
     </span>
   )
 }
@@ -47,7 +47,7 @@ function needsDnsBadge() {
   return (
     <span className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full bg-warning/10 text-warning">
       <span className="w-1.5 h-1.5 rounded-full bg-warning" />
-      Needs DNS setup
+      One quick step left
     </span>
   )
 }
@@ -151,7 +151,7 @@ export default function DomainsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Domain Registry</h1>
-          <p className="text-sm text-muted mt-1 max-w-3xl">Domains are the branded URLs your links live on. Each link belongs to a domain — e.g. link <code className="text-xs bg-neutral-100 px-1.5 py-0.5 rounded">your.domain/r/summer23</code> uses domain <code className="text-xs bg-neutral-100 px-1.5 py-0.5 rounded">your.domain</code>. Domains are health-checked automatically every 15 minutes. <strong>Resolves</strong> means the domain points somewhere; <strong>Verified</strong> means you proved ownership with a TXT record — both matter before a domain is fully trusted.</p>
+          <p className="text-sm text-muted mt-1 max-w-3xl">A domain is the web address your links live on, like <code className="text-xs bg-neutral-100 px-1.5 py-0.5 rounded">your.domain/r/summer23</code>. For a domain to be fully ready you do two things, and the app walks you through both: <strong>Verify</strong> you own it (add a small text record), then <strong>Point</strong> it at VeriClick (add one short record) so your links use your own brand.</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           {domainUsage && (
@@ -213,8 +213,8 @@ export default function DomainsPage() {
                 </h3>
                 <p className="text-sm text-slate-600 leading-relaxed mt-0.5">
                   Ownership is confirmed, but {needsDnsStepDomains.length === 1 ? `your domain` : 'these domains'} don't
-                  point at VeriClick yet. Tracking links share the VeriClick URL until they do. Add one small DNS record
-                  to unlock your branded links.
+                  point at VeriClick yet. Links share the VeriClick URL until they do. Add one short record
+                  to use your own brand.
                 </p>
               </div>
             </div>

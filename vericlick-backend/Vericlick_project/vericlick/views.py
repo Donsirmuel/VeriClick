@@ -364,6 +364,25 @@ def auth_me(request):
 
 
 @api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def delete_account(request):
+    # Self-service account removal. Requires typing DELETE to confirm so an
+    # impostor or a misfired request can't wipe an account by accident. Related
+    # data (workspace, links, domains, clicks, IP rules, settings) is removed
+    # through the workspace/owner cascade. The Django user is deleted last.
+    confirmation = (request.data.get('confirmation') or '').strip().upper()
+    if confirmation != 'DELETE':
+        return Response(
+            {'errors': [{'field': 'confirmation', 'detail': 'Type DELETE to confirm you want to close your account.'}]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    user = request.user
+    user.delete()
+    return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(['POST'])
 @permission_classes([AllowAny])
 def password_reset_request(request):
     email = request.data.get('email')
@@ -434,6 +453,20 @@ def dashboard_stats(request):
     blocked_24h = clicks_24h.filter(decision=ClickLog.Decision.BLOCKED).count()
     challenged_24h = clicks_24h.filter(decision=ClickLog.Decision.CHALLENGED).count()
 
+    # Real change vs the previous 24h window today, not a placeholder. Falls back
+    # to null (no badge shown) when there's no prior traffic to compare against.
+    previous_clicks_24h = ClickLog.objects.filter(
+        link__workspace=workspace,
+        created_at__gte=twenty_four_hours_ago - timedelta(hours=24),
+        created_at__lt=twenty_four_hours_ago,
+    ).count()
+    if previous_clicks_24h > 0:
+        clicks_trend = round(
+            ((total_clicks_24h - previous_clicks_24h) / previous_clicks_24h) * 100, 1
+        )
+    else:
+        clicks_trend = None
+
     active_links = TrackingLink.objects.filter(workspace=workspace, status=TrackingLink.Status.ACTIVE).count()
     domains_healthy = DomainRegistry.objects.filter(
         workspace=workspace, health_status=DomainRegistry.HealthStatus.HEALTHY
@@ -447,6 +480,7 @@ def dashboard_stats(request):
 
     data = {
         'totalClicks24h': total_clicks_24h,
+        'clicksTrend': clicks_trend,
         'botTrafficBlocked': bot_clicks_24h,
         'blocked': blocked_24h,
         'challenged': challenged_24h,

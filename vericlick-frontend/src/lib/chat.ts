@@ -20,7 +20,8 @@ export const QUICK_QUESTIONS = [
   'How does VeriClick work?',
   'How do I create a link?',
   'How do I verify my domain?',
-  'What is an IP rule?',
+  'How do I point my domain at VeriClick?',
+  'How do I delete my account?',
   'How much does it cost?',
   'How can I contact support?',
 ]
@@ -44,17 +45,22 @@ const TOPICS: ChatTopic[] = [
   {
     id: 'domains',
     keywords: ['domain', 'domain health', 'register domain', 'add domain', 'tracking domain', 'resolves', 'healthy', 'degraded'],
-    answer: `A domain is the web address your tracked links live on. Register it under Domains and VeriClick health-checks it automatically (it confirms the domain resolves to a server). A domain can show Healthy, Degraded, or Blacklisted. Health checks run from inside the app — you don't need to set up any external scheduler.`,
+    answer: `A domain is the web address your tracked links live on. Register it under Domains. To make it fully work with VeriClick you do two quick things: 1) Verify you own it (add a small text/TXT record at your domain provider), and 2) Point it at VeriClick (add one short record, an A or CNAME, that the app shows you). The Domains page walks you through both step by step with copy buttons. Until step 2 is done your links still work — they just use the VeriClick URL instead of your own brand.`,
   },
   {
     id: 'verify-domain',
-    keywords: ['verify', 'verification', 'ownership', 'txt', 'dns', 'verification record', 'prove', 'verified badge'],
-    answer: `Verification proves you own the domain, which is separate from health. VeriClick gives you a DNS TXT record like vericlick-verify=<token>. Publish that record with your DNS provider, then click "Verify ownership" on the domain. Once the record is found, the domain gets the Verified badge. Health (resolves) and ownership (verified) are tracked separately.`,
+    keywords: ['verify', 'verification', 'ownership', 'txt', 'dns', 'verification record', 'prove', 'verified badge', 'point'],
+    answer: `Verification proves you own the domain, which is separate from pointing it at VeriClick. 1) Verify: VeriClick gives you a small text record (vericlick-verify=<token>). Add it at your domain provider, then press "Verify ownership". 2) Point: add one short record (an A or CNAME record) so your domain uses your brand. The Domains page shows the exact record with copy buttons for each value. Your links work either way — before the second step they just use the VeriClick URL.`,
   },
   {
     id: 'ip-rules',
     keywords: ['ip rule', 'ip rules', 'allow', 'deny', 'whitelist', 'blacklist', 'cidr', 'address', 'block ip', 'allowlist', 'denylist', 'rule'],
     answer: `IP rules let you control which addresses can reach your links. An Allow rule always wins — those IPs are never flagged. A Deny rule blocks matching IPs/CIDR blocks. Rules can be set to expire, and you can whitelist an IP straight from the blocked-IPs review queue.`,
+  },
+  {
+    id: 'point-domain',
+    keywords: ['point', 'pointing', 'a record', 'cname', 'name servers', 'nameserver', 'branded url', 'own url', 'custom url', 'dns setup'],
+    answer: `Pointing your domain at VeriClick is the second (and final) step to use your own brand on links. In the Domains page, open the domain and press "Set up DNS" — VeriClick shows you one short record (an A or CNAME record) with the exact Name and Value to add, plus copy buttons. Add it at your domain provider, save, then press "Check again". It can take a few minutes to a few hours to spread. Until it's done, your links still work — they just use the VeriClick URL.`,
   },
   {
     id: 'blocked-ips',
@@ -84,12 +90,12 @@ const TOPICS: ChatTopic[] = [
   {
     id: 'get-started',
     keywords: ['start', 'get started', 'begin', 'setup', 'onboarding', 'first', 'beginner', 'tutorial', 'guide', 'quick start'],
-    answer: `To get started: 1) Create an account (free, no card). 2) Add a domain under Domains and verify ownership with a DNS TXT record. 3) Create your first tracked link under Links. 4) Share the short URL and watch your dashboard. Your dashboard has a 5-step onboarding checklist that walks you through all of it.`,
+    answer: `To get started: 1) Create an account (free, no card). 2) Add a domain under Domains. 3) Verify you own it (add a text/TXT record) then point it at VeriClick (one short record — the app walks you through both). 4) Create your first tracked link under Links. 5) Share the link and watch your dashboard. Your dashboard has a step-by-step onboarding checklist that walks you through all of it.`,
   },
   {
     id: 'account',
     keywords: ['account', 'login', 'sign in', 'signin', 'sign up', 'signup', 'register', 'password', 'reset', 'forgot', 'oauth', 'google', 'profile'],
-    answer: `Accounts are created in seconds with an email and password (or Google sign-in). You'll be logged into your workspace automatically. Forgot your password? Use "Forgot password" on the sign-in page to get a reset token.`,
+    answer: `Accounts are created in seconds with an email and password (or Google sign-in). You'll be logged into your workspace automatically. Forgot your password? Use "Forgot password" on the sign-in page to get a reset token. You can see your login email under Settings → Account, and close your account there too — it types DELETE to confirm and removes everything permanently.`,
   },
   {
     id: 'contact',
@@ -108,7 +114,7 @@ const TOPICS: ChatTopic[] = [
   },
 ]
 
-const FALLBACK_ANSWER = `I'm not sure I can answer that one yet. I'm best with questions about links, domains, verification, IP rules, blocked traffic, the dashboard, pricing, and account setup. For anything else, use the Contact page (link in the footer) or open the Help page in your dashboard.`
+const FALLBACK_ANSWER = `I'm not sure I can answer that one yet. I'm best with questions about links, domains, verification, pointing a domain at VeriClick, IP rules, blocked traffic, the dashboard, pricing, and your account. For anything else, use the Contact page (link in the footer) or open the Help page in your dashboard.`
 
 function tokenize(text: string): Set<string> {
   return new Set(text.split(' ').filter(Boolean))

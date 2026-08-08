@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { CodeIcon, Copy01Icon, Globe02Icon, ShieldIcon } from '@hugeicons/core-free-icons'
+import { CodeIcon, Copy01Icon, Globe02Icon, ShieldIcon, Delete01Icon, UserIcon } from '@hugeicons/core-free-icons'
 import toast from 'react-hot-toast'
 import { fetchWorkspace, updateWorkspace } from '@/api/workspace'
 import { apiClient } from '@/api/client'
+import { deleteAccount, fetchMe } from '@/api/auth'
 import { Skeleton } from '@/components/ui/Skeleton'
+import { parseApiError } from '@/lib/errors'
 
 const API_BASE = (apiClient.defaults.baseURL ?? 'http://localhost:8000/api').replace(/\/$/, '')
 
@@ -15,6 +17,11 @@ export default function SettingsPage() {
   const { data: workspace } = useQuery({
     queryKey: ['workspace'],
     queryFn: fetchWorkspace,
+  })
+
+  const { data: me } = useQuery({
+    queryKey: ['me'],
+    queryFn: fetchMe,
   })
 
   const [workspaceName, setWorkspaceName] = useState('')
@@ -59,12 +66,33 @@ export default function SettingsPage() {
     }
   }
 
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [confirmation, setConfirmation] = useState('')
+  const [deleting, setDeleting] = useState(false)
+
+  const handleDeleteAccount = async () => {
+    if (confirmation.trim().toUpperCase() !== 'DELETE') {
+      toast.error("Type DELETE to confirm")
+      return
+    }
+    setDeleting(true)
+    try {
+      await deleteAccount(confirmation.trim())
+      localStorage.removeItem('token')
+      localStorage.removeItem('refresh')
+      window.location.href = '/auth/login'
+    } catch (err) {
+      toast.error(parseApiError(err))
+      setDeleting(false)
+    }
+  }
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-8">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Settings</h1>
-          <p className="text-sm text-muted mt-1">Manage your workspace preferences.</p>
+          <p className="text-sm text-muted mt-1">Manage your workspace preferences and account.</p>
         </div>
       </div>
 
@@ -111,7 +139,7 @@ export default function SettingsPage() {
             <button
               onClick={handleSaveWorkspace}
               disabled={updateMutation.isPending || !workspace}
-              className="bg-black hover:bg-neutral-800 text-white px-6 py-2.5 rounded-xl text-sm font-bold transition-all disabled:opacity-50"
+              className="w-full sm:w-auto bg-black hover:bg-neutral-800 text-white px-6 py-2.5 rounded-xl text-sm font-bold transition-all disabled:opacity-50"
             >
               {updateMutation.isPending ? 'Saving...' : 'Save changes'}
             </button>
@@ -154,11 +182,75 @@ export default function SettingsPage() {
             <button
               onClick={handleCopySnippet}
               disabled={!snippet}
-              className="bg-black hover:bg-neutral-800 text-white px-6 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all disabled:opacity-50"
+              className="w-full sm:w-auto bg-black hover:bg-neutral-800 text-white px-6 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50"
             >
               <HugeiconsIcon icon={Copy01Icon} className="w-4 h-4" />
               Copy snippet
             </button>
+          </div>
+        </section>
+
+        <section className="bg-white rounded-2xl border border-border p-6 sm:p-8 shadow-sm space-y-6">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-neutral-100 flex items-center justify-center shrink-0">
+              <HugeiconsIcon icon={UserIcon} className="w-5 h-5 text-slate-700" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-slate-900 mb-1">Account</h3>
+              <p className="text-sm text-muted leading-relaxed">
+                Your login email is <span className="font-medium text-slate-900">{me?.email ?? 'loading…'}</span>.
+              </p>
+            </div>
+          </div>
+
+          <div className="p-4 rounded-xl border border-error/20 bg-error/5 flex items-start gap-3">
+            <div className="mt-0.5 shrink-0">
+              <HugeiconsIcon icon={ShieldIcon} className="w-5 h-5 text-error" />
+            </div>
+            <div className="space-y-3 flex-1">
+              <div>
+                <h4 className="text-sm font-bold text-slate-900 mb-1">Close account</h4>
+                <p className="text-sm text-muted leading-relaxed">
+                  This deletes your workspace, links, domains, and traffic data permanently. It cannot be undone.
+                </p>
+              </div>
+              {confirmingDelete ? (
+                <div className="space-y-3">
+                  <input
+                    type="text"
+                    value={confirmation}
+                    onChange={(e) => setConfirmation(e.target.value)}
+                    placeholder="Type DELETE to confirm"
+                    className="w-full bg-white border border-error/40 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-error transition-colors"
+                  />
+                  <div className="flex flex-col sm:flex-row gap-3 sm:justify-end">
+                    <button
+                      onClick={() => { setConfirmingDelete(false); setConfirmation(''); setDeleting(false) }}
+                      disabled={deleting}
+                      className="w-full sm:w-auto px-4 py-2.5 text-sm font-bold text-muted hover:text-slate-900 transition-colors disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleDeleteAccount}
+                      disabled={deleting}
+                      className="w-full sm:w-auto bg-error hover:bg-error/90 text-white px-6 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                    >
+                      <HugeiconsIcon icon={Delete01Icon} className="w-4 h-4" />
+                      {deleting ? 'Deleting…' : 'Delete my account'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setConfirmingDelete(true)}
+                  className="w-full sm:w-auto bg-error hover:bg-error/90 text-white px-6 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all"
+                >
+                  <HugeiconsIcon icon={Delete01Icon} className="w-4 h-4" />
+                  Delete my account
+                </button>
+              )}
+            </div>
           </div>
         </section>
 

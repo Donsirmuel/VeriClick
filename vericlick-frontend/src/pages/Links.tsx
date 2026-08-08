@@ -170,17 +170,17 @@ export default function LinksPage() {
                         <Link
                           to="/app/domains"
                           className="inline-flex items-center gap-1 text-[10px] font-bold text-warning bg-warning/10 hover:bg-warning/20 px-2 py-0.5 rounded-full transition-colors"
-                          title="This link is using the VeriClick URL because your domain isn't pointing at our servers yet. Set it up in Domains."
+                          title="This link uses the VeriClick URL because your domain isn't pointed at VeriClick yet. Finish it in one quick step under Domains."
                         >
                           <span className="w-1 h-1 rounded-full bg-warning" />
-                          Domain DNS pending
+                          One step left
                         </Link>
                       )}
                     </div>
                     <span className="mt-0.5 block max-w-[320px] truncate text-xs text-muted" title={link.trackingUrl}>{link.trackingUrl}</span>
                     {domainPending && (
                       <Link to="/app/domains" className="mt-1 block text-xs font-bold text-slate-700 underline decoration-neutral-300 hover:decoration-black underline-offset-2 transition-colors">
-                        Add DNS record to use {link.domain} →
+                        Use {link.domain} for this link →
                       </Link>
                     )}
                   </td>

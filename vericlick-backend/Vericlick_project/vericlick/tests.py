@@ -300,6 +300,42 @@ class AuthEndpointTests(APITestCase):
         self.assertNotIn('password', body)
 
 
+class AccountDeletionTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='deleteuser', email='delete@example.com', password='testpass123'
+        )
+        self.workspace = Workspace.objects.get(owner=self.user)
+        self.client.force_authenticate(user=self.user)
+
+    def test_delete_account_requires_confirmation(self):
+        res = self.client.post('/api/auth/delete-account/',
+                               {'confirmation': 'nope'}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertTrue(User.objects.filter(pk=self.user.pk).exists())
+
+    def test_delete_account_removes_user_and_data(self):
+        domain = DomainRegistry.objects.create(workspace=self.workspace, domain='del.example.com')
+        link = TrackingLink.objects.create(
+            workspace=self.workspace, domain=domain,
+            slug='del-link', destination_url='https://example.com',
+        )
+        IPRule.objects.create(workspace=self.workspace)
+        res = self.client.post('/api/auth/delete-account/',
+                               {'confirmation': '  delete '}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(User.objects.filter(pk=self.user.pk).exists())
+        self.assertFalse(Workspace.objects.filter(pk=self.workspace.pk).exists())
+        self.assertFalse(DomainRegistry.objects.filter(pk=domain.pk).exists())
+        self.assertFalse(TrackingLink.objects.filter(pk=link.pk).exists())
+
+    def test_delete_account_requires_auth(self):
+        self.client.force_authenticate(user=None)
+        res = self.client.post('/api/auth/delete-account/',
+                               {'confirmation': 'DELETE'}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
 class DashboardEndpointTests(APITestCase):
     def setUp(self):
         self.user = User.objects.create_user(username='dashuser', password='testpass123')
@@ -319,6 +355,24 @@ class DashboardEndpointTests(APITestCase):
         self.assertEqual(body['botTrafficBlocked'], 0)
         self.assertEqual(body['botTrafficPercentage'], 0)
         self.assertEqual(body['activeLinks'], 0)
+        self.assertIsNone(body['clicksTrend'])
+
+    def test_stats_trend_is_computed_from_previous_24h(self):
+        link = TrackingLink.objects.create(
+            workspace=self.workspace,
+            slug='trend-link', destination_url='https://example.com',
+        )
+        now = timezone.now()
+        now_click_1 = ClickLog.objects.create(link=link, ip='1.1.1.1', is_bot=False)
+        now_click_2 = ClickLog.objects.create(link=link, ip='3.3.3.3', is_bot=False)
+        prev_click = ClickLog.objects.create(link=link, ip='2.2.2.2', is_bot=False)
+        ClickLog.objects.filter(pk=now_click_1.pk).update(created_at=now)
+        ClickLog.objects.filter(pk=now_click_2.pk).update(created_at=now - timedelta(hours=2))
+        ClickLog.objects.filter(pk=prev_click.pk).update(created_at=now - timedelta(hours=30))
+        res = self.client.get('/api/dashboard/stats/')
+        body = res.json()
+        self.assertIsNotNone(body['clicksTrend'])
+        self.assertAlmostEqual(body['clicksTrend'], 100.0, places=1)
 
     def test_stats_with_data(self):
         domain = DomainRegistry.objects.create(

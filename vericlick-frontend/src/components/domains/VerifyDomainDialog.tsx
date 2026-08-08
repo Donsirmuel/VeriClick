@@ -76,9 +76,9 @@ export function VerifyDomainDialog({ domain, onClose, onVerified, onRequestDnsSe
                       <HugeiconsIcon icon={CheckmarkCircle02Icon} className="w-4 h-4 text-success" />
                     </div>
                     <p className="text-sm text-slate-700 leading-relaxed">
-                      Your domain already points at VeriClick. Tracked links on{' '}
+                      Your domain is already pointing at VeriClick. Links on{' '}
                       <span className="font-mono text-xs bg-neutral-100 px-1 rounded">{domain.domain}</span> are
-                      now branded. Copy your tracking link from the Links page and start sharing.
+                      ready to use your own brand. Copy a tracking link from the Links page and start sharing.
                     </p>
                   </div>
                 ) : (
@@ -87,9 +87,9 @@ export function VerifyDomainDialog({ domain, onClose, onVerified, onRequestDnsSe
                       <span className="w-1.5 h-1.5 rounded-full bg-warning" />
                     </div>
                     <p className="text-sm text-slate-700 leading-relaxed">
-                      Your links will use the VeriClick URL until you point{' '}
+                      One more short step: point{' '}
                       <span className="font-mono text-xs bg-neutral-100 px-1 rounded">{domain.domain}</span>{' '}
-                      at our servers. One small DNS record to add — we'll walk you through it.
+                      at VeriClick so your links use your own brand. Until then links still work — they just use the VeriClick URL.
                     </p>
                   </div>
                 )}
@@ -120,13 +120,13 @@ export function VerifyDomainDialog({ domain, onClose, onVerified, onRequestDnsSe
                 </div>
                 <p className="text-xs text-slate-700 leading-relaxed">
                   To prove you own <span className="font-mono text-xs bg-white border border-neutral-200 px-1 rounded">{domain.domain}</span>,
-                  add the TXT record below at your DNS provider. This is the same step used to
-                  verify domains with email or CDN providers. You only do this once per domain.
+                  you add a small "text record" (a TXT record) at the company you bought the domain from.
+                  It's a standard step used by many services, and you only do it once per domain.
                 </p>
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700 ml-1">TXT record details</label>
+                <label className="text-sm font-medium text-slate-700 ml-1">The text record (TXT) to add</label>
                 <div className="overflow-hidden rounded-xl border border-neutral-200">
                   <table className="w-full text-sm">
                     <tbody>
@@ -135,7 +135,7 @@ export function VerifyDomainDialog({ domain, onClose, onVerified, onRequestDnsSe
                         <td className="px-4 py-2.5 font-mono text-xs">{'TXT'}</td>
                       </tr>
                       <tr className="border-b border-neutral-200">
-                        <th className="text-left text-xs font-bold text-muted uppercase tracking-wider bg-neutral-50 px-4 py-2.5 w-24">Host / Name</th>
+                        <th className="text-left text-xs font-bold text-muted uppercase tracking-wider bg-neutral-50 px-4 py-2.5 w-24">Name</th>
                         <td className="px-4 py-2.5 font-mono text-xs whitespace-nowrap overflow-x-auto">{'@'}</td>
                       </tr>
                       <tr className="border-b border-neutral-200">
@@ -167,10 +167,10 @@ export function VerifyDomainDialog({ domain, onClose, onVerified, onRequestDnsSe
               <div className="p-4 rounded-xl border border-neutral-200 space-y-2">
                 <h4 className="text-sm font-bold text-slate-900">How to add it</h4>
                 <ol className="list-decimal pl-5 text-sm text-muted space-y-1 leading-relaxed">
-                  <li>Open your DNS provider (where the domain's DNS is managed).</li>
-                  <li>Create a new TXT record with the Type, Host/Name, TTL and Value above (TTL 300 is the usual default).</li>
-                  <li>Leave the host as <span className="font-mono text-xs bg-neutral-100 px-1 rounded">@</span> so the record applies to the domain root.</li>
-                  <li>Save, then click <strong>Check verification</strong> below (DNS can take a few minutes to propagate).</li>
+                  <li>Log in to the company you bought <span className="font-mono text-xs bg-neutral-100 px-1 rounded">{domain.domain}</span> from (like GoDaddy, Namecheap, or Cloudflare).</li>
+                  <li>Find the page called DNS or "Manage DNS" and add a new record of type <strong>TXT</strong>.</li>
+                  <li>Copy the value on the right into the "Value" or "Content" box. Leave the Name as <span className="font-mono text-xs bg-neutral-100 px-1 rounded">@</span> if you can. If there's a TTL box, use the default.</li>
+                  <li>Save it, then press <strong>Check verification</strong> below. It can take a few minutes for the change to spread across the internet.</li>
                 </ol>
               </div>
 

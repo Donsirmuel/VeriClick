@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { Globe02Icon, LinkSquare02Icon, ShieldIcon, DashboardSquare01Icon, ArrowRight02Icon, Mail01Icon } from '@hugeicons/core-free-icons'
+import { Globe02Icon, LinkSquare02Icon, ShieldIcon, DashboardSquare01Icon, ArrowRight02Icon, Mail01Icon, UserIcon } from '@hugeicons/core-free-icons'
 
 const sections = [
   {
@@ -8,10 +8,14 @@ const sections = [
     title: 'Domains',
     body: (
       <>
-        A domain is the web address your links live on (like your.domain). Add your domain first, then create
-        links under it. A domain has two separate statuses: <strong>health</strong> (does it resolve to a server?)
-        and <strong>verified</strong> (did you prove you own it?). Health is checked automatically from inside the
-        app; ownership is proven separately by publishing a DNS TXT record.
+        Your links live on a domain — the web address people type (like{' '}
+        <span className="font-mono text-xs bg-neutral-100 px-1 rounded">your-domain.com</span>). Add your domain first.
+        To make it work with VeriClick you do two quick things, and the app walks you through both:
+        <ol className="list-decimal pl-5 mt-2 space-y-1">
+          <li><strong>Verify you own it</strong> — add a small text record (a TXT record) at your domain provider. This is how VeriClick proves you really control the domain.</li>
+          <li><strong>Point it at VeriClick</strong> — add one short record (an A or CNAME record). Your links then use your own brand instead of the VeriClick URL.</li>
+        </ol>
+        Not sure where to do this? The <strong>Domains</strong> page shows the exact record to add and a “copy” button for each value. Until step 2 is done, your links still work — they just use the VeriClick URL.
       </>
     ),
   },
@@ -20,8 +24,8 @@ const sections = [
     title: 'Links',
     body: (
       <>
-        Each link has a short code called a <strong>slug</strong> (e.g. summer23). When someone visits your.domain/r/summer23,
-        VeriClick checks if they are a bot or a real person before redirecting them to your destination URL. Flagged requests
+        Each link has a short code called a <strong>slug</strong> (e.g. summer23). When someone visits your-domain.com/r/summer23,
+        VeriClick checks if they are a bot or a real person before sending them to your destination page. Flagged visitors
         are sent to your safe destination instead of your real page.
       </>
     ),
@@ -31,23 +35,35 @@ const sections = [
     title: 'IP Rules',
     body: (
       <>
-        An IP address is a computer's unique identifier on the internet. IP Rules let you allow or block specific IP addresses
-        from reaching your links. <strong>Allow</strong> rules are checked first and always win, so whitelisted IPs are never
-        flagged again. <strong>Deny</strong> rules are checked next, followed by automated bot detection and rate limits.
+        Every computer has a unique number on the internet called an <strong>IP address</strong>. IP Rules let you allow
+        or block specific addresses from reaching your links. <strong>Allow</strong> rules are checked first and always win,
+        so whitelisted addresses are never flagged again. <strong>Deny</strong> rules are checked next, followed by automatic
+        bot detection and rate limits.
       </>
     ),
   },
   {
     icon: DashboardSquare01Icon,
     title: 'Dashboard',
-    body: 'Shows your traffic stats, recent activity, and how many bots have been detected and blocked.',
+    body: 'Shows your traffic, recent activity, and how many bots have been detected and blocked. The numbers update automatically as visitors click your links.',
+  },
+  {
+    icon: UserIcon,
+    title: 'Your account',
+    body: (
+      <>
+        Your login email is shown in <strong>Settings → Account</strong>. You can close your account there too — it removes
+        your workspace, links, domains, and traffic data permanently. It asks you to type DELETE to confirm, so it can’t
+        happen by accident.
+      </>
+    ),
   },
 ]
 
 export default function HelpPage() {
   return (
     <div>
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-8">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Help & Docs</h1>
           <p className="text-sm text-muted mt-1">Everything you need to get started with VeriClick.</p>
@@ -80,18 +96,22 @@ export default function HelpPage() {
           </li>
           <li className="flex gap-3">
             <span className="w-6 h-6 rounded-full bg-white text-black text-xs font-bold flex items-center justify-center shrink-0">2</span>
-            <span>Prove you own it by publishing the DNS TXT record, then click <strong>Verify ownership</strong></span>
+            <span>Verify you own it — add the text record (TXT) the app shows you, then press <strong>Verify ownership</strong></span>
           </li>
           <li className="flex gap-3">
             <span className="w-6 h-6 rounded-full bg-white text-black text-xs font-bold flex items-center justify-center shrink-0">3</span>
-            <span>Go to <strong>Links</strong> and create your first link</span>
+            <span>Point your domain at VeriClick — one short record, and the app shows you exactly what to add</span>
           </li>
           <li className="flex gap-3">
             <span className="w-6 h-6 rounded-full bg-white text-black text-xs font-bold flex items-center justify-center shrink-0">4</span>
-            <span>Share the short URL — VeriClick handles the rest</span>
+            <span>Go to <strong>Links</strong> and create your first link</span>
           </li>
           <li className="flex gap-3">
             <span className="w-6 h-6 rounded-full bg-white text-black text-xs font-bold flex items-center justify-center shrink-0">5</span>
+            <span>Share the link — VeriClick handles the rest</span>
+          </li>
+          <li className="flex gap-3">
+            <span className="w-6 h-6 rounded-full bg-white text-black text-xs font-bold flex items-center justify-center shrink-0">6</span>
             <span>Check the <strong>Dashboard</strong> to see traffic and blocked bots</span>
           </li>
         </ol>

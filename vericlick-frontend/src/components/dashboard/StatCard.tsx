@@ -33,7 +33,7 @@ export function StatCard({ title, value, subValue, icon: Icon, trend, color = 'p
             "text-xs font-bold px-2 py-1 rounded-full",
             trend.isPositive ? "text-neutral-500 bg-neutral-100" : "text-error bg-error/10"
           )}>
-            {trend.isPositive ? '+' : '-'}{trend.value}%
+            {trend.isPositive ? '+' : '-'}{Math.abs(trend.value)}%
           </div>
         )}
       </div>

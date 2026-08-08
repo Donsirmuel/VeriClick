@@ -24,6 +24,7 @@ urlpatterns = [
     path('auth/register/', views.register, name='register'),
     path('auth/google/', views.google_login, name='google-login'),
     path('auth/me/', views.auth_me, name='auth-me'),
+    path('auth/delete-account/', views.delete_account, name='delete-account'),
     path('auth/password-reset/', views.password_reset_request, name='password-reset'),
     path('auth/password-reset/confirm/', views.password_reset_confirm, name='password-reset-confirm'),
     path('auth/login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),

@@ -62,13 +62,21 @@ export default function DashboardPage() {
       {
         n: 2,
         title: 'Verify your domain',
-        desc: 'Add the DNS TXT record VeriClick gives you to prove you own the domain. The “Verify ownership” button walks you through it.',
+        desc: 'Add the small text record (TXT) VeriClick gives you to prove you own the domain. The app walks you through it.',
         to: '/app/domains',
         icon: CheckmarkCircle02Icon,
         done: hasVerifiedDomain,
       },
       {
         n: 3,
+        title: 'Point your domain at VeriClick',
+        desc: 'One more short record and your links use your own brand. Until then they use the VeriClick URL — either way they work.',
+        to: '/app/domains',
+        icon: Globe02Icon,
+        done: (domains ?? []).some((d) => d.ready),
+      },
+      {
+        n: 4,
         title: 'Create a tracked link',
         desc: 'Point a tracked link at the page you want to protect.',
         to: '/app/links',
@@ -76,15 +84,15 @@ export default function DashboardPage() {
         done: activeLinks > 0,
       },
       {
-        n: 4,
+        n: 5,
         title: 'Copy your tracked link',
-        desc: 'Share the VeriClick URL — humans get through, suspicious traffic gets blocked.',
+        desc: 'Share the link — humans get through, suspicious traffic gets blocked.',
         to: '/app/links',
         icon: Copy01Icon,
         done: activeLinks > 0,
       },
       {
-        n: 5,
+        n: 6,
         title: 'Install the site script',
         desc: 'Add extra detection to pages you own with one line of code.',
         to: '/app/settings',
@@ -166,7 +174,9 @@ export default function DashboardPage() {
           title="Total Clicks (24h)"
           value={(stats?.totalClicks24h ?? 0).toLocaleString()}
           icon={Activity01Icon}
-          trend={{ value: 12.5, isPositive: true }}
+          trend={stats?.clicksTrend != null
+            ? { value: stats.clicksTrend, isPositive: stats.clicksTrend >= 0 }
+            : undefined}
           color="primary"
         />
         <StatCard
