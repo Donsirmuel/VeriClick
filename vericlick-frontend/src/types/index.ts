@@ -74,6 +74,7 @@ export interface Domain {
     label: string
     host: string
     target: string
+    trackingHost: string
     sentence: string
     note?: string
   }

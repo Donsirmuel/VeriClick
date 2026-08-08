@@ -47,10 +47,24 @@ def _target_addresses():
     return _resolve_addresses(host)
 
 
+def tracking_host(domain):
+    """The hostname tracked links actually live on for a registered domain.
+    An apex (2-label) domain can't hold a CNAME record, so its branded links
+    run on the standard `t.` subdomain instead (e.g. t.example.com). Subdomains
+    keep their own name (e.g. links.example.com stays links.example.com)."""
+    domain = (domain or '').strip().rstrip('.')
+    labels = [part for part in domain.split('.') if part]
+    if len(labels) <= 2:
+        return f't.{domain}' if domain else ''
+    return domain
+
+
 def domain_points_to_this_server(domain):
-    """True when `domain`'s DNS points at this server (an A/CNAME record that
-    resolves to our IPs). This is stricter than "resolves somewhere" and is the
-    state that must hold before tracked links can live on the custom domain."""
+    """True when the domain's branded tracking host points at this server (an
+    A/CNAME record that resolves to our IPs). This is stricter than "resolves
+    somewhere" and is the state that must hold before tracked links can live on
+    the custom domain. Apex domains are checked through their `t.` subdomain,
+    since DNS providers forbid CNAME on the root of a domain."""
     if not domain:
         return False
     domain = domain.strip().rstrip('.')
@@ -59,7 +73,7 @@ def domain_points_to_this_server(domain):
     target = _target_addresses()
     if not target:
         return False
-    return bool(_resolve_addresses(domain) & target)
+    return bool(_resolve_addresses(tracking_host(domain)) & target)
 
 
 class Workspace(models.Model):

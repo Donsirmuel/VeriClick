@@ -21,7 +21,7 @@ from decouple import config
 
 from .models import (
     Workspace, DomainRegistry, TrackingLink, ClickLog, IPRule, TrackerEvent,
-    Plan, DiscountCode, SiteConfig,
+    Plan, DiscountCode, SiteConfig, tracking_host,
 )
 from .serializers import (
     UserSerializer,
@@ -189,9 +189,15 @@ def tls_allowed(request):
     host = (request.query_params.get('domain') or '').strip().lower().rstrip('.')
     if not host:
         return Response(status=status.HTTP_400_BAD_REQUEST)
-    allowed = DomainRegistry.objects.filter(
-        domain=host, verified=True,
-    ).exists()
+    # Allow a registered verified domain itself, OR its tracking host. An apex
+    # domain (e.g. donnable.site) can't hold a CNAME, so its branded links run
+    # on the `t.` subdomain (t.donnable.site) which Caddy must also serve TLS
+    # for.
+    allowed = False
+    for d in DomainRegistry.objects.filter(verified=True):
+        if d.domain == host or tracking_host(d.domain) == host:
+            allowed = True
+            break
     if not allowed:
         return Response(status=status.HTTP_403_FORBIDDEN)
     return Response(status=status.HTTP_200_OK)

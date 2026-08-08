@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
   Cancel01Icon, Copy01Icon, Globe02Icon, CheckmarkCircle02Icon,
@@ -17,6 +17,12 @@ interface DnsSetupDialogProps {
 
 export function DnsSetupDialog({ domain, onClose, onRechecked }: DnsSetupDialogProps) {
   const [checking, setChecking] = useState(false)
+
+  useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
+  }, [])
 
   const handleCopy = async (text: string, label: string) => {
     try {
@@ -63,7 +69,7 @@ export function DnsSetupDialog({ domain, onClose, onRechecked }: DnsSetupDialogP
               </div>
               <h3 className="text-lg font-bold text-slate-900 mb-1">All set — you're live</h3>
               <p className="text-sm text-muted max-w-sm mx-auto">
-                <span className="font-mono text-xs bg-neutral-100 px-1.5 py-0.5 rounded">{domain.domain}</span>{' '}
+                <span className="font-mono text-xs bg-neutral-100 px-1.5 py-0.5 rounded">{record.trackingHost || domain.domain}</span>{' '}
                 is verified and pointed at VeriClick. Your tracking links are now running on your own domain.
               </p>
             </div>
@@ -75,9 +81,9 @@ export function DnsSetupDialog({ domain, onClose, onRechecked }: DnsSetupDialogP
                 </div>
                 <p className="text-xs text-slate-700 leading-relaxed">
                   One small change makes{' '}
-                  <span className="font-mono text-xs bg-white border border-neutral-200 px-1 rounded">{domain.domain}</span>{' '}
+                  <span className="font-mono text-xs bg-white border border-neutral-200 px-1 rounded">{record.trackingHost || domain.domain}</span>{' '}
                   work with VeriClick. After it, links like{' '}
-                  <span className="font-mono text-xs bg-white border border-neutral-200 px-1 rounded">{domain.domain}/r/&lt;slug&gt;</span>{' '}
+                  <span className="font-mono text-xs bg-white border border-neutral-200 px-1 rounded">{(record.trackingHost || domain.domain)}/r/&lt;slug&gt;</span>{' '}
                   use your own brand. Without this change, links still work — they just use the VeriClick URL instead.
                 </p>
               </div>

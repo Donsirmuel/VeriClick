@@ -125,15 +125,21 @@ class DomainRegistrySerializer(serializers.ModelSerializer):
         domain = (obj.domain or '').strip().lower().rstrip('.')
         labels = [part for part in domain.split('.') if part]
 
-        # Apex domains can't use a CNAME, so steer them at a subdomain instead.
+        # Apex domains (2 labels, e.g. example.com) can't use a CNAME, so their
+        # tracked links live on the standard `t.` subdomain instead (e.g.
+        # t.example.com). The user still registers the apex: no second domain
+        # entry, no ALIAS/A chase — just one CNAME whose Name is `t`.
         if len(labels) <= 2:
-            subdomain = f't.{domain}'
+            tracking = f't.{domain}'
             return {
                 'label': 'CNAME',
                 'host': 't',
                 'target': target,
-                'sentence': f'Register a subdomain instead: add {subdomain} in VeriClick, then add a CNAME record with Name "t" and the value on the right.',
-                'note': f'The root domain ({domain}) can\'t use a CNAME on most providers. Use a subdomain instead (e.g. {subdomain}) — add it in VeriClick, then the record above is exactly what to create.',
+                'trackingHost': tracking,
+                'sentence': 'Add a CNAME record with Name "t" and the value on the right.',
+                'note': (f'Your links run on a subdomain of this domain: {tracking}. '
+                         f'The root (apex) {domain} can\'t use a CNAME, so "t" quietly '
+                         f'points {tracking} to VeriClick. No other records change.'),
             }
 
         # Subdomain: host is the first label (e.g. "t" for t.example.com).
@@ -142,6 +148,7 @@ class DomainRegistrySerializer(serializers.ModelSerializer):
             'label': 'CNAME',
             'host': host,
             'target': target,
+            'trackingHost': domain,
             'sentence': f'Add a CNAME record with Name "{host}" and the value on the right.',
             'note': f'If the box asks for a full hostname, use {domain} instead of just "{host}".',
         }

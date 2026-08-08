@@ -761,6 +761,21 @@ class DomainsEndpointTests(APITestCase):
         self.assertEqual(body['dnsSetup']['label'], 'CNAME')
         self.assertEqual(body['dnsSetup']['host'], 't')
         self.assertIn('t.example.com', body['dnsSetup']['note'])
+        self.assertEqual(body['dnsSetup']['trackingHost'], 't.example.com')
+
+    def test_dns_setup_tracking_host_for_subdomain(self):
+        domain = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='track.example.com',
+        )
+        body = self.client.get(f'/api/domains/{domain.id}/').json()
+        self.assertEqual(body['dnsSetup']['trackingHost'], 'track.example.com')
+
+    def test_tracking_host_maps_apex_to_t_subdomain(self):
+        from vericlick.models import tracking_host
+        for apex in ['donlabs.site', 'example.co', 'example.com']:
+            self.assertEqual(tracking_host(apex), f't.{apex}')
+        self.assertEqual(tracking_host('track.example.com'), 'track.example.com')
+        self.assertEqual(tracking_host('t.sub.example.com'), 't.sub.example.com')
 
     def test_dns_setup_note_returned_for_apex(self):
         domain = DomainRegistry.objects.create(

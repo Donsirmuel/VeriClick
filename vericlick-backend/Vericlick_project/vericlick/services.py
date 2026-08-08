@@ -199,7 +199,12 @@ def get_public_tracking_url(link, request=None):
         and domain.health_status == DomainRegistry.HealthStatus.HEALTHY
         and domain.points_to_server
     ):
-        return f'https://{domain.domain}/r/{link.slug}/'
+        from .models import tracking_host
+
+        # Links on an apex (2-label) domain live on its `t.` subdomain, since
+        # root domains can't carry a CNAME.
+        host = tracking_host(domain.domain)
+        return f'https://{host}/r/{link.slug}/'
     if request is not None:
         return request.build_absolute_uri(f'/r/{link.slug}/')
     from django.conf import settings as django_settings
