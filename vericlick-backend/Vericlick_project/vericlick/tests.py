@@ -965,6 +965,48 @@ class TlsAllowedTests(APITestCase):
 
 # IP Rules
 
+class RegisteredDomainHostMiddlewareTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='hostmw_user')
+        self.workspace = Workspace.objects.get(owner=self.user)
+
+    def test_tracking_host_of_apex_domain_is_allowed(self):
+        # https://t.example.com/r/<slug>/ arrives with Host t.example.com.
+        # Even though only the apex example.com is registered, the middleware
+        # must let the tracking subdomain hostname through (otherwise Django
+        # answers 400 DisallowedHost before the view runs).
+        DomainRegistry.objects.create(
+            workspace=self.workspace, domain='example.com', verified=True,
+        )
+        res = self.client.get(
+            '/api/internal/tls-allowed/',
+            {'domain': 't.example.com'},
+            HTTP_HOST='t.example.com',
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+
+    def test_registered_subdomain_host_is_allowed(self):
+        # A 3+-label domain keeps its own name (no tracking subdomain), so the
+        # Host already equals the registered domain.
+        DomainRegistry.objects.create(
+            workspace=self.workspace, domain='links.example.com', verified=True,
+        )
+        res = self.client.get(
+            '/api/internal/tls-allowed/',
+            {'domain': 'links.example.com'},
+            HTTP_HOST='links.example.com',
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+
+    def test_unregistered_host_is_rejected(self):
+        res = self.client.get(
+            '/api/internal/tls-allowed/',
+            {'domain': 't.unknown-domain.io'},
+            HTTP_HOST='t.unknown-domain.io',
+        )
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+
 class IPRuleModelTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username='iprule_user')
