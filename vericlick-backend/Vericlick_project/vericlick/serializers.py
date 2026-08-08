@@ -90,20 +90,64 @@ class RegisterSerializer(serializers.ModelSerializer):
 class DomainRegistrySerializer(serializers.ModelSerializer):
     links_count = serializers.SerializerMethodField()
     verification_record = serializers.CharField(read_only=True)
+    # Readiness = verified ownership AND resolving to our server. Cheap and
+    # always current because points_to_server is refreshed by run_health_check.
+    ready = serializers.SerializerMethodField()
+    # Plain-language guidance for the DNS step that makes a domain really
+    # serve tracking: what to add (A vs CNAME) and to what value. This is the
+    # exact record a user must create at their DNS provider after verifying
+    # ownership, and is derived from TRACKING_SERVER_IP / PUBLIC_TRACKING_BASE_URL.
+    dns_setup = serializers.SerializerMethodField()
 
     class Meta:
         model = DomainRegistry
         fields = [
-            'id', 'domain', 'health_status', 'verified', 'verification_token',
-            'verification_record', 'last_checked', 'links_count', 'created_at',
+            'id', 'domain', 'health_status', 'verified', 'points_to_server',
+            'verification_token', 'verification_record', 'last_checked',
+            'links_count', 'ready', 'dns_setup', 'created_at',
         ]
         read_only_fields = [
-            'id', 'health_status', 'verified', 'verification_token',
-            'verification_record', 'last_checked', 'links_count', 'created_at',
+            'id', 'health_status', 'verified', 'points_to_server',
+            'verification_token', 'verification_record', 'last_checked',
+            'links_count', 'ready', 'dns_setup', 'created_at',
         ]
+
+    def get_dns_setup(self, obj):
+        from django.conf import settings as django_settings
+
+        server_ip = getattr(django_settings, 'TRACKING_SERVER_IP', '').strip()
+        base = getattr(django_settings, 'PUBLIC_TRACKING_BASE_URL', '').strip().rstrip('/')
+        target = '/'.join(base.split('://')[-1].split('/')[:1]) if base else ''
+        if server_ip:
+            return {
+                'label': 'A record',
+                'host': '@',
+                'target': server_ip,
+                'sentence': 'Your domain forwards to our servers.',
+            }
+        if target:
+            return {
+                'label': 'CNAME',
+                'host': '@',
+                'target': target,
+                'sentence': 'Your domain points to our servers via this alias.',
+            }
+        return {
+            'label': 'A',
+            'host': '@',
+            'target': '',
+            'sentence': 'Point this domain at our servers to start routing clicks.',
+        }
 
     def get_links_count(self, obj):
         return obj.links.count()
+
+    def get_ready(self, obj):
+        return bool(
+            obj.verified
+            and obj.points_to_server
+            and obj.health_status == DomainRegistry.HealthStatus.HEALTHY
+        )
 
     def validate_domain(self, value):
         value = (value or '').strip().lower()
@@ -120,6 +164,10 @@ class TrackingLinkSerializer(serializers.ModelSerializer):
     domain_health = serializers.CharField(
         source='domain.health_status', read_only=True, default=None
     )
+    # Explains why a tracked link is (or isn't) running on its custom domain.
+    # tracking_domain_ready = True when the link's domain is verified, healthy
+    # and points at this server so the branded URL is live.
+    tracking_domain_ready = serializers.SerializerMethodField()
     domain = serializers.SlugRelatedField(
         slug_field='domain', queryset=DomainRegistry.objects.all(), allow_null=True, required=False,
     )
@@ -131,13 +179,23 @@ class TrackingLinkSerializer(serializers.ModelSerializer):
         model = TrackingLink
         fields = [
             'id', 'slug', 'destination_url', 'domain', 'domain_health',
-            'tracking_url', 'total_clicks', 'bot_clicks', 'human_clicks', 'status',
-            'created_at', 'updated_at',
+            'tracking_domain_ready', 'tracking_url', 'total_clicks', 'bot_clicks',
+            'human_clicks', 'status', 'created_at', 'updated_at',
         ]
         read_only_fields = [
             'id', 'tracking_url', 'total_clicks', 'bot_clicks', 'human_clicks',
             'created_at', 'updated_at',
         ]
+
+    def get_tracking_domain_ready(self, obj):
+        domain = obj.domain
+        if not domain:
+            return None
+        return bool(
+            domain.verified
+            and domain.points_to_server
+            and domain.health_status == DomainRegistry.HealthStatus.HEALTHY
+        )
 
     def get_tracking_url(self, obj):
         from .services import get_public_tracking_url

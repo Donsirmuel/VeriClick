@@ -181,16 +181,25 @@ def get_safe_destination(workspace, request=None):
 
 def get_public_tracking_url(link, request=None):
     # Single source of truth for the shareable tracked URL. A link on a custom
-    # domain resolves to https://<domain>/r/<slug>/ only when that domain is
-    # currently healthy. If the domain is not yet live, the app falls back to
-    # the current request host or a configured public tracking base so copied
-    # links never point at a dead domain.
+    # domain resolves to https://<domain>/r/<slug>/ only when the domain is
+    # actually serving tracked traffic for us — which requires BOTH:
+    #   1. the domain owner proved control (verified, TXT record), and
+    #   2. the domain points at this server (points_to_server — its DNS
+    #      resolves to our IP, not just *some* IP like the customer's old web
+    #      host), and
+    #   3. the domain resolves (health_status healthy).
+    # Otherwise the app falls back to the current request host or the
+    # configured public tracking base so copied links never point at a dead
+    # domain.
+    domain = link.domain
     if (
-        link.domain
-        and link.domain.domain
-        and link.domain.health_status == DomainRegistry.HealthStatus.HEALTHY
+        domain
+        and domain.domain
+        and domain.verified
+        and domain.health_status == DomainRegistry.HealthStatus.HEALTHY
+        and domain.points_to_server
     ):
-        return f'https://{link.domain.domain}/r/{link.slug}/'
+        return f'https://{domain.domain}/r/{link.slug}/'
     if request is not None:
         return request.build_absolute_uri(f'/r/{link.slug}/')
     from django.conf import settings as django_settings

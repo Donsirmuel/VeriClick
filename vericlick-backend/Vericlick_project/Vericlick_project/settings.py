@@ -213,6 +213,12 @@ CSRF_TRUSTED_ORIGINS = config('CSRF_TRUSTED_ORIGINS', default='', cast=Csv())
 
 PUBLIC_TRACKING_BASE_URL = _env_str('PUBLIC_TRACKING_BASE_URL').rstrip('/')
 
+# Optional override for the public IP Caddy listens on, used to decide whether a
+# customer domain is actually pointed at this server (not just resolving
+# somewhere else). When blank, the backend resolves PUBLIC_TRACKING_BASE_URL and
+# uses its addresses instead.
+TRACKING_SERVER_IP = _env_str('TRACKING_SERVER_IP')
+
 # Where /suspicious/ sends suspicious/automated traffic that has no per-workspace
 # safe_destination. (Just a Google bounce by default, not an in-house page.)
 

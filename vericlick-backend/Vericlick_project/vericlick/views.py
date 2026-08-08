@@ -614,7 +614,12 @@ class DomainRegistryViewSet(viewsets.ModelViewSet):
     def recheck(self, request, pk=None):
         domain = self.get_object()
         domain.run_health_check()
-        return Response({'status': 'ok', 'health_status': domain.health_status, 'last_checked': domain.last_checked})
+        return Response({
+            'status': 'ok',
+            'health_status': domain.health_status,
+            'points_to_server': domain.points_to_server,
+            'last_checked': domain.last_checked,
+        })
 
     @action(detail=True, methods=['post'])
     def verify(self, request, pk=None):
@@ -630,6 +635,7 @@ class DomainRegistryViewSet(viewsets.ModelViewSet):
             return Response({
                 'status': 'ok',
                 'verified': True,
+                'points_to_server': domain.points_to_server,
                 'verificationRecord': domain.verification_record,
             })
         return Response(

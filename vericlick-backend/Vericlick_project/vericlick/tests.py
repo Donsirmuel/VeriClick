@@ -520,6 +520,7 @@ class LinksEndpointTests(APITestCase):
     def test_tracking_url_uses_custom_domain(self):
         domain = DomainRegistry.objects.create(
             workspace=self.workspace, domain='link.example.com',
+            verified=True, points_to_server=True,
         )
         link = TrackingLink.objects.create(
             workspace=self.workspace, domain=domain,
@@ -527,6 +528,30 @@ class LinksEndpointTests(APITestCase):
         )
         res = self.client.get(f'/api/links/{link.id}/')
         self.assertEqual(res.json()['trackingUrl'], 'https://link.example.com/r/dom-url/')
+
+    def test_tracking_url_uses_custom_domain_only_when_verified(self):
+        domain = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='link.example.com',
+            verified=False, points_to_server=True,
+        )
+        link = TrackingLink.objects.create(
+            workspace=self.workspace, domain=domain,
+            slug='unverified-url', destination_url='https://example.com',
+        )
+        res = self.client.get(f'/api/links/{link.id}/')
+        self.assertEqual(res.json()['trackingUrl'], 'http://testserver/r/unverified-url/')
+
+    def test_tracking_url_uses_custom_domain_only_when_pointing_at_server(self):
+        domain = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='link.example.com',
+            verified=True, points_to_server=False,
+        )
+        link = TrackingLink.objects.create(
+            workspace=self.workspace, domain=domain,
+            slug='not-pointing-url', destination_url='https://example.com',
+        )
+        res = self.client.get(f'/api/links/{link.id}/')
+        self.assertEqual(res.json()['trackingUrl'], 'http://testserver/r/not-pointing-url/')
 
     def test_tracking_url_falls_back_when_domain_is_not_healthy(self):
         domain = DomainRegistry.objects.create(
@@ -617,8 +642,42 @@ class DomainsEndpointTests(APITestCase):
         body = res.json()
         self.assertEqual(body['status'], 'ok')
         self.assertIsNotNone(body['lastChecked'])
+        self.assertIn(body['pointsToServer'], [True, False])
         domain.refresh_from_db()
         self.assertIsNotNone(domain.last_checked)
+
+    def test_ready_is_true_only_when_verified_and_pointing_at_server(self):
+        domain = DomainRegistry.objects.create(
+            workspace=self.workspace,
+            domain='ready.example.com',
+            verified=True,
+            points_to_server=True,
+            health_status=DomainRegistry.HealthStatus.HEALTHY,
+        )
+        res = self.client.get(f'/api/domains/{domain.id}/')
+        self.assertTrue(res.json()['ready'])
+
+        domain2 = DomainRegistry.objects.create(
+            workspace=self.workspace,
+            domain='unready.example.com',
+            verified=True,
+            points_to_server=False,
+            health_status=DomainRegistry.HealthStatus.HEALTHY,
+        )
+        res2 = self.client.get(f'/api/domains/{domain2.id}/')
+        self.assertFalse(res2.json()['ready'])
+        self.assertFalse(res2.json()['pointsToServer'])
+
+    def test_dns_setup_guidance_returned(self):
+        domain = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='setup.example.com',
+        )
+        res = self.client.get(f'/api/domains/{domain.id}/')
+        body = res.json()
+        self.assertIn('dnsSetup', body)
+        self.assertIn('label', body['dnsSetup'])
+        self.assertIn('host', body['dnsSetup'])
+        self.assertIn('target', body['dnsSetup'])
 
     def test_recheck_not_found(self):
         res = self.client.post(f'/api/domains/{uuid.uuid4()}/recheck/')

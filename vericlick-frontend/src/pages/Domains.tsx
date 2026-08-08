@@ -2,10 +2,11 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { Globe02Icon, PlusSignIcon, RefreshIcon, Search01Icon, Edit01Icon, Cancel01Icon, Clock03Icon, LinkSquare02Icon } from '@hugeicons/core-free-icons'
+import { Globe02Icon, PlusSignIcon, RefreshIcon, Search01Icon, Edit01Icon, Cancel01Icon, Clock03Icon, LinkSquare02Icon, CheckmarkCircle02Icon } from '@hugeicons/core-free-icons'
 import toast from 'react-hot-toast'
 import { AddDomainDialog } from '@/components/domains/AddDomainDialog'
 import { VerifyDomainDialog } from '@/components/domains/VerifyDomainDialog'
+import { DnsSetupDialog } from '@/components/domains/DnsSetupDialog'
 import { fetchDomains, createDomain, updateDomain, deleteDomain, recheckDomain } from '@/api/domains'
 import { fetchWorkspace } from '@/api/workspace'
 import { formatRelativeTime } from '@/lib/utils'
@@ -33,6 +34,24 @@ function healthBadge(status: string) {
   )
 }
 
+function readyBadge() {
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full bg-success/10 text-success">
+      <HugeiconsIcon icon={CheckmarkCircle02Icon} className="w-3.5 h-3.5" />
+      Ready to serve links
+    </span>
+  )
+}
+
+function needsDnsBadge() {
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full bg-warning/10 text-warning">
+      <span className="w-1.5 h-1.5 rounded-full bg-warning" />
+      Needs DNS setup
+    </span>
+  )
+}
+
 export default function DomainsPage() {
   const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
@@ -42,6 +61,7 @@ export default function DomainsPage() {
   const [editTarget, setEditTarget] = useState<{ id: string; domain: string } | null>(null)
   const [editValue, setEditValue] = useState('')
   const [verifyTarget, setVerifyTarget] = useState<Domain | null>(null)
+  const [dnsSetupTarget, setDnsSetupTarget] = useState<Domain | null>(null)
 
   const { data: domains = [], isLoading } = useQuery({
     queryKey: ['domains'],
@@ -101,6 +121,10 @@ export default function DomainsPage() {
   const filteredDomains = domains.filter(d =>
     d.domain.toLowerCase().includes(search.toLowerCase())
   )
+
+  // Verified + resolving to our server = fully ready for branded links.
+  // Verified but NOT pointing at us = ownership done, DNS step still needed.
+  const needsDnsStepDomains = domains.filter(d => d.verified && !d.ready)
 
   const handleStartEdit = (id: string, domain: string) => {
     setEditTarget({ id, domain })
@@ -174,6 +198,36 @@ export default function DomainsPage() {
         />
       </div>
 
+      {needsDnsStepDomains.length > 0 && (
+        <div className="mb-6">
+          <div className="flex items-center justify-between gap-3 flex-wrap rounded-2xl border border-warning/30 bg-warning/10 p-4">
+            <div className="flex items-start gap-3 min-w-0">
+              <div className="mt-0.5 shrink-0">
+                <HugeiconsIcon icon={Globe02Icon} className="w-5 h-5 text-warning" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-sm font-bold text-slate-900">
+                  {needsDnsStepDomains.length === 1
+                    ? 'Your domain is verified — one more quick step'
+                    : `${needsDnsStepDomains.length} of your domains need one more quick step`}
+                </h3>
+                <p className="text-sm text-slate-600 leading-relaxed mt-0.5">
+                  Ownership is confirmed, but {needsDnsStepDomains.length === 1 ? `your domain` : 'these domains'} don't
+                  point at VeriClick yet. Tracking links share the VeriClick URL until they do. Add one small DNS record
+                  to unlock your branded links.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setDnsSetupTarget(needsDnsStepDomains[0])}
+              className="shrink-0 bg-black hover:bg-neutral-800 text-white px-4 py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm"
+            >
+              Show DNS setup
+            </button>
+          </div>
+        </div>
+      )}
+
       {isLoading ? (
         <TableSkeleton rows={6} columns={5} />
       ) : domains.length === 0 ? (
@@ -203,7 +257,7 @@ export default function DomainsPage() {
                 <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">
                   <span className="flex items-center gap-1.5">
                     Status
-                    <HelpTooltip text="Status shows whether the domain resolves (Healthy/Degraded/Blacklisted). Verified is separate: it proves you own the domain by adding a TXT record. A domain must resolve AND be verified before it is fully trusted." />
+                    <HelpTooltip text="A domain is fully ready only when BOTH of its two steps are done: (1) Verified — you proved ownership by adding a TXT record; and (2) DNS points at VeriClick — you added the record we show you so the domain reaches our servers. 'Deferred' just means it hasn't been re-checked yet." />
                   </span>
                 </th>
                 <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Last Checked</th>
@@ -253,7 +307,30 @@ export default function DomainsPage() {
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    {healthBadge(domain.healthStatus)}
+                    <div className="flex flex-col items-start gap-2">
+                      {domain.ready ? (
+                        readyBadge()
+                      ) : domain.verified ? (
+                        <>
+                          {needsDnsBadge()}
+                          <button
+                            onClick={() => setDnsSetupTarget(domain)}
+                            className="text-xs font-bold text-slate-700 underline decoration-neutral-300 hover:decoration-black underline-offset-2 transition-colors"
+                          >
+                            Add DNS record →
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          {healthBadge(domain.healthStatus)}
+                          <span className="text-xs font-bold text-warning">
+                            {domain.healthStatus === 'degraded'
+                              ? 'Not resolving'
+                              : 'Verify ownership first'}
+                          </span>
+                        </>
+                      )}
+                    </div>
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2 text-sm text-muted">
@@ -313,6 +390,18 @@ export default function DomainsPage() {
           domain={verifyTarget}
           onClose={() => setVerifyTarget(null)}
           onVerified={handleVerified}
+          onRequestDnsSetup={(d) => setDnsSetupTarget(d)}
+        />
+      )}
+
+      {dnsSetupTarget && (
+        <DnsSetupDialog
+          domain={dnsSetupTarget}
+          onClose={() => setDnsSetupTarget(null)}
+          onRechecked={() => {
+            queryClient.invalidateQueries({ queryKey: ['domains'] })
+            queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
+          }}
         />
       )}
 

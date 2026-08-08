@@ -13,9 +13,10 @@ interface VerifyDomainDialogProps {
   domain: Domain
   onClose: () => void
   onVerified: () => void
+  onRequestDnsSetup?: (domain: Domain) => void
 }
 
-export function VerifyDomainDialog({ domain, onClose, onVerified }: VerifyDomainDialogProps) {
+export function VerifyDomainDialog({ domain, onClose, onVerified, onRequestDnsSetup }: VerifyDomainDialogProps) {
   const [checking, setChecking] = useState(false)
   const [verified, setVerified] = useState(false)
 
@@ -55,21 +56,61 @@ export function VerifyDomainDialog({ domain, onClose, onVerified }: VerifyDomain
 
         <div className="p-6 space-y-6">
           {verified ? (
-            <div className="text-center py-6">
-              <div className="w-14 h-14 bg-success/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                <HugeiconsIcon icon={CheckmarkCircle02Icon} className="w-7 h-7 text-success" />
+            <div className="py-4 space-y-6">
+              <div className="text-center">
+                <div className="w-14 h-14 bg-success/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                  <HugeiconsIcon icon={CheckmarkCircle02Icon} className="w-7 h-7 text-success" />
+                </div>
+                <h3 className="text-lg font-bold text-slate-900 mb-1">Ownership confirmed</h3>
+                <p className="text-sm text-muted max-w-sm mx-auto">
+                  <span className="font-mono text-xs bg-neutral-100 px-1.5 py-0.5 rounded">{domain.domain}</span>{' '}
+                  is verified — you control it. That's the first of two steps.
+                </p>
               </div>
-              <h3 className="text-lg font-bold text-slate-900 mb-1">Ownership confirmed</h3>
-              <p className="text-sm text-muted max-w-sm mx-auto">
-                <span className="font-mono text-xs bg-neutral-100 px-1.5 py-0.5 rounded">{domain.domain}</span>{' '}
-                is verified. Tracked links on this domain are treated as fully trusted.
-              </p>
-              <button
-                onClick={onClose}
-                className="mt-6 bg-black hover:bg-neutral-800 text-white px-6 py-2.5 rounded-xl text-sm font-bold transition-all"
-              >
-                Done
-              </button>
+
+              <div className="p-4 rounded-xl border border-neutral-200 space-y-3">
+                <h4 className="text-sm font-bold text-slate-900">What's next</h4>
+{domain.pointsToServer ? (
+                  <div className="flex items-start gap-3">
+                    <div className="w-6 h-6 rounded-full bg-success/10 flex items-center justify-center shrink-0">
+                      <HugeiconsIcon icon={CheckmarkCircle02Icon} className="w-4 h-4 text-success" />
+                    </div>
+                    <p className="text-sm text-slate-700 leading-relaxed">
+                      Your domain already points at VeriClick. Tracked links on{' '}
+                      <span className="font-mono text-xs bg-neutral-100 px-1 rounded">{domain.domain}</span> are
+                      now branded. Copy your tracking link from the Links page and start sharing.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex items-start gap-3">
+                    <div className="w-6 h-6 rounded-full bg-warning/10 flex items-center justify-center shrink-0">
+                      <span className="w-1.5 h-1.5 rounded-full bg-warning" />
+                    </div>
+                    <p className="text-sm text-slate-700 leading-relaxed">
+                      Your links will use the VeriClick URL until you point{' '}
+                      <span className="font-mono text-xs bg-neutral-100 px-1 rounded">{domain.domain}</span>{' '}
+                      at our servers. One small DNS record to add — we'll walk you through it.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center justify-end gap-3">
+                {onRequestDnsSetup && (
+                  <button
+                    onClick={() => { if (onRequestDnsSetup) { onRequestDnsSetup(domain); onClose() } }}
+                    className="bg-black hover:bg-neutral-800 text-white px-6 py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm"
+                  >
+                    Set up DNS next
+                  </button>
+                )}
+                <button
+                  onClick={onClose}
+                  className="px-4 py-2.5 text-sm font-bold text-muted hover:text-slate-900 transition-colors"
+                >
+                  Done
+                </button>
+              </div>
             </div>
           ) : (
             <>

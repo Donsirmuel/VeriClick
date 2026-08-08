@@ -2,11 +2,64 @@ import uuid
 import secrets
 import string
 import socket
+import re
 from django.db import models
 from django.contrib.auth.models import User
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.utils.timezone import now
+
+
+def _resolve_addresses(host):
+    # Best-effort DNS resolution returning a set of IP strings for a host.
+    # Uses dnspython when available (same dependency as TXT ownership checks);
+    # follows CNAMEs automatically when querying A/AAAA records.
+    addrs = set()
+    try:
+        import dns.resolver
+        for record_type in ('A', 'AAAA'):
+            try:
+                answers = dns.resolver.resolve(host, record_type, lifetime=5)
+                addrs |= {r.address for r in answers}
+            except Exception:
+                continue
+    except ImportError:
+        try:
+            for info in socket.getaddrinfo(host, None):
+                addrs.add(info[4][0])
+        except Exception:
+            return set()
+    return addrs
+
+
+def _target_addresses():
+    # The addresses we expect a customer tracking domain to resolve to. Prefers
+    # an explicit TRACKING_SERVER_IP; otherwise resolves PUBLIC_TRACKING_BASE_URL
+    # (e.g. vendora.pager) — the same host Caddy serves.
+    from django.conf import settings as django_settings
+    configured = getattr(django_settings, 'TRACKING_SERVER_IP', '').strip()
+    if configured:
+        return {configured}
+    base = getattr(django_settings, 'PUBLIC_TRACKING_BASE_URL', '').strip().rstrip('/')
+    host = re.sub(r'^https?://', '', base).split('/')[0].strip()
+    if not host:
+        return {'127.0.0.1'}
+    return _resolve_addresses(host)
+
+
+def domain_points_to_this_server(domain):
+    """True when `domain`'s DNS points at this server (an A/CNAME record that
+    resolves to our IPs). This is stricter than "resolves somewhere" and is the
+    state that must hold before tracked links can live on the custom domain."""
+    if not domain:
+        return False
+    domain = domain.strip().rstrip('.')
+    if not domain:
+        return False
+    target = _target_addresses()
+    if not target:
+        return False
+    return bool(_resolve_addresses(domain) & target)
 
 
 class Workspace(models.Model):
@@ -75,6 +128,15 @@ class DomainRegistry(models.Model):
             'confirms the domain resolves.'
         ),
     )
+    points_to_server = models.BooleanField(
+        default=False,
+        help_text=(
+            'True when the domain does more than resolve — its DNS points at '
+            'this server (A/CNAME to the VeriClick IP). A domain must resolve, '
+            'be verified, and point at the server before tracking links can '
+            'live on it.'
+        ),
+    )
     verification_token = models.CharField(
         max_length=64, default=uuid.uuid4, editable=False,
         help_text='Random token used to prove DNS ownership via a TXT record.',
@@ -97,17 +159,27 @@ class DomainRegistry(models.Model):
         return f'vericlick-verify={self.verification_token}'
 
     def run_health_check(self):
-        # Only confirms the domain resolves. Ownership verification is a
-        # separate step (DNS TXT record) so "resolves" and "verified" are
-        # never conflated in the UX.
+        # Two independent signals, both required before links can live on the
+        # custom domain:
+        #   1. health_status: the domain resolves at all (legacy semantics).
+        #   2. points_to_server: it resolves to *this* server — verified via DNS
+        #      (A/CNAME chain, or a configured TRACKING_SERVER_IP fallback). A
+        #      domain that resolves to some other host (e.g. the customer's old
+        #      web host) is NOT in a state to serve our tracked URLs.
+        # Ownership verification (TXT) remains a separate step ("verified").
         try:
             socket.getaddrinfo(self.domain, 80, proto=socket.IPPROTO_TCP)
             self.health_status = self.HealthStatus.HEALTHY
         except Exception:
             self.health_status = self.HealthStatus.DEGRADED
+        try:
+            self.points_to_server = domain_points_to_this_server(self.domain)
+        except Exception:
+            # Never let a DNS lookup failure break the health-check request.
+            self.points_to_server = False
         finally:
             self.last_checked = now()
-            self.save(update_fields=['health_status', 'last_checked'])
+            self.save(update_fields=['health_status', 'points_to_server', 'last_checked'])
 
 
 class TrackingLink(models.Model):

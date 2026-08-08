@@ -25,12 +25,22 @@ export async function deleteDomain(id: string): Promise<void> {
   await apiClient.delete(`/domains/${id}/`)
 }
 
-export async function recheckDomain(id: string): Promise<{ status: string; lastChecked: string }> {
-  const { data } = await apiClient.post<{ status: string; lastChecked: string }>(`/domains/${id}/recheck/`)
-  return data
+export async function recheckDomain(id: string): Promise<{ status: string; healthStatus: string; pointsToServer: boolean; lastChecked: string }> {
+  const { data } = await apiClient.post<{ status: string; healthStatus: string; pointsToServer: boolean; lastChecked: string }>(`/domains/${id}/recheck/`)
+  return {
+    status: data.status,
+    healthStatus: data.healthStatus,
+    pointsToServer: data.pointsToServer,
+    lastChecked: data.lastChecked,
+  }
 }
 
-export async function verifyDomain(id: string): Promise<{ status: string; verified: boolean; verificationRecord: string }> {
-  const { data } = await apiClient.post<{ status: string; verified: boolean; verificationRecord: string }>(`/domains/${id}/verify/`)
-  return data
+export async function verifyDomain(id: string): Promise<{ status: string; verified: boolean; pointsToServer: boolean; verificationRecord: string }> {
+  const { data } = await apiClient.post<{ status: string; verified: boolean; pointsToServer: boolean; verificationRecord: string }>(`/domains/${id}/verify/`)
+  return {
+    status: data.status,
+    verified: data.verified,
+    pointsToServer: data.pointsToServer,
+    verificationRecord: data.verificationRecord,
+  }
 }

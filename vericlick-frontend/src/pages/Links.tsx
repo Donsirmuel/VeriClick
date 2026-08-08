@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
@@ -158,12 +159,30 @@ export default function LinksPage() {
             <tbody>
               {links.map((link) => {
                 const humanClicks = link.humanClicks ?? Math.max((link.totalClicks ?? 0) - (link.botClicks ?? 0), 0)
+                const domainPending = Boolean(link.domain) && link.trackingDomainReady === false
 
                 return (
                 <tr key={link.id} className="border-b border-neutral-100 hover:bg-neutral-50/50 transition-colors">
                   <td className="px-6 py-4">
-                    <span className="font-mono font-bold text-sm">{link.slug}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-bold text-sm">{link.slug}</span>
+                      {domainPending && (
+                        <Link
+                          to="/app/domains"
+                          className="inline-flex items-center gap-1 text-[10px] font-bold text-warning bg-warning/10 hover:bg-warning/20 px-2 py-0.5 rounded-full transition-colors"
+                          title="This link is using the VeriClick URL because your domain isn't pointing at our servers yet. Set it up in Domains."
+                        >
+                          <span className="w-1 h-1 rounded-full bg-warning" />
+                          Domain DNS pending
+                        </Link>
+                      )}
+                    </div>
                     <span className="mt-0.5 block max-w-[320px] truncate text-xs text-muted" title={link.trackingUrl}>{link.trackingUrl}</span>
+                    {domainPending && (
+                      <Link to="/app/domains" className="mt-1 block text-xs font-bold text-slate-700 underline decoration-neutral-300 hover:decoration-black underline-offset-2 transition-colors">
+                        Add DNS record to use {link.domain} →
+                      </Link>
+                    )}
                   </td>
                   <td className="px-6 py-4">
                     <span className="block max-w-[320px] truncate text-sm text-muted" title={link.destinationUrl}>{link.destinationUrl}</span>

@@ -42,6 +42,7 @@ export interface TrackingLink {
   destinationUrl: string
   domain: string | null
   domainHealth: HealthStatus | null
+  trackingDomainReady: boolean | null
   trackingUrl: string
   totalClicks: number
   botClicks: number
@@ -62,10 +63,18 @@ export interface Domain {
   domain: string
   healthStatus: HealthStatus
   verified: boolean
+  pointsToServer: boolean
   verificationToken: string
   verificationRecord: string
   lastChecked: string | null
   linksCount: number
+  ready: boolean
+  dnsSetup: {
+    label: string
+    host: string
+    target: string
+    sentence: string
+  }
   createdAt: string
 }
 
