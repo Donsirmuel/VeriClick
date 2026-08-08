@@ -2,7 +2,7 @@ import json
 import uuid
 from datetime import timedelta
 from unittest.mock import patch
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.contrib.auth.models import User
 from django.utils import timezone
 from rest_framework.test import APITestCase, APIClient
@@ -931,6 +931,23 @@ class TlsAllowedTests(APITestCase):
         res = self.client.get(
             '/api/internal/tls-allowed/',
             {'domain': 't.example.com'},
+            HTTP_HOST='backend',
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+
+    @override_settings(
+        SECURE_SSL_REDIRECT=True,
+        SECURE_REDIRECT_EXEMPT=[r'^api/internal/'],
+    )
+    def test_ssl_redirect_does_not_apply_to_internal_probe(self):
+        # In production SECURE_SSL_REDIRECT is on. Caddy's TLS probe comes in
+        # over plain HTTP and refuses to follow redirects, so the internal
+        # endpoints must be exempt from the https 302.
+        self.domain.verified = True
+        self.domain.save(update_fields=['verified'])
+        res = self.client.get(
+            '/api/internal/tls-allowed/',
+            {'domain': self.domain.domain},
             HTTP_HOST='backend',
         )
         self.assertEqual(res.status_code, status.HTTP_200_OK)

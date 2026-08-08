@@ -193,6 +193,12 @@ LOGGING = {
 
 if not DEBUG:
     SECURE_SSL_REDIRECT = True
+    # Caddy's on-demand TLS probe calls http://backend:8000/api/internal/* over
+    # plain HTTP from inside the docker network. With SECURE_SSL_REDIRECT on,
+    # Django would 302 that probe to https://... and Caddy (which refuses to
+    # follow redirects when asking for on-demand permission) would fail to get a
+    # 200, so no certificate gets minted. Keep these internal endpoints HTTP.
+    SECURE_REDIRECT_EXEMPT = [r'^api/internal/']
     SECURE_HSTS_SECONDS = 31536000
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
