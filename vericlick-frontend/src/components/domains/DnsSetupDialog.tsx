@@ -84,19 +84,19 @@ export function DnsSetupDialog({ domain, onClose, onRechecked }: DnsSetupDialogP
 
               <div className="space-y-2">
                 <label className="text-sm font-medium text-slate-700 ml-1">The record to add</label>
-                <div className="overflow-hidden rounded-xl border border-neutral-200">
-                  <table className="w-full text-sm">
+                <div className="rounded-xl border border-neutral-200">
+                  <table className="w-full text-sm table-fixed">
                     <tbody>
                       <tr className="border-b border-neutral-200">
                         <th className="text-left text-xs font-bold text-muted uppercase tracking-wider bg-neutral-50 px-4 py-2.5 w-24">Type</th>
-                        <td className="px-4 py-2.5 font-mono text-xs">{record.label}</td>
+                        <td className="px-4 py-2.5 font-mono text-xs truncate">{record.label}</td>
                       </tr>
                       <tr className="border-b border-neutral-200">
                         <th className="text-left text-xs font-bold text-muted uppercase tracking-wider bg-neutral-50 px-4 py-2.5 w-24">Name</th>
                         <td className="px-4 py-2.5">
                           <div className="flex items-center gap-2">
                             <span className="font-mono text-xs whitespace-nowrap overflow-x-auto min-w-0 flex-1">{record.host === '@' ? `${record.host} (@)` : record.host}</span>
-                            <button onClick={() => handleCopy(record.host, 'Host')} className="p-1.5 rounded-lg hover:bg-neutral-100 transition-colors" title="Copy name">
+                            <button onClick={() => handleCopy(record.host, 'Host')} className="p-1.5 rounded-lg hover:bg-neutral-100 transition-colors shrink-0" title="Copy name">
                               <HugeiconsIcon icon={Copy01Icon} className="w-4 h-4 text-muted" />
                             </button>
                           </div>
@@ -104,13 +104,13 @@ export function DnsSetupDialog({ domain, onClose, onRechecked }: DnsSetupDialogP
                       </tr>
                       <tr className="border-b border-neutral-200">
                         <th className="text-left text-xs font-bold text-muted uppercase tracking-wider bg-neutral-50 px-4 py-2.5 w-24">TTL</th>
-                        <td className="px-4 py-2.5 font-mono text-xs">{'300 (or default)'}</td>
+                        <td className="px-4 py-2.5 font-mono text-xs truncate">{'300 (or default)'}</td>
                       </tr>
                       <tr>
                         <th className="text-left text-xs font-bold text-muted uppercase tracking-wider bg-neutral-50 px-4 py-2.5 w-24 align-top">Value</th>
                         <td className="px-4 py-2.5">
                           <div className="flex items-center gap-2">
-                            <div className="flex-1 min-w-0 bg-neutral-900 text-neutral-100 text-xs font-mono px-3 py-2.5 rounded-lg overflow-x-auto whitespace-nowrap">{record.target}</div>
+                            <div className="flex-1 min-w-0 bg-neutral-900 text-neutral-100 text-xs font-mono px-3 py-2.5 rounded-lg break-all">{record.target}</div>
                             <button
                               onClick={() => handleCopy(record.target, 'Value')}
                               className="p-2.5 bg-black hover:bg-neutral-800 text-white rounded-lg transition-colors shrink-0"

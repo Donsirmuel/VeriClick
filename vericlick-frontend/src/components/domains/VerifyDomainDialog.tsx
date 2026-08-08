@@ -129,26 +129,26 @@ export function VerifyDomainDialog({ domain, onClose, onVerified, onRequestDnsSe
 
               <div className="space-y-2">
                 <label className="text-sm font-medium text-slate-700 ml-1">The text record (TXT) to add</label>
-                <div className="overflow-hidden rounded-xl border border-neutral-200">
-                  <table className="w-full text-sm">
+                <div className="rounded-xl border border-neutral-200">
+                  <table className="w-full text-sm table-fixed">
                     <tbody>
                       <tr className="border-b border-neutral-200">
                         <th className="text-left text-xs font-bold text-muted uppercase tracking-wider bg-neutral-50 px-4 py-2.5 w-24">Type</th>
-                        <td className="px-4 py-2.5 font-mono text-xs">{'TXT'}</td>
+                        <td className="px-4 py-2.5 font-mono text-xs truncate">{'TXT'}</td>
                       </tr>
                       <tr className="border-b border-neutral-200">
                         <th className="text-left text-xs font-bold text-muted uppercase tracking-wider bg-neutral-50 px-4 py-2.5 w-24">Name</th>
-                        <td className="px-4 py-2.5 font-mono text-xs whitespace-nowrap overflow-x-auto">{'@'}</td>
+                        <td className="px-4 py-2.5 font-mono text-xs whitespace-nowrap overflow-x-auto min-w-0">{'@'}</td>
                       </tr>
                       <tr className="border-b border-neutral-200">
                         <th className="text-left text-xs font-bold text-muted uppercase tracking-wider bg-neutral-50 px-4 py-2.5 w-24">TTL</th>
-                        <td className="px-4 py-2.5 font-mono text-xs">{'300'}</td>
+                        <td className="px-4 py-2.5 font-mono text-xs truncate">{'300'}</td>
                       </tr>
                       <tr>
                         <th className="text-left text-xs font-bold text-muted uppercase tracking-wider bg-neutral-50 px-4 py-2.5 w-24 align-top">Value</th>
                         <td className="px-4 py-2.5">
                           <div className="flex items-center gap-2">
-                            <div className="flex-1 min-w-0 bg-neutral-900 text-neutral-100 text-xs font-mono px-3 py-2.5 rounded-lg overflow-x-auto whitespace-nowrap">{domain.verificationRecord}</div>
+                            <div className="flex-1 min-w-0 bg-neutral-900 text-neutral-100 text-xs font-mono px-3 py-2.5 rounded-lg break-all">{domain.verificationRecord}</div>
                             <button
                               onClick={handleCopyRecord}
                               className="p-2.5 bg-black hover:bg-neutral-800 text-white rounded-lg transition-colors shrink-0"
