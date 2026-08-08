@@ -908,6 +908,43 @@ class TlsAllowedTests(APITestCase):
         res = self.client.get('/api/internal/tls-allowed/', {'domain': 'nonexistent.net'})
         self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
 
+    def test_works_when_called_by_caddy_from_inside_docker(self):
+        # Caddy's on-demand TLS probe reaches the backend with Host: backend,
+        # which must not be rejected by ALLOWED_HOSTS before the view runs.
+        self.domain.verified = True
+        self.domain.save(update_fields=['verified'])
+        res = self.client.get(
+            '/api/internal/tls-allowed/',
+            {'domain': self.domain.domain},
+            HTTP_HOST='backend',
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+
+    def test_apex_tracking_host_allowed(self):
+        # A root-domain entry (example.com) can't hold a CNAME, so its links
+        # run on t.example.com — Caddy must be allowed to mint that certificate.
+        apex = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='example.com',
+        )
+        apex.verified = True
+        apex.save(update_fields=['verified'])
+        res = self.client.get(
+            '/api/internal/tls-allowed/',
+            {'domain': 't.example.com'},
+            HTTP_HOST='backend',
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+
+    def test_apex_tracking_host_for_unrelated_subdomain_denied(self):
+        self.domain.verified = True
+        self.domain.save(update_fields=['verified'])
+        res = self.client.get(
+            '/api/internal/tls-allowed/',
+            {'domain': 't.other.example.com'},
+            HTTP_HOST='backend',
+        )
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+
 
 # IP Rules
 

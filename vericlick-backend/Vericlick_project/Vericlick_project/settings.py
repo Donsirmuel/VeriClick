@@ -42,7 +42,7 @@ else:
     secret_key = _env_str('SECRET_KEY')
     if not secret_key:
         raise ImproperlyConfigured(
-            'SECRET_KEY is not set. Generate one (e.g. `python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"`) '
+            'SECRET_KEY is not set. Generate one (e.g. `python -c "from django.utils.crypto import get_random_secret_key; print(get_random_secret_key())"`) '
             'and add it to the .env file.'
         )
     SECRET_KEY = secret_key
@@ -54,6 +54,11 @@ else:
             'to the .env file.'
         )
     ALLOWED_HOSTS = Csv()(allowed_hosts)
+
+# `backend` is allowed unconditionally because it is internal: Caddy's
+# on-demand TLS probe (/api/internal/tls-allowed/) reaches Django with
+# Host: backend, and that request must never be rejected as a disallowed host.
+ALLOWED_HOSTS = [h for h in ALLOWED_HOSTS if h] + ['backend']
 
 INSTALLED_APPS = [
     'jazzmin',
