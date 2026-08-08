@@ -2016,3 +2016,28 @@ class UpgradeEndpointTests(APITestCase):
         Plan.objects.filter(code='pro').update(is_active=False)
         res = self.client.post('/api/upgrade/', {'plan_code': 'pro'}, format='json')
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+class PasswordResetEndpointTests(APITestCase):
+    def setUp(self):
+        self.shared_email = 'reset@example.com'
+        self.user = User.objects.create_user(username='resetuser', email=self.shared_email, password='testpass123')
+
+    def test_reset_request_generic_response(self):
+        res = self.client.post('/api/auth/password-reset/', {'email': self.shared_email}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+
+    def test_reset_request_unknown_email_is_200(self):
+        res = self.client.post('/api/auth/password-reset/', {'email': 'nobody@example.com'}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+
+    def test_reset_request_no_email_rejected(self):
+        res = self.client.post('/api/auth/password-reset/', {}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_reset_request_duplicate_email_does_not_500(self):
+        # Legacy sign-ups could create two accounts with the same email. The
+        # endpoint must stay a generic 200 even when the address is ambiguous.
+        User.objects.create_user(username='resetuser2', email=self.shared_email, password='testpass123')
+        res = self.client.post('/api/auth/password-reset/', {'email': self.shared_email}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)

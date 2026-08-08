@@ -335,6 +335,14 @@ def google_login(request):
 
     try:
         user = User.objects.get(email=email)
+    except User.MultipleObjectsReturned:
+        # Legacy signups allowed duplicate emails. With several accounts on the
+        # same address we can't tell which Google identity to attach to, so ask
+        # the user to resolve it rather than silently picking one.
+        return Response(
+            {'errors': [{'field': 'email', 'detail': 'Multiple accounts share this email. Sign in with your username or contact support.'}]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
     except User.DoesNotExist:
         # New-account creation via Google also respects the admin signups toggle.
         if not SiteConfig.signups_allowed():
@@ -397,12 +405,13 @@ def password_reset_request(request):
             {'errors': [{'field': 'email', 'detail': 'Email is required'}]},
             status=status.HTTP_400_BAD_REQUEST,
         )
-    try:
-        user = User.objects.get(email=email)
+    # Legacy signups allowed duplicate emails, so there can be more than one
+    # account for an address. first() (instead of get()) keeps this a silent
+    # no-op for unknown/ambiguous addresses instead of a 500.
+    user = User.objects.filter(email=email).first()
+    if user is not None:
         token = default_token_generator.make_token(user)
         send_password_reset_email(user, user.pk, token)
-    except User.DoesNotExist:
-        pass
     # Generic response: never reveal whether an account exists for an email.
     return Response({'status': 'ok', 'message': 'If an account exists for this email, a reset link has been sent.'})
 
