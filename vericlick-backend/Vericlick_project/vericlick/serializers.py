@@ -2,10 +2,25 @@ import secrets
 import string
 from rest_framework import serializers
 from django.contrib.auth.models import User
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from .models import (
     Workspace, DomainRegistry, TrackingLink, ClickLog, IPRule, TrackerEvent,
     Plan, DiscountCode, SiteConfig,
 )
+
+
+class EmailOrUsernameTokenObtainPairSerializer(TokenObtainPairSerializer):
+    # SimpleJWT authenticates by username only, but the SPA sends whichever
+    # identifier the user typed (they commonly enter their email). Resolve an
+    # email — case-insensitive — to the matching username before the parent
+    # runs the standard username/password check.
+    def validate(self, attrs):
+        identifier = attrs.get(self.username_field, '')
+        if '@' in str(identifier):
+            user = User.objects.filter(email__iexact=identifier.strip()).first()
+            if user is not None:
+                attrs[self.username_field] = user.get_username()
+        return super().validate(attrs)
 
 
 def _generate_slug(length=7):

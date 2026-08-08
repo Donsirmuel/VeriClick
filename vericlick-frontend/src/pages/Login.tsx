@@ -110,7 +110,7 @@ export default function Login() {
           <div className="bg-neutral-950 border border-neutral-800 rounded-2xl p-6 sm:p-8">
             <form onSubmit={handleSubmit} className="space-y-5">
               <div className="space-y-2">
-                <label className="text-sm font-medium text-neutral-300 ml-1">Username</label>
+                <label className="text-sm font-medium text-neutral-300 ml-1">Username or email</label>
                 <div className="relative group">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-neutral-500 group-focus-within:text-white transition-colors">
                     <HugeiconsIcon icon={Mail01Icon} className="w-5 h-5" />
@@ -118,7 +118,7 @@ export default function Login() {
                   <input
                     type="text"
                     required
-                    placeholder="Enter your username"
+                    placeholder="Username or email"
                     className="w-full bg-black border border-neutral-800 rounded-xl pl-12 pr-4 py-3 text-white focus:outline-none focus:border-white/50 focus:ring-1 focus:ring-white/10 transition-all placeholder:text-neutral-600"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}

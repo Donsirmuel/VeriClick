@@ -290,6 +290,9 @@ SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(days=1),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'AUTH_HEADER_TYPES': ('Bearer',),
+    # Login accepts either the username or the account email (the SPA's auth
+    # flow sends whatever the user typed).
+    'TOKEN_OBTAIN_SERIALIZER': 'vericlick.serializers.EmailOrUsernameTokenObtainPairSerializer',
 }
 
 

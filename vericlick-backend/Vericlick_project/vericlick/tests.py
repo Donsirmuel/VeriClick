@@ -271,6 +271,30 @@ class AuthEndpointTests(APITestCase):
         self.assertIn('access', body)
         self.assertIn('refresh', body)
 
+    def test_login_with_email_resolves_to_username(self):
+        # The signup flow logs the just-registered user in via their email;
+        # login must accept it (SimpleJWT is username-only by default).
+        user = User.objects.create_user(
+            username='mailuser', email='Mail.User@Example.com', password='testpass123',
+        )
+        for identifier in ('mailuser', 'Mail.User@Example.com', 'mail.user@example.com'):
+            res = self.client.post(
+                '/api/auth/login/',
+                {'username': identifier, 'password': 'testpass123'},
+                format='json',
+            )
+            self.assertEqual(res.status_code, status.HTTP_200_OK, msg=f'login via {identifier}')
+        self.assertTrue(hasattr(user, 'username'))
+
+    def test_login_wrong_email_denied(self):
+        User.objects.create_user(
+            username='mailuser2', email='mail2@example.com', password='testpass123',
+        )
+        res = self.client.post('/api/auth/login/', {
+            'username': 'unknown@example.com', 'password': 'testpass123',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+
     def test_login_invalid_credentials(self):
         res = self.client.post('/api/auth/login/', {
             'username': 'nonexistent',

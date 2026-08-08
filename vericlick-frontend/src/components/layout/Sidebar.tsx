@@ -103,44 +103,29 @@ export function Sidebar({ onClose: _onClose }: { onClose: () => void }) {
       </nav>
 
       <div className="mt-auto space-y-2">
-        {workspace?.betaFreeMode ? (
-          <Link
-            to="/pricing"
-            className="block p-4 bg-neutral-800/50 rounded-2xl mb-6 border border-neutral-700/50 hover:border-neutral-600 transition-colors"
-          >
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-2 h-2 rounded-full bg-white animate-pulse-dot" />
-              <span className="text-xs font-bold text-white uppercase tracking-wider">Free during beta</span>
-            </div>
-            <p className="text-[11px] text-neutral-400 leading-relaxed">
-              VeriClick is free right now. No card, no limits — see the pricing page for details.
-            </p>
-          </Link>
-        ) : (
-          <Link
-            to="/app/billing"
-            className="block p-4 bg-neutral-800/50 rounded-2xl mb-6 border border-neutral-700/50 hover:border-neutral-600 transition-colors"
-          >
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-xs font-bold text-white uppercase tracking-wider">Current plan</span>
-            </div>
-            <div className="flex items-center justify-between text-sm font-bold text-white mb-1">
-              <span>{workspace?.planName ?? 'No plan'}</span>
-              {workspace?.domainLimit && (
-                <span className={`text-[11px] font-bold ${
-                  workspace.canAddDomain ? 'text-neutral-400' : 'text-warning'
-                }`}>
-                  {workspace.domainsUsed}/{workspace.domainLimit} domains
-                </span>
-              )}
-            </div>
-            <p className="text-[11px] text-neutral-400 leading-relaxed">
-              {workspace?.domainLimit
-                ? `${workspace.domainLimit} tracked domains on your plan.`
-                : 'Pick a plan to start adding tracked domains.'}
-            </p>
-          </Link>
-        )}
+        <Link
+          to="/app/billing"
+          className="block p-4 bg-neutral-800/50 rounded-2xl mb-6 border border-neutral-700/50 hover:border-neutral-600 transition-colors"
+        >
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-xs font-bold text-white uppercase tracking-wider">Current plan</span>
+          </div>
+          <div className="flex items-center justify-between text-sm font-bold text-white mb-1">
+            <span>{workspace?.planName ?? 'No plan'}</span>
+            {workspace?.domainLimit && (
+              <span className={`text-[11px] font-bold ${
+                workspace.canAddDomain ? 'text-neutral-400' : 'text-warning'
+              }`}>
+                {workspace.domainsUsed}/{workspace.domainLimit} domains
+              </span>
+            )}
+          </div>
+          <p className="text-[11px] text-neutral-400 leading-relaxed">
+            {workspace?.domainLimit
+              ? `${workspace.domainLimit} tracked domains on your plan.`
+              : 'Pick a plan to start adding tracked domains.'}
+          </p>
+        </Link>
 
         <div className="text-[10px] text-neutral-600 font-mono px-4 py-1">v1.0.0</div>
         <Link to="/app/help" className="flex items-center gap-3 px-4 py-3 w-full text-neutral-400 hover:text-white transition-colors group">
