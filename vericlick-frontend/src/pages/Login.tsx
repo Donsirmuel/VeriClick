@@ -13,12 +13,14 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
   const navigate = useNavigate()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setError('')
     if (!username.trim() || !password) {
-      toast.error('Please enter your username and password')
+      setError('Please enter your username and password')
       return
     }
     setLoading(true)
@@ -30,6 +32,7 @@ export default function Login() {
       navigate('/app/dashboard')
     } catch (err) {
       const message = parseApiError(err)
+      setError(message || 'Invalid username or password. Please try again.')
       toast.error(message || 'Invalid username or password. Please try again.')
     } finally {
       setLoading(false)
@@ -154,6 +157,15 @@ export default function Login() {
                   </button>
                 </div>
               </div>
+
+              {error && (
+                <div
+                  role="alert"
+                  className="bg-red-950/40 border border-red-800/60 rounded-xl px-4 py-3 text-sm text-red-300 leading-relaxed"
+                >
+                  {error}
+                </div>
+              )}
 
               <button
                 type="submit"

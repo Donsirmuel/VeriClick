@@ -302,6 +302,30 @@ class AuthEndpointTests(APITestCase):
         }, format='json')
         self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
 
+    def test_login_unknown_account_message(self):
+        res = self.client.post('/api/auth/login/', {
+            'username': 'nobody@example.com',
+            'password': 'whatever',
+        }, format='json')
+        body = res.json()
+        self.assertIn('errors', body)
+        self.assertIn('account', body['errors'][0]['detail'].lower())
+
+    def test_login_wrong_password_message(self):
+        User.objects.create_user(
+            username='pwuser', email='pw@example.com', password='correct-horse',
+        )
+        # Same account, wrong password — the reason must be the password, not a
+        # misleading "no active account found" (the case right after a reset).
+        res = self.client.post('/api/auth/login/', {
+            'username': 'pwuser',
+            'password': 'wrong-password',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+        body = res.json()
+        self.assertIn('errors', body)
+        self.assertIn('password', body['errors'][0]['detail'].lower())
+
     def test_refresh_token(self):
         User.objects.create_user(username='refreshuser', password='testpass123')
         login_res = self.client.post('/api/auth/login/', {

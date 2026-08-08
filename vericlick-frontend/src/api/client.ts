@@ -63,7 +63,13 @@ apiClient.interceptors.response.use(
       return Promise.reject(error)
     }
 
-    if (status === 401 && !config._retry) {
+    // A failed sign-in (or refresh) must never trigger the token-refresh
+    // dance below: retrying "wrong password" against a stale token re-fires the
+    // request, silently discards the user's session, and buries the real reason
+    // for the failure. Auth endpoints report their own errors directly.
+    const isAuthRequest = /\/auth\/(login|refresh|google)\//.test(config.url ?? '')
+
+    if (status === 401 && !config._retry && !isAuthRequest) {
       const refresh = localStorage.getItem('refresh')
 
       if (refresh && !isRefreshing) {

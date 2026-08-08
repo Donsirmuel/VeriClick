@@ -1,5 +1,6 @@
 import secrets
 import string
+from django.db.models import Q
 from rest_framework import serializers
 from django.contrib.auth.models import User
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
@@ -14,13 +15,35 @@ class EmailOrUsernameTokenObtainPairSerializer(TokenObtainPairSerializer):
     # identifier the user typed (they commonly enter their email). Resolve an
     # email — case-insensitive — to the matching username before the parent
     # runs the standard username/password check.
+    #
+    # SimpleJWT's default failure message ("No active account found with the
+    # given credentials") is wrong in two ways: it claims the account doesn't
+    # exist even when only the password is wrong (very confusing right after a
+    # password reset), and it hides WHY the sign-in failed. We re-raise with a
+    # precise, actionable reason instead.
     def validate(self, attrs):
-        identifier = attrs.get(self.username_field, '')
-        if '@' in str(identifier):
-            user = User.objects.filter(email__iexact=identifier.strip()).first()
-            if user is not None:
-                attrs[self.username_field] = user.get_username()
-        return super().validate(attrs)
+        identifier = (attrs.get(self.username_field) or '').strip()
+        matched = User.objects.filter(
+            Q(username__iexact=identifier) | Q(email__iexact=identifier)
+        ).first()
+        if matched is not None:
+            attrs[self.username_field] = matched.get_username()
+
+        try:
+            return super().validate(attrs)
+        except Exception as exc:
+            from rest_framework.exceptions import AuthenticationFailed
+            if isinstance(exc, AuthenticationFailed):
+                if matched is None:
+                    raise AuthenticationFailed(
+                        'We couldn\'t find an account with that username or email. '
+                        'Check the spelling or create a new account.'
+                    )
+                raise AuthenticationFailed(
+                    'Incorrect password. If you just reset your password, '
+                    'make sure you\'re using your new one.'
+                )
+            raise
 
 
 def _generate_slug(length=7):
