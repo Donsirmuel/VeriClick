@@ -75,6 +75,7 @@ export interface Domain {
     host: string
     target: string
     sentence: string
+    note?: string
   }
   createdAt: string
 }

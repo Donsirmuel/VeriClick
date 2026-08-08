@@ -118,25 +118,51 @@ class DomainRegistrySerializer(serializers.ModelSerializer):
         server_ip = getattr(django_settings, 'TRACKING_SERVER_IP', '').strip()
         base = getattr(django_settings, 'PUBLIC_TRACKING_BASE_URL', '').strip().rstrip('/')
         target = '/'.join(base.split('://')[-1].split('/')[:1]) if base else ''
+
+        domain = (obj.domain or '').strip().lower().rstrip('.')
+        labels = [part for part in domain.split('.') if part]
+        second_level_tlds = {
+            'co.uk', 'org.uk', 'ac.uk', 'co.jp', 'co.in', 'com.au', 'net.au',
+            'co.nz', 'com.br', 'com.mx', 'co.za', 'co.ke', 'com.ng',
+        }
+        is_apex = len(labels) <= 2 and '.'.join(labels[-2:]) not in second_level_tlds or (
+            len(labels) == 3 and '.'.join(labels[-2:]) in second_level_tlds
+        )
+        # For a subdomain like t.example.com the record's Name/Host is the
+        # first label ("t"); for the apex domain it's @.
+        host = labels[0] if not is_apex else '@'
+
+        if is_apex:
+            if server_ip:
+                return {
+                    'label': 'A',
+                    'host': host,
+                    'target': server_ip,
+                    'sentence': 'Point this domain at our server',
+                    'note': 'Use an A record for the root domain. If your provider won\'t allow it, use an ALIAS record with the same value.',
+                }
+            return {
+                'label': 'A / ALIAS',
+                'host': host,
+                'target': target,
+                'sentence': 'Set an ALIAS record at the root pointing at our host',
+                'note': 'The root domain can\'t use a CNAME on most providers. Use an ALIAS record with the value above instead.',
+            }
+
         if server_ip:
             return {
-                'label': 'A record',
-                'host': '@',
+                'label': 'A',
+                'host': host,
                 'target': server_ip,
-                'sentence': 'Your domain forwards to our servers.',
-            }
-        if target:
-            return {
-                'label': 'CNAME',
-                'host': '@',
-                'target': target,
-                'sentence': 'Your domain points to our servers via this alias.',
+                'sentence': 'Point this subdomain at our server (use our IP)',
+                'note': f'If the box asks for a full hostname, use {domain} instead of just "{host}".',
             }
         return {
-            'label': 'A',
-            'host': '@',
-            'target': '',
-            'sentence': 'Point this domain at our servers to start routing clicks.',
+            'label': 'CNAME',
+            'host': host,
+            'target': target,
+            'sentence': 'Point this subdomain at our server via an alias',
+            'note': f'If the box asks for a full hostname, use {domain} instead of just "{host}".',
         }
 
     def get_links_count(self, obj):

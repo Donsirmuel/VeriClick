@@ -724,7 +724,7 @@ class DomainsEndpointTests(APITestCase):
 
     def test_dns_setup_guidance_returned(self):
         domain = DomainRegistry.objects.create(
-            workspace=self.workspace, domain='setup.example.com',
+            workspace=self.workspace, domain='track.example.com',
         )
         res = self.client.get(f'/api/domains/{domain.id}/')
         body = res.json()
@@ -732,6 +732,22 @@ class DomainsEndpointTests(APITestCase):
         self.assertIn('label', body['dnsSetup'])
         self.assertIn('host', body['dnsSetup'])
         self.assertIn('target', body['dnsSetup'])
+        # Subdomain domains get the subdomain label as the record Name/Host.
+        self.assertEqual(body['dnsSetup']['host'], 'track')
+
+    def test_dns_setup_apex_uses_at_host(self):
+        domain = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='example.com',
+        )
+        res = self.client.get(f'/api/domains/{domain.id}/')
+        self.assertEqual(res.json()['dnsSetup']['host'], '@')
+
+    def test_dns_setup_note_returned_for_apex(self):
+        domain = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='example.com',
+        )
+        res = self.client.get(f'/api/domains/{domain.id}/')
+        self.assertIn('note', res.json()['dnsSetup'])
 
     def test_recheck_not_found(self):
         res = self.client.post(f'/api/domains/{uuid.uuid4()}/recheck/')

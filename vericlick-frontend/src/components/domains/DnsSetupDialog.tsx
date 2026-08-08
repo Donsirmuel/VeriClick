@@ -133,10 +133,15 @@ export function DnsSetupDialog({ domain, onClose, onRechecked }: DnsSetupDialogP
                 <ol className="list-decimal pl-5 text-sm text-muted space-y-1 leading-relaxed">
                   <li>Log in to the company you bought <span className="font-mono text-xs bg-neutral-100 px-1 rounded">{domain.domain}</span> from (like GoDaddy, Namecheap, or Cloudflare).</li>
                   <li>Find the page called DNS or "Manage DNS".</li>
-                  <li>Add a new record ({record.label}). Fill in the boxes on the left ("Name" or "Host") and on the right ("Value") with the details above. If there's a TTL box, just use the default — you don't need to touch it.</li>
+                  <li>Add a new record ({record.label}). Copy the Name (or "Host") and the Value above exactly as shown.</li>
                   <li>Save it.</li>
                   <li>It usually takes a few minutes to a few hours before the change spreads across the internet. When you think it's ready, press <strong>Check again</strong> below.</li>
                 </ol>
+                {record.note && (
+                  <p className="text-xs text-slate-700 leading-relaxed bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2">
+                    {record.note}
+                  </p>
+                )}
                 <p className="text-xs text-muted leading-relaxed bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2">
                   No idea where to find it? Ask the assistant (chat bubble, bottom-right) or contact us — happy to help.
                 </p>
