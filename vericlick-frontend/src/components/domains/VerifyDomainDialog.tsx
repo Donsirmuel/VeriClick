@@ -36,6 +36,8 @@ export function VerifyDomainDialog({ domain, onClose, onVerified, onRequestDnsSe
       setVerified(true)
       toast.success('Domain verified — this domain is now trusted')
       onVerified()
+      // Auto-close so the user lands back on the list with the updated status.
+      setTimeout(onClose, 1400)
     } catch (error) {
       toast.error(parseApiError(error))
     } finally {
@@ -146,9 +148,7 @@ export function VerifyDomainDialog({ domain, onClose, onVerified, onRequestDnsSe
                         <th className="text-left text-xs font-bold text-muted uppercase tracking-wider bg-neutral-50 px-4 py-2.5 w-24 align-top">Value</th>
                         <td className="px-4 py-2.5">
                           <div className="flex items-center gap-2">
-                            <div className="flex-1 bg-neutral-900 text-neutral-100 text-xs font-mono px-3 py-2.5 rounded-lg overflow-x-auto whitespace-nowrap">
-                              {domain.verificationRecord}
-                            </div>
+                            <div className="flex-1 min-w-0 bg-neutral-900 text-neutral-100 text-xs font-mono px-3 py-2.5 rounded-lg overflow-x-auto whitespace-nowrap">{domain.verificationRecord}</div>
                             <button
                               onClick={handleCopyRecord}
                               className="p-2.5 bg-black hover:bg-neutral-800 text-white rounded-lg transition-colors shrink-0"

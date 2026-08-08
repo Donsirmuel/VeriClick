@@ -115,53 +115,34 @@ class DomainRegistrySerializer(serializers.ModelSerializer):
     def get_dns_setup(self, obj):
         from django.conf import settings as django_settings
 
-        server_ip = getattr(django_settings, 'TRACKING_SERVER_IP', '').strip()
+        # DNS guidance is intentionally simple and uniform: a single CNAME
+        # record pointing the subdomain's label at our public tracker host
+        # (e.g. Name "t" -> Value "vendora.page"). No A/ALIAS/IP variants to
+        # explain — one record, one copy.
         base = getattr(django_settings, 'PUBLIC_TRACKING_BASE_URL', '').strip().rstrip('/')
         target = '/'.join(base.split('://')[-1].split('/')[:1]) if base else ''
 
         domain = (obj.domain or '').strip().lower().rstrip('.')
         labels = [part for part in domain.split('.') if part]
-        second_level_tlds = {
-            'co.uk', 'org.uk', 'ac.uk', 'co.jp', 'co.in', 'com.au', 'net.au',
-            'co.nz', 'com.br', 'com.mx', 'co.za', 'co.ke', 'com.ng',
-        }
-        is_apex = len(labels) <= 2 and '.'.join(labels[-2:]) not in second_level_tlds or (
-            len(labels) == 3 and '.'.join(labels[-2:]) in second_level_tlds
-        )
-        # For a subdomain like t.example.com the record's Name/Host is the
-        # first label ("t"); for the apex domain it's @.
-        host = labels[0] if not is_apex else '@'
 
-        if is_apex:
-            if server_ip:
-                return {
-                    'label': 'A',
-                    'host': host,
-                    'target': server_ip,
-                    'sentence': 'Point this domain at our server',
-                    'note': 'Use an A record for the root domain. If your provider won\'t allow it, use an ALIAS record with the same value.',
-                }
+        # Apex domains can't use a CNAME, so steer them at a subdomain instead.
+        if len(labels) <= 2:
+            subdomain = f't.{domain}'
             return {
-                'label': 'A / ALIAS',
-                'host': host,
+                'label': 'CNAME',
+                'host': 't',
                 'target': target,
-                'sentence': 'Set an ALIAS record at the root pointing at our host',
-                'note': 'The root domain can\'t use a CNAME on most providers. Use an ALIAS record with the value above instead.',
+                'sentence': f'Register a subdomain instead: add {subdomain} in VeriClick, then add a CNAME record with Name "t" and the value on the right.',
+                'note': f'The root domain ({domain}) can\'t use a CNAME on most providers. Use a subdomain instead (e.g. {subdomain}) — add it in VeriClick, then the record above is exactly what to create.',
             }
 
-        if server_ip:
-            return {
-                'label': 'A',
-                'host': host,
-                'target': server_ip,
-                'sentence': 'Point this subdomain at our server (use our IP)',
-                'note': f'If the box asks for a full hostname, use {domain} instead of just "{host}".',
-            }
+        # Subdomain: host is the first label (e.g. "t" for t.example.com).
+        host = labels[0]
         return {
             'label': 'CNAME',
             'host': host,
             'target': target,
-            'sentence': 'Point this subdomain at our server via an alias',
+            'sentence': f'Add a CNAME record with Name "{host}" and the value on the right.',
             'note': f'If the box asks for a full hostname, use {domain} instead of just "{host}".',
         }
 

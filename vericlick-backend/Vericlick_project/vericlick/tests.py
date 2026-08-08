@@ -686,6 +686,21 @@ class DomainsEndpointTests(APITestCase):
         self.assertEqual(res.status_code, status.HTTP_204_NO_CONTENT)
         self.assertFalse(DomainRegistry.objects.filter(id=domain.id).exists())
 
+    def test_delete_domain_removes_its_links(self):
+        domain = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='cascade.example.com',
+        )
+        link = TrackingLink.objects.create(
+            workspace=self.workspace, domain=domain,
+            slug='cascade-link', destination_url='https://example.com',
+        )
+        ClickLog.objects.create(link=link, ip='9.9.9.9')
+        res = self.client.delete(f'/api/domains/{domain.id}/')
+        self.assertEqual(res.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(DomainRegistry.objects.filter(id=domain.id).exists())
+        self.assertFalse(TrackingLink.objects.filter(id=link.id).exists())
+        self.assertFalse(ClickLog.objects.filter(link=link).exists())
+
     def test_recheck_updates_last_checked(self):
         domain = DomainRegistry.objects.create(
             workspace=self.workspace, domain='recheck.example.com',
@@ -734,13 +749,18 @@ class DomainsEndpointTests(APITestCase):
         self.assertIn('target', body['dnsSetup'])
         # Subdomain domains get the subdomain label as the record Name/Host.
         self.assertEqual(body['dnsSetup']['host'], 'track')
+        # Guidance is always the single CNAME flavour.
+        self.assertEqual(body['dnsSetup']['label'], 'CNAME')
+        self.assertEqual(body['dnsSetup']['target'], 'vendora.page')
 
-    def test_dns_setup_apex_uses_at_host(self):
+    def test_dns_setup_apex_steers_to_subdomain(self):
         domain = DomainRegistry.objects.create(
             workspace=self.workspace, domain='example.com',
         )
-        res = self.client.get(f'/api/domains/{domain.id}/')
-        self.assertEqual(res.json()['dnsSetup']['host'], '@')
+        body = res = self.client.get(f'/api/domains/{domain.id}/').json()
+        self.assertEqual(body['dnsSetup']['label'], 'CNAME')
+        self.assertEqual(body['dnsSetup']['host'], 't')
+        self.assertIn('t.example.com', body['dnsSetup']['note'])
 
     def test_dns_setup_note_returned_for_apex(self):
         domain = DomainRegistry.objects.create(
@@ -748,6 +768,7 @@ class DomainsEndpointTests(APITestCase):
         )
         res = self.client.get(f'/api/domains/{domain.id}/')
         self.assertIn('note', res.json()['dnsSetup'])
+        self.assertIn('subdomain', res.json()['dnsSetup']['note'].lower())
 
     def test_recheck_not_found(self):
         res = self.client.post(f'/api/domains/{uuid.uuid4()}/recheck/')

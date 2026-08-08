@@ -644,6 +644,13 @@ class DomainRegistryViewSet(viewsets.ModelViewSet):
             domain.last_checked = timezone.now()
             domain.save(update_fields=['health_status', 'last_checked'])
 
+    def perform_destroy(self, instance):
+        # A domain owns its links. Deleting the domain removes the links
+        # (and their click logs, which cascade) — otherwise orphaned links would
+        # keep serving on a domain the user just removed.
+        instance.links.all().delete()
+        instance.delete()
+
     @action(detail=True, methods=['post'])
     def recheck(self, request, pk=None):
         domain = self.get_object()
@@ -662,6 +669,12 @@ class DomainRegistryViewSet(viewsets.ModelViewSet):
         # control the domain. A domain can resolve (healthy) but only become
         # 'verified' once ownership is proven.
         domain = self.get_object()
+        # Refresh the DNS-pointing status so the response always reflects the
+        # current A/CNAME state (not a stale health-check result).
+        try:
+            domain.run_health_check()
+        except Exception:
+            pass
         verified, detail = verify_domain_ownership(domain)
         if verified:
             domain.verified = True
