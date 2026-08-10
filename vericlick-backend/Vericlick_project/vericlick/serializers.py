@@ -155,7 +155,7 @@ class DomainRegistrySerializer(serializers.ModelSerializer):
 
         # DNS guidance is intentionally simple and uniform: a single CNAME
         # record pointing the subdomain's label at our public tracker host
-        # (e.g. Name "t" -> Value "vendora.page"). No A/ALIAS/IP variants to
+        # (e.g. Name "t" -> Value "get-vericlick.site"). No A/ALIAS/IP variants to
         # explain — one record, one copy.
         base = getattr(django_settings, 'PUBLIC_TRACKING_BASE_URL', '').strip().rstrip('/')
         target = '/'.join(base.split('://')[-1].split('/')[:1]) if base else ''

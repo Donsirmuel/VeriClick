@@ -2,7 +2,7 @@
 #
 # TWO layers of HTTPS:
 #
-# 1. Static product domains (vendora.page, etc.) — listed in SITE_ADDRESSES,
+# 1. Static product domains (get-vericlick.site, etc.) — listed in SITE_ADDRESSES,
 #    certificates issued automatically on boot via Let's Encrypt.
 #
 # 2. Customer-owned custom tracking domains (the core product feature). Rather

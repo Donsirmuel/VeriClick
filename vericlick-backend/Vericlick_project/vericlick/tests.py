@@ -788,6 +788,7 @@ class DomainsEndpointTests(APITestCase):
         self.assertFalse(res2.json()['ready'])
         self.assertFalse(res2.json()['pointsToServer'])
 
+    @override_settings(PUBLIC_TRACKING_BASE_URL='https://links.example.org')
     def test_dns_setup_guidance_returned(self):
         domain = DomainRegistry.objects.create(
             workspace=self.workspace, domain='track.example.com',
@@ -802,7 +803,7 @@ class DomainsEndpointTests(APITestCase):
         self.assertEqual(body['dnsSetup']['host'], 'track')
         # Guidance is always the single CNAME flavour.
         self.assertEqual(body['dnsSetup']['label'], 'CNAME')
-        self.assertEqual(body['dnsSetup']['target'], 'vendora.page')
+        self.assertEqual(body['dnsSetup']['target'], 'links.example.org')
 
     def test_dns_setup_apex_steers_to_subdomain(self):
         domain = DomainRegistry.objects.create(

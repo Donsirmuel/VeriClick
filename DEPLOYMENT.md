@@ -17,7 +17,7 @@ A single Compose file builds and runs the whole stack on the VPS:
 
 ### Steps (InterServer VPS — everything happens on the server)
 
-1. **Prereqs:** Docker + Compose plugin installed on the VPS; `vendora.page` + `www` A records point at the VPS's public IP; ports **80 and 443 are open** (80 is used for the ACME HTTP challenge).
+1. **Prereqs:** Docker + Compose plugin installed on the VPS; `get-vericlick.site` + `www` A records point at the VPS's public IP; ports **80 and 443 are open** (80 is used for the ACME HTTP challenge).
 2. **Clone the repo** onto the server and `cd` into it.
 3. **Create the environment:**
    ```bash
@@ -38,8 +38,8 @@ A single Compose file builds and runs the whole stack on the VPS:
    ```bash
    docker compose ps                          # all three services 'Up' / 'healthy'
    docker compose exec frontend ls /data/caddy/certificates   # ACME certs present
-   curl -I https://vendora.page               # 200 (HTTP/2 over TLS)
-   curl -s https://vendora.page/api/health/   # {"status":"ok",...}
+   curl -I https://get-vericlick.site               # 200 (HTTP/2 over TLS)
+   curl -s https://get-vericlick.site/api/health/   # {"status":"ok",...}
    ```
 6. **Keep it running across reboots:** InterServer's services manager or a
    systemd unit runs `docker compose up -d`. Rebuilds deploy as
@@ -91,11 +91,11 @@ docker compose down -v             # stop AND delete the database (destructive)
    Required on the VPS:
    - `DEBUG=False`
    - `SECRET_KEY` — strong value, e.g. `python -c "import secrets; print(secrets.token_urlsafe(50))"`
-   - `ALLOWED_HOSTS` — your real domains, e.g. `vendora.page,www.vendora.page`
-   - `CORS_ALLOWED_ORIGINS` — the SPA origin(s), e.g. `https://vendora.page`
+   - `ALLOWED_HOSTS` — your real domains, e.g. `get-vericlick.site,www.get-vericlick.site`
+   - `CORS_ALLOWED_ORIGINS` — the SPA origin(s), e.g. `https://get-vericlick.site`
    - `CSRF_TRUSTED_ORIGINS` — same origins (needed for browser POSTs)
    - `DATABASE_URL` — single PostgreSQL URL, e.g. `postgres://vericlick:pass@db:5432/vericlick`; Postgres runs in Docker and seeds itself from this URL (see `deploy/db-entrypoint.sh`)
-   - `PUBLIC_TRACKING_BASE_URL=https://vendora.page`
+   - `PUBLIC_TRACKING_BASE_URL=https://get-vericlick.site`
    - `TRUST_X_FORWARDED_PROTO=True` only when behind a trusted proxy
    - `GOOGLE_CLIENT_ID` — see "Google sign-in setup" below
    - `GEOIP2_DB` — path to a GeoLite2-City.mmdb for real location data
@@ -142,7 +142,7 @@ allow the origin the SPA runs on:
 
 1. Google Cloud Console → **APIs & Services → Credentials → Create credentials → OAuth client ID → Web app**.
 2. **Authorized JavaScript origins** — add the exact origin(s) the SPA runs on:
-   add `https://vendora.page` and `https://www.vendora.page`.
+   add `https://get-vericlick.site` and `https://www.get-vericlick.site`.
    Do **not** add paths — origins only, and the value must match the browser
    URL exactly (scheme + host + port).
 3. Copy the client ID into **both** env files:
@@ -177,8 +177,8 @@ deployment, keep it in code.
 ## 2. Frontend
 
 1. Configure `vericlick-frontend/.env` (see `.env.example`):
-   - `VITE_API_BASE_URL=https://vendora.page/api` — the backend URL on the VPS
-   - `VITE_SITE_URL=https://vendora.page` — drives the generated `robots.txt`
+   - `VITE_API_BASE_URL=https://get-vericlick.site/api` — the backend URL on the VPS
+   - `VITE_SITE_URL=https://get-vericlick.site` — drives the generated `robots.txt`
      and `sitemap.xml` (must match the deployed domain)
    - `VITE_GOOGLE_CLIENT_ID` — the Google OAuth web client ID (see the Google
      sign-in setup section above)
@@ -193,7 +193,7 @@ deployment, keep it in code.
    `sitemap.xml` to Django before the SPA fallback catches the rest.
 
 ### Nginx routing on InterServer
-Use the sample `deploy/nginx/vericlick-vendora.page.conf.example` as the
+Use the sample `deploy/nginx/vericlick-get-vericlick.site.conf.example` as the
 starting point. The critical rule is that `/r/*` must proxy to Django. If the
 frontend handles that path first, tracked links will 404 even though the app
 generated them correctly.
