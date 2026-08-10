@@ -109,6 +109,13 @@ export interface PricingResponse {
   plans: Plan[]
 }
 
+export interface CheckoutSession {
+  checkoutId: string
+  checkoutUrl: string
+  expiresAt?: string | null
+  plan: string
+}
+
 export interface SiteConfig {
   betaFreeMode: boolean
   signupsOpen: boolean

@@ -1,27 +1,42 @@
+import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { CheckmarkCircle02Icon, Globe02Icon, ShieldIcon, Tag01Icon } from '@hugeicons/core-free-icons'
 import toast from 'react-hot-toast'
 import { fetchPricing } from '@/api/pricing'
-import { fetchWorkspace, upgradePlan } from '@/api/workspace'
+import { fetchWorkspace, startCheckout } from '@/api/workspace'
+import { parseApiError } from '@/lib/errors'
 import type { Plan } from '@/types'
 
 export default function Billing() {
   const queryClient = useQueryClient()
+  const [justPaid, setJustPaid] = useState(false)
 
   const { data: pricing } = useQuery({ queryKey: ['pricing'], queryFn: fetchPricing })
   const { data: workspace } = useQuery({ queryKey: ['workspace'], queryFn: fetchWorkspace })
 
-  const upgradeMutation = useMutation({
-    mutationFn: upgradePlan,
-    onSuccess: (updated) => {
-      queryClient.setQueryData(['workspace'], updated)
-      queryClient.invalidateQueries({ queryKey: ['workspace'] })
-      toast.success(`You're now on ${updated.planName ?? 'a paid plan'}.`)
+  const checkoutMutation = useMutation({
+    mutationFn: startCheckout,
+    onSuccess: (session) => {
+      toast.success('Opening secure checkout…')
+      window.location.href = session.checkoutUrl
     },
-    onError: () => toast.error("Couldn't change your plan right now."),
+    onError: (err) => toast.error(parseApiError(err) || "Couldn't start the checkout right now."),
   })
+
+  // Coming back from Bachs: after a successful payment the success URL gets
+  // ?billing=success appended, so refresh the workspace (the webhook will have
+  // granted the plan) and show a confirmation banner.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('billing') === 'success') {
+      setJustPaid(true)
+      queryClient.invalidateQueries({ queryKey: ['workspace'] })
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const current = workspace?.plan ?? null
   const betaFree = pricing?.betaFreeMode ?? false
@@ -47,7 +62,21 @@ export default function Billing() {
             <h3 className="text-sm font-bold text-slate-900 mb-1">You're not charged during beta</h3>
             <p className="text-sm text-muted leading-relaxed">
               Every feature is free while beta mode is on, so domain limits aren't enforced.
-              You can still choose a plan below to preview it — it takes effect when billing launches.
+              Plans go on sale when billing launches.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {justPaid && (
+        <div className="flex items-start gap-3 bg-green-50 border border-green-200 rounded-2xl p-5">
+          <div className="w-9 h-9 bg-green-600 rounded-xl flex items-center justify-center shrink-0">
+            <HugeiconsIcon icon={CheckmarkCircle02Icon} className="w-4 h-4 text-white" />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-green-900 mb-1">Payment confirmed</h3>
+            <p className="text-sm text-green-700 leading-relaxed">
+              Your new plan is active. Open the domains page to start using your extra domain room.
             </p>
           </div>
         </div>
@@ -127,11 +156,11 @@ export default function Billing() {
                   </Link>
                 ) : (
                   <button
-                    onClick={() => upgradeMutation.mutate(plan.code)}
-                    disabled={upgradeMutation.isPending}
+                    onClick={() => checkoutMutation.mutate(plan.code)}
+                    disabled={checkoutMutation.isPending}
                     className="bg-black hover:bg-neutral-800 disabled:bg-neutral-300 text-white px-4 py-3 rounded-xl text-sm font-bold transition-all"
                   >
-                    {upgradeMutation.isPending ? 'Switching…' : betaFree ? 'Choose for launch' : `Switch to ${plan.name}`}
+                    {checkoutMutation.isPending ? 'Opening checkout…' : betaFree ? 'Choose plan' : `Switch to ${plan.name}`}
                   </button>
                 )}
               </div>

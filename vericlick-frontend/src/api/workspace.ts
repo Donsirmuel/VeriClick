@@ -1,5 +1,5 @@
 import { apiClient } from './client'
-import type { Workspace } from '@/types'
+import type { Workspace, CheckoutSession } from '@/types'
 
 interface WorkspaceUpdateInput {
   name?: string
@@ -16,7 +16,7 @@ export async function updateWorkspace(input: WorkspaceUpdateInput): Promise<Work
   return data
 }
 
-export async function upgradePlan(planCode: string): Promise<Workspace> {
-  const { data } = await apiClient.post<Workspace>('/upgrade/', { plan_code: planCode })
+export async function startCheckout(planCode: string): Promise<CheckoutSession> {
+  const { data } = await apiClient.post<CheckoutSession>('/upgrade/', { plan_code: planCode })
   return data
 }

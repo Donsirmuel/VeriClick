@@ -1,4 +1,7 @@
+import hashlib
+import hmac
 import json
+import time
 import uuid
 from datetime import timedelta
 from unittest.mock import patch
@@ -9,7 +12,7 @@ from rest_framework.test import APITestCase, APIClient
 from rest_framework import status
 from .models import (
     Workspace, DomainRegistry, TrackingLink, ClickLog, IPRule, TrackerEvent,
-    Plan, DiscountCode, SiteConfig,
+    Plan, DiscountCode, SiteConfig, CheckoutIntent,
 )
 from .utils import snake_to_camel, camel_to_snake, transform_keys
 
@@ -2016,21 +2019,44 @@ class UpgradeEndpointTests(APITestCase):
         self.user = User.objects.create_user(username='upgradeuser', password='testpass123')
         self.client.force_authenticate(user=self.user)
         self.workspace = Workspace.objects.get(owner=self.user)
+        Plan.objects.filter(code='plus').update(bachs_product_id='prod_plus')
 
     def test_upgrade_requires_auth(self):
         self.client.force_authenticate(user=None)
         res = self.client.post('/api/upgrade/', {'plan_code': 'basic'}, format='json')
         self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
 
-    def test_upgrade_sets_plan(self):
+    @patch('vericlick.payments.create_checkout_session')
+    def test_upgrade_creates_checkout_session(self, mock_create):
         SiteConfig.objects.update(beta_free_mode=False)
+        mock_create.return_value = {
+            'checkout_id': 'chk_test123',
+            'checkout_url': 'https://checkout.bachs.io/c/tok_test',
+            'expires_at': '2026-01-01T00:00:00Z',
+        }
         res = self.client.post('/api/upgrade/', {'plan_code': 'plus'}, format='json')
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         body = res.json()
-        self.assertEqual(body['plan'], 'plus')
-        self.assertEqual(body['domainLimit'], 10)
+        self.assertEqual(body['checkoutUrl'], 'https://checkout.bachs.io/c/tok_test')
+        self.assertEqual(body['checkoutId'], 'chk_test123')
+        # The plan is NOT granted here — the webhook is the source of truth.
         self.workspace.refresh_from_db()
-        self.assertEqual(self.workspace.plan.code, 'plus')
+        self.assertIsNone(self.workspace.plan)
+        self.assertTrue(mock_create.called)
+        intent = CheckoutIntent.objects.get(workspace=self.workspace)
+        self.assertEqual(intent.checkout_id, 'chk_test123')
+        self.assertEqual(intent.plan.code, 'plus')
+
+    def test_upgrade_blocked_during_beta(self):
+        res = self.client.post('/api/upgrade/', {'plan_code': 'plus'}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_upgrade_plan_without_product_rejected(self):
+        SiteConfig.objects.update(beta_free_mode=False)
+        Plan.objects.filter(code='plus').update(bachs_product_id='')
+        res = self.client.post('/api/upgrade/', {'plan_code': 'plus'}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(CheckoutIntent.objects.filter(workspace=self.workspace).exists())
 
     def test_upgrade_unknown_plan_rejected(self):
         res = self.client.post('/api/upgrade/', {'plan_code': 'platinum'}, format='json')
@@ -2040,6 +2066,105 @@ class UpgradeEndpointTests(APITestCase):
         Plan.objects.filter(code='pro').update(is_active=False)
         res = self.client.post('/api/upgrade/', {'plan_code': 'pro'}, format='json')
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+class BachsWebhookEndpointTests(APITestCase):
+    SECRET = 'whsec_test_secret'
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='payuser', email='pay@example.com', password='testpass123')
+        self.workspace = Workspace.objects.get(owner=self.user)
+        self.plan = Plan.objects.get(code='plus')
+        self.intent = CheckoutIntent.objects.create(
+            workspace=self.workspace, plan=self.plan, user=self.user,
+            checkout_id='chk_paid123',
+        )
+
+    def _signed_delivery(self, payload):
+        body = json.dumps(payload).encode('utf-8')
+        timestamp = str(int(time.time()))
+        message = f'{timestamp}.{body.decode("utf-8")}'
+        signature = hmac.new(
+            self.SECRET.encode(), message.encode('utf-8'), hashlib.sha256
+        ).hexdigest()
+        return body.decode('utf-8'), timestamp, signature
+
+    def _post(self, body, timestamp, signature):
+        return self.client.post(
+            '/api/webhooks/bachs/',
+            data=body,
+            content_type='application/json',
+            HTTP_X_BACHS_TIMESTAMP=timestamp,
+            HTTP_X_BACHS_SIGNATURE=signature,
+        )
+
+    def _collection_event(self, checkout_id=None):
+        return {
+            'id': 'evt_test1',
+            'type': 'collection.succeeded',
+            'created_at': '2026-08-10T00:00:00Z',
+            'organization_id': 'org_test',
+            'data': {
+                'charge_id': 'chr_test1',
+                'checkout_id': checkout_id or self.intent.checkout_id,
+                'status': 'SUCCEEDED',
+                'amount': '10.00',
+                'currency': 'USD',
+            },
+        }
+
+    @override_settings(BACHS_WEBHOOK_SECRET='whsec_test_secret')
+    def test_paid_collection_grants_plan(self):
+        body, ts, sig = self._signed_delivery(self._collection_event())
+        res = self._post(body, ts, sig)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.workspace.refresh_from_db()
+        self.intent.refresh_from_db()
+        self.assertEqual(self.workspace.plan.code, 'plus')
+        self.assertEqual(self.intent.status, CheckoutIntent.Status.PAID)
+        self.assertEqual(self.intent.charge_id, 'chr_test1')
+
+    @override_settings(BACHS_WEBHOOK_SECRET='whsec_test_secret')
+    def test_duplicate_delivery_is_idempotent(self):
+        body, ts, sig = self._signed_delivery(self._collection_event())
+        self.assertEqual(self._post(body, ts, sig).status_code, status.HTTP_200_OK)
+        self.assertEqual(self._post(body, ts, sig).status_code, status.HTTP_200_OK)
+        self.workspace.refresh_from_db()
+        self.intent.refresh_from_db()
+        self.assertEqual(self.workspace.plan.code, 'plus')
+        self.assertEqual(self.intent.status, CheckoutIntent.Status.PAID)
+
+    @override_settings(BACHS_WEBHOOK_SECRET='whsec_test_secret')
+    def test_bad_signature_rejected(self):
+        body, ts, sig = self._signed_delivery(self._collection_event())
+        res = self._post(body, ts, 'deadbeef' * 8)
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.intent.refresh_from_db()
+        self.assertEqual(self.intent.status, CheckoutIntent.Status.OPEN)
+
+    @override_settings(BACHS_WEBHOOK_SECRET='whsec_test_secret')
+    def test_unknown_checkout_id_is_ignored(self):
+        event = self._collection_event(checkout_id='chk_nope')
+        body, ts, sig = self._signed_delivery(event)
+        res = self._post(body, ts, sig)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.workspace.refresh_from_db()
+        self.assertIsNone(self.workspace.plan)
+
+    @override_settings(BACHS_WEBHOOK_SECRET='whsec_test_secret')
+    def test_non_payment_event_is_ignored(self):
+        event = {'id': 'evt_other', 'type': 'customer.created', 'data': {}}
+        body, ts, sig = self._signed_delivery(event)
+        res = self._post(body, ts, sig)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.workspace.refresh_from_db()
+        self.assertIsNone(self.workspace.plan)
+
+    @override_settings(BACHS_WEBHOOK_SECRET='')
+    def test_webhook_rejected_when_unconfigured(self):
+        body, ts, sig = self._signed_delivery(self._collection_event())
+        res = self._post(body, ts, sig)
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
 
 
 class PasswordResetEndpointTests(APITestCase):

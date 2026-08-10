@@ -21,7 +21,7 @@ from decouple import config
 
 from .models import (
     Workspace, DomainRegistry, TrackingLink, ClickLog, IPRule, TrackerEvent,
-    Plan, DiscountCode, SiteConfig, tracking_host,
+    Plan, DiscountCode, SiteConfig, CheckoutIntent, tracking_host,
 )
 from .serializers import (
     UserSerializer,
@@ -119,14 +119,18 @@ def site_config(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def upgrade_workspace(request):
-    # Plan selection for a workspace (the "checkout gating" hook). Today this
-    # just assigns the chosen paid plan, which then enforces that plan's domain
-    # limit via Workspace.effective_domain_limit. A payment provider (e.g.
-    # Stripe checkout session) can be wired in here later without changing the
-    # contract: the frontend sends plan_code and gets the updated workspace back.
+    # "Choose a plan" → create a Bachs checkout session. The plan is NOT applied
+    # here; Bachs is the source of truth. A verified `collection.succeeded`
+    # webhook (bachs_webhook) sets the workspace's plan once payment clears.
+    # The client redirects the user to `checkout_url` and we predict the rest.
     workspace = get_user_workspace(request.user)
     if not workspace:
         return Response({'error': 'No workspace found'}, status=status.HTTP_404_NOT_FOUND)
+    if SiteConfig.is_beta_free_mode():
+        return Response(
+            {'errors': [{'field': 'plan', 'detail': 'Billing launches after beta — you can\'t buy a plan while beta free mode is on.'}]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     code = (request.data.get('plan_code') or '').strip()
     try:
@@ -136,11 +140,73 @@ def upgrade_workspace(request):
             {'errors': [{'field': 'plan_code', 'detail': 'That plan is not available.'}]},
             status=status.HTTP_400_BAD_REQUEST,
         )
+    if not plan.bachs_product_id:
+        return Response(
+            {'errors': [{'field': 'plan_code', 'detail': f'The {plan.name} plan isn\'t ready to buy yet. Try another plan or contact support.'}]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
-    workspace.plan = plan
-    workspace.save(update_fields=['plan'])
-    send_plan_upgraded_email(request.user, workspace, plan)
-    return Response(WorkspaceSerializer(workspace).data)
+    from .payments import create_checkout_session, BachsError
+
+    intent = CheckoutIntent.objects.create(
+        workspace=workspace,
+        plan=plan,
+        user=request.user,
+    )
+    try:
+        result = create_checkout_session(intent, plan, request.user.email, request.user.username)
+    except BachsError as exc:
+        intent.status = CheckoutIntent.Status.FAILED
+        intent.save(update_fields=['status', 'updated_at'])
+        return Response(
+            {'errors': [{'field': 'checkout', 'detail': f'Could not start the secure checkout. {exc}'}]},
+            status=status.HTTP_502_BAD_GATEWAY,
+        )
+
+    intent.checkout_id = result.get('checkout_id', '')
+    intent.save(update_fields=['checkout_id', 'updated_at'])
+    return Response({
+        'checkout_id': result.get('checkout_id'),
+        'checkout_url': result.get('checkout_url'),
+        'expires_at': result.get('expires_at'),
+        'plan': plan.code,
+    })
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+@throttle_classes([])
+def bachs_webhook(request):
+    # Bachs webhook destination. Verify the HMAC signature over the RAW body
+    # before trusting anything, then fulfil paid checkouts. Returns 200 for
+    # every successfully signed delivery (even unknowns) so Bachs doesn't retry.
+    from .payments import verify_webhook_signature, fulfil_paid_checkout
+
+    raw_body = request.body
+    if not verify_webhook_signature(
+        raw_body,
+        request.headers.get('X-Bachs-Timestamp', ''),
+        request.headers.get('X-Bachs-Signature', ''),
+    ):
+        return Response(
+            {'errors': [{'detail': 'Invalid webhook signature.'}]},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    try:
+        import json
+        payload = json.loads(raw_body.decode('utf-8'))
+    except (ValueError, UnicodeDecodeError):
+        return Response(
+            {'errors': [{'detail': 'Unparseable webhook body.'}]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    event_type = payload.get('type')
+    data = payload.get('data') or {}
+    if event_type == 'collection.succeeded':
+        fulfil_paid_checkout(data.get('checkout_id'), data.get('charge_id') or '')
+    return Response({'status': 'ok'})
 
 
 @api_view(['POST'])

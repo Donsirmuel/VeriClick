@@ -3,7 +3,7 @@ from django.utils import timezone
 
 from .models import (
     Workspace, DomainRegistry, TrackingLink, ClickLog, IPRule,
-    TrackerEvent, Plan, DiscountCode, SiteConfig,
+    TrackerEvent, Plan, DiscountCode, SiteConfig, CheckoutIntent,
 )
 
 
@@ -97,14 +97,24 @@ class TrackerEventAdmin(admin.ModelAdmin):
 
 @admin.register(Plan)
 class PlanAdmin(admin.ModelAdmin):
-    list_display = ('code', 'name', 'monthly_price', 'domain_limit', 'features_preview', 'is_active', 'sort_order')
+    list_display = ('code', 'name', 'monthly_price', 'domain_limit', 'bachs_product_id', 'features_preview', 'is_active', 'sort_order')
     list_filter = ('is_active',)
     search_fields = ('code', 'name')
-    list_editable = ('monthly_price', 'domain_limit', 'is_active', 'sort_order')
+    list_editable = ('monthly_price', 'domain_limit', 'bachs_product_id', 'is_active', 'sort_order')
 
     @admin.display(description='Features')
     def features_preview(self, obj):
         return '; '.join(obj.features or [])[:80]
+
+
+@admin.register(CheckoutIntent)
+class CheckoutIntentAdmin(admin.ModelAdmin):
+    list_display = ('id', 'workspace', 'plan', 'status', 'checkout_id', 'created_at')
+    list_filter = ('status', 'created_at')
+    search_fields = ('workspace__name', 'checkout_id', 'charge_id')
+    readonly_fields = ('id', 'created_at', 'updated_at')
+    autocomplete_fields = ['workspace', 'plan', 'user']
+    date_hierarchy = 'created_at'
 
 
 @admin.register(SiteConfig)

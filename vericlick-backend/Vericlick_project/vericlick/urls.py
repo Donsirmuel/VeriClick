@@ -19,6 +19,7 @@ urlpatterns = [
     path('pricing/', views.pricing, name='pricing'),
     path('site-config/', views.site_config, name='site-config'),
     path('upgrade/', views.upgrade_workspace, name='upgrade'),
+    path('webhooks/bachs/', views.bachs_webhook, name='bachs-webhook'),
     path('discount-codes/validate/', views.discount_code_validate, name='discount-code-validate'),
     # Auth
     path('auth/register/', views.register, name='register'),

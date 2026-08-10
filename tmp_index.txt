@@ -1,0 +1,36 @@
+49: def get_user_workspace(user):
+53: def _merge_query_params(destination, incoming_query):
+73: def workspace_detail(request):
+90: def health_check(request):
+96: def pricing(request):
+109: def site_config(request):
+121: def upgrade_workspace(request):
+122:     # "Choose a plan" → create a Bachs checkout session. The plan is NOT applied
+123:     # here; Bachs is the source of truth. A verified `collection.succeeded`
+124:     # webhook (bachs_webhook) sets the workspace's plan once payment clears.
+143:     if not plan.bachs_product_id:
+149:     from .payments import create_checkout_session, BachsError
+151:     intent = CheckoutIntent.objects.create(
+158:     except BachsError as exc:
+159:         intent.status = CheckoutIntent.Status.FAILED
+179: def bachs_webhook(request):
+180:     # Bachs webhook destination. Verify the HMAC signature over the RAW body
+182:     # every successfully signed delivery (even unknowns) so Bachs doesn't retry.
+188:         request.headers.get('X-Bachs-Timestamp', ''),
+189:         request.headers.get('X-Bachs-Signature', ''),
+214: def discount_code_validate(request):
+249: def tls_allowed(request):
+275: def serve_tracker_script(request):
+295: def receive_tracker_event(request):
+345: def register(request):
+360: def google_login(request):
+441: def auth_me(request):
+448: def delete_account(request):
+467: def password_reset_request(request):
+487: def password_reset_confirm(request):
+517: def dashboard_stats(request):
+583: def dashboard_traffic(request):
+619: def blocked_ips(request):
+647: def dashboard_activity(request):
+777: def redirect_click(request, slug):
+818: def neutral_page(request):

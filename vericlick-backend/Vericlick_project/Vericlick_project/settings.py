@@ -27,6 +27,16 @@ def _env_bool(name, default=False):
     return default
 
 
+def _env_int(name, default=0):
+    raw = config(name, default=None)
+    if raw is None:
+        return default
+    try:
+        return int(str(raw).strip())
+    except (TypeError, ValueError):
+        return default
+
+
 # Production-first: DEBUG is off unless explicitly enabled. Everything that is
 # insecure (dev SECRET_KEY, localhost hosts) is only reachable when DEBUG=True.
 DEBUG = _env_bool('DEBUG', False)
@@ -249,6 +259,16 @@ NEUTRAL_DEFAULT_DESTINATION = 'https://google.com'
 RESEND_API_KEY = _env_str('RESEND_API_KEY')
 RESEND_FROM_EMAIL = _env_str('RESEND_FROM_EMAIL', 'VeriClick <noreply@vendora.page>')
 SITE_URL = _env_str('SITE_URL', 'https://vendora.page').rstrip('/')
+
+
+# Bachs payments. Blank api key = billing off (the upgrade endpoint returns a
+# clear 503 and the webhook view rejects everything). Sandbox keys are the
+# default: going live is a key + base-URL swap (https://api.bachs.io, sk_live_).
+
+BACHS_API_KEY = _env_str('BACHS_API_KEY')
+BACHS_WEBHOOK_SECRET = _env_str('BACHS_WEBHOOK_SECRET')
+BACHS_BASE_URL = _env_str('BACHS_BASE_URL', 'https://sandbox-api.bachs.io').rstrip('/')
+BACHS_WEBHOOK_TOLERANCE_SECONDS = _env_int('BACHS_WEBHOOK_TOLERANCE_SECONDS', 300)
 
 
 REST_FRAMEWORK = {

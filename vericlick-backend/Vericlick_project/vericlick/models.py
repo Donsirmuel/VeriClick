@@ -367,6 +367,15 @@ class Plan(models.Model):
         help_text='How many domains a workspace on this plan may register.',
     )
     features = models.JSONField(default=list, blank=True, help_text='Extra bullet points shown on the pricing page.')
+    bachs_product_id = models.CharField(
+        max_length=64, blank=True, default='',
+        help_text=(
+            'The Bachs recurring product ID (prod_...) this plan is sold as. '
+            'Create a matching recurring product in Bachs, then paste its ID '
+            'here — upgrading to this plan routes through that product\'s '
+            'checkout.'
+        ),
+    )
     is_active = models.BooleanField(default=True, help_text='Inactive plans are hidden from the pricing endpoint.')
     sort_order = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -376,6 +385,49 @@ class Plan(models.Model):
 
     def __str__(self):
         return f'{self.name} (${self.monthly_price}/mo)'
+
+
+class CheckoutIntent(models.Model):
+    # One row per checkout session a workspace starts for a plan. Bachs is the
+    # source of truth for whether payment actually happened: the row stays OPEN
+    # until a verified collection.succeeded webhook arrives, at which point the
+    # workspace's plan is set. A redirect back to the app is never enough.
+    class Status(models.TextChoices):
+        OPEN = 'open', 'Open'
+        PAID = 'paid', 'Paid'
+        FAILED = 'failed', 'Failed'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace = models.ForeignKey(
+        Workspace, on_delete=models.CASCADE, related_name='checkout_intents',
+    )
+    plan = models.ForeignKey(
+        Plan, on_delete=models.CASCADE, related_name='checkout_intents',
+    )
+    user = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='checkout_intents',
+        help_text='The account that started the checkout (for the upgrade email).',
+    )
+    checkout_id = models.CharField(
+        max_length=100, blank=True, default='', db_index=True,
+        help_text="Bachs checkout ID (chk_...). Empty until Bachs answers.",
+    )
+    charge_id = models.CharField(
+        max_length=100, blank=True, default='',
+        help_text="Bachs charge ID (chr_...), if provided on the webhook.",
+    )
+    status = models.CharField(
+        max_length=10, choices=Status.choices, default=Status.OPEN,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.checkout_id or "pending"} -> {self.plan} ({self.status})'
 
 
 class DiscountCode(models.Model):
