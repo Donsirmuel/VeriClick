@@ -48,7 +48,7 @@ npm install
 npm run dev
 ```
 
-- `VITE_API_BASE_URL=https://get-vericlick.site/api` — backend origin
+- `VITE_API_BASE_URL=https://getvericlick.site/api` — backend origin
 - `VITE_SITE_URL` — deployed domain; drives build-time `robots.txt` / `sitemap.xml` (default `https://vericlick.io`)
 
 `npm run build` runs `tsc -b && vite build` and emits per-route chunks; `npm run lint` runs oxlint. The build writes `dist/robots.txt` and `dist/sitemap.xml` from `VITE_SITE_URL`.

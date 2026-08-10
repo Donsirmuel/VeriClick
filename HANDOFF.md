@@ -218,11 +218,11 @@ cd vericlick-frontend
 npm install
 npm run dev
 ```
-Environment variables (`.env`, see `.env.example`): `VITE_API_BASE_URL=https://get-vericlick.site/api`, `VITE_SITE_URL` (drives build-time `robots.txt`/`sitemap.xml`), `VITE_GOOGLE_CLIENT_ID`.
+Environment variables (`.env`, see `.env.example`): `VITE_API_BASE_URL=https://getvericlick.site/api`, `VITE_SITE_URL` (drives build-time `robots.txt`/`sitemap.xml`), `VITE_GOOGLE_CLIENT_ID`.
 
 ### Google OAuth Setup
 1. Google Cloud Console → Credentials → OAuth 2.0 Client ID (Web application)
-2. Add `https://get-vericlick.site` and `https://www.get-vericlick.site` to Authorized JavaScript origins
+2. Add `https://getvericlick.site` and `https://www.getvericlick.site` to Authorized JavaScript origins
 3. Set `GOOGLE_CLIENT_ID` in backend `.env` and `VITE_GOOGLE_CLIENT_ID` in frontend `.env`
 
 ### Production Checklist

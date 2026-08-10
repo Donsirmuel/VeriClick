@@ -33,8 +33,8 @@ services:
       TRUST_X_FORWARDED_PROTO: "true"
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
-      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-VeriClick <noreply@get-vericlick.site>}
-      SITE_URL: ${SITE_URL:-https://get-vericlick.site}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-VeriClick <noreply@getvericlick.site>}
+      SITE_URL: ${SITE_URL:-https://getvericlick.site}
       BACHS_API_KEY: ${BACHS_API_KEY:-}
       BACHS_WEBHOOK_SECRET: ${BACHS_WEBHOOK_SECRET:-}
       BACHS_BASE_URL: ${BACHS_BASE_URL:-https://sandbox-api.bachs.io}

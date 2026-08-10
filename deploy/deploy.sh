@@ -68,8 +68,8 @@ cmd_up() {
   wait_healthy || true
   echo
   echo "VeriClick should be live. Verify:"
-  echo "  https://get-vericlick.site            (SPA)"
-  echo "  https://get-vericlick.site/admin/     (Jazzmin admin)"
+  echo "  https://getvericlick.site            (SPA)"
+  echo "  https://getvericlick.site/admin/     (Jazzmin admin)"
 }
 
 cmd_down() {

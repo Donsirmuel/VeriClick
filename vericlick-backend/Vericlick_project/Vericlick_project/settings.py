@@ -60,7 +60,7 @@ else:
     allowed_hosts = _env_str('ALLOWED_HOSTS')
     if not allowed_hosts:
         raise ImproperlyConfigured(
-            'ALLOWED_HOSTS is not set. Add the public hostnames (e.g. get-vericlick.site,www.get-vericlick.site) '
+            'ALLOWED_HOSTS is not set. Add the public hostnames (e.g. getvericlick.site,www.getvericlick.site) '
             'to the .env file.'
         )
     ALLOWED_HOSTS = Csv()(allowed_hosts)
@@ -257,8 +257,8 @@ NEUTRAL_DEFAULT_DESTINATION = 'https://google.com'
 # a no-op until configured — no exceptions are raised for missing config.
 
 RESEND_API_KEY = _env_str('RESEND_API_KEY')
-RESEND_FROM_EMAIL = _env_str('RESEND_FROM_EMAIL', 'VeriClick <noreply@get-vericlick.site>')
-SITE_URL = _env_str('SITE_URL', 'https://get-vericlick.site').rstrip('/')
+RESEND_FROM_EMAIL = _env_str('RESEND_FROM_EMAIL', 'VeriClick <noreply@getvericlick.site>')
+SITE_URL = _env_str('SITE_URL', 'https://getvericlick.site').rstrip('/')
 
 
 # Bachs payments. Blank api key = billing off (the upgrade endpoint returns a

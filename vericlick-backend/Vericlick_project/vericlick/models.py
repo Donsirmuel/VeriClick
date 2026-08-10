@@ -35,7 +35,7 @@ def _resolve_addresses(host):
 def _target_addresses():
     # The addresses we expect a customer tracking domain to resolve to. Prefers
     # an explicit TRACKING_SERVER_IP; otherwise resolves PUBLIC_TRACKING_BASE_URL
-    # (e.g. get-vericlick.site) — the same host Caddy serves.
+    # (e.g. getvericlick.site) — the same host Caddy serves.
     from django.conf import settings as django_settings
     configured = getattr(django_settings, 'TRACKING_SERVER_IP', '').strip()
     if configured:
