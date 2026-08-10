@@ -33,6 +33,7 @@ def _request(method, path, payload=None, api_key=None, base_url=None, idempotenc
         'Authorization': f'Bearer {api_key}',
         'Content-Type': 'application/json',
         'Accept': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
     }
     if idempotency_key:
         headers['Idempotency-Key'] = idempotency_key
