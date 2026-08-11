@@ -1,8 +1,26 @@
 from django.contrib import admin
 from django.urls import path, include
 from django.http import HttpResponse
-from django.template.loader import render_to_string
+from django.conf import settings
 from vericlick.views import redirect_click, neutral_page
+
+# Public pages worth crawling. Auth/app pages are excluded (the SPA noindexes
+# /auth/* and /app/* at runtime anyway, and login/register add no value).
+SITEMAP_PAGES = [
+    ('/', '1.0'),
+    ('/pricing', '0.8'),
+    ('/contact', '0.6'),
+    ('/privacy', '0.4'),
+    ('/terms', '0.4'),
+]
+
+
+def _canonical_base():
+    # Always the canonical product domain (SITE_URL), never the request host, so
+    # robots.txt / sitemap.xml reference one host even while vendora.page still
+    # serves the app — avoids duplicate-content signals during the transition.
+    return settings.SITE_URL.rstrip('/')
+
 
 def robots_txt(request):
     lines = [
@@ -10,21 +28,24 @@ def robots_txt(request):
         'Allow: /',
         'Disallow: /auth/',
         'Disallow: /app/',
+        'Disallow: /api/',
+        'Disallow: /r/',
+        'Disallow: /suspicious/',
+        'Disallow: /admin/',
         '',
-        f'Sitemap: {request.scheme}://{request.get_host()}/sitemap.xml',
+        f'Sitemap: {_canonical_base()}/sitemap.xml',
     ]
     return HttpResponse('\n'.join(lines), content_type='text/plain')
 
 def sitemap_xml(request):
-    urls = [
-        {'loc': f'{request.scheme}://{request.get_host()}/', 'priority': '1.0'},
-        {'loc': f'{request.scheme}://{request.get_host()}/auth/login', 'priority': '0.3'},
-        {'loc': f'{request.scheme}://{request.get_host()}/auth/register', 'priority': '0.3'},
-    ]
+    base = _canonical_base()
+    url_xml = '\n'.join(
+        f'  <url>\n    <loc>{base}{path}</loc>\n    <priority>{priority}</priority>\n  </url>'
+        for path, priority in SITEMAP_PAGES
+    )
     xml = '<?xml version="1.0" encoding="UTF-8"?>\n'
     xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
-    for entry in urls:
-        xml += f'  <url>\n    <loc>{entry["loc"]}</loc>\n    <priority>{entry["priority"]}</priority>\n  </url>\n'
+    xml += url_xml + '\n'
     xml += '</urlset>'
     return HttpResponse(xml, content_type='application/xml')
 

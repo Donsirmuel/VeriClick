@@ -193,8 +193,9 @@ All page modules are loaded via `React.lazy(() => import('./pages/...'))` with a
 - Frontend API client camelCases responses, so backend `tracker_secret` → `trackerSecret`, `tracking_url` → `trackingUrl`, etc.
 
 ### SEO (env-driven)
-- `vite.config.ts` ships an inline `seoFiles()` plugin: on `npm run build` it writes `dist/robots.txt` + `dist/sitemap.xml` from `VITE_SITE_URL` (default `https://vericlick.io`). No static copies live in `public/` anymore — set `VITE_SITE_URL` to the deployed domain before building.
-- `index.html` carries title/description/OG/Twitter/JSON-LD metadata (canonical domain: vericlick.io).
+- `/robots.txt` and `/sitemap.xml` are served by the Django backend (Caddy proxies them), built from `SITE_URL` so they always reference the canonical domain — never the request host. Public pages only: `/`, `/pricing`, `/contact`, `/privacy`, `/terms`; `/auth/*`, `/app/*`, `/api/*`, `/r/*`, `/admin/` are disallowed.
+- `index.html` carries title/description/OG/Twitter/JSON-LD metadata (canonical domain: `getvericlick.site`). Google/Bing verification codes are injected at build time from `VITE_GOOGLE_SITE_VERIFICATION` / `VITE_BING_VERIFICATION`.
+- `SEOHead.tsx` sets per-route title/description/canonical for public pages and injects `noindex, nofollow` on `/auth/*` and `/app/*`.
 
 ### Code-splitting
 - Done via `React.lazy` per route in `App.tsx` (`withSuspense` wrapper). The old single ~970 kB chunk note is obsolete — build output is now split into per-route chunks.

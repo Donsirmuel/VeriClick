@@ -49,9 +49,10 @@ npm run dev
 ```
 
 - `VITE_API_BASE_URL=https://getvericlick.site/api` — backend origin
-- `VITE_SITE_URL` — deployed domain; drives build-time `robots.txt` / `sitemap.xml` (default `https://vericlick.io`)
+- `VITE_SITE_URL` — deployed domain; used by `SEOHead.tsx` for per-page canonical URLs
+- `VITE_GOOGLE_SITE_VERIFICATION` / `VITE_BING_VERIFICATION` — search-console verification codes (blank until indexing is set up)
 
-`npm run build` runs `tsc -b && vite build` and emits per-route chunks; `npm run lint` runs oxlint. The build writes `dist/robots.txt` and `dist/sitemap.xml` from `VITE_SITE_URL`.
+`npm run build` runs `tsc -b && vite build` and emits per-route chunks; `npm run lint` runs oxlint. `robots.txt` / `sitemap.xml` are served by the Django backend (canonical from `SITE_URL`).
 
 ## Domain health scheduling
 

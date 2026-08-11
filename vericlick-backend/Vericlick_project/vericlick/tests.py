@@ -1567,18 +1567,27 @@ class RedirectEndpointTests(APITestCase):
 # SEO Endpoints
 
 class SEOEndpointTests(APITestCase):
+    @override_settings(SITE_URL='https://example.org')
     def test_robots_txt(self):
         res = self.client.get('/robots.txt')
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         self.assertEqual(res['Content-Type'], 'text/plain')
-        self.assertIn('Disallow: /auth/', res.content.decode())
-        self.assertIn('Sitemap:', res.content.decode())
+        body = res.content.decode()
+        self.assertIn('Disallow: /auth/', body)
+        self.assertIn('Disallow: /r/', body)
+        self.assertIn('Disallow: /api/', body)
+        self.assertIn('Sitemap: https://example.org/sitemap.xml', body)
 
+    @override_settings(SITE_URL='https://example.org')
     def test_sitemap_xml(self):
         res = self.client.get('/sitemap.xml')
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         self.assertEqual(res['Content-Type'], 'application/xml')
-        self.assertIn('<urlset', res.content.decode())
+        body = res.content.decode()
+        self.assertIn('<urlset', body)
+        self.assertIn('<loc>https://example.org/</loc>', body)
+        self.assertIn('<loc>https://example.org/pricing</loc>', body)
+        self.assertNotIn('auth', body)
 
 
 class DomainScanCommandTests(APITestCase):
