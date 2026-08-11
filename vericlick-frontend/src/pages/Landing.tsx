@@ -235,7 +235,7 @@ function RotatingWord() {
   return (
     <span
       key={index}
-      className="inline-block w-[7ch] text-left"
+      className="inline-block w-auto min-w-[6ch] text-left pr-2"
       style={{ animation: 'word-in 0.5s ease-out forwards' }}
     >
       {HERO_WORDS[index]},
@@ -266,7 +266,7 @@ export default function Landing() {
                 Link protection for real traffic
               </div>
 
-              <h1 className="text-5xl md:text-6xl lg:text-[5.5rem] font-bold tracking-tight mb-8 leading-[0.95] opacity-0" style={{ animation: 'fade-in-up 0.7s ease-out 0.2s forwards' }}>
+              <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-[5.5rem] font-bold tracking-tight mb-8 leading-[0.95] opacity-0" style={{ animation: 'fade-in-up 0.7s ease-out 0.2s forwards' }}>
                 Every <RotatingWord /><br />
                 <span className="text-gradient">verified.</span>
               </h1>
@@ -287,7 +287,7 @@ export default function Landing() {
                 </Link>
               </div>
 
-              <div ref={heroStats.ref} className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8 border-t border-neutral-800/60 pt-10 opacity-0" style={{ animation: 'fade-in-up 0.6s ease-out 0.55s forwards' }}>
+              <div ref={heroStats.ref} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 md:gap-8 border-t border-neutral-800/60 pt-10 opacity-0" style={{ animation: 'fade-in-up 0.6s ease-out 0.55s forwards' }}>
                 {HERO_POINTS.map((p) => (
                   <div key={p.title}>
                     <div className="flex items-center gap-2 mb-1">

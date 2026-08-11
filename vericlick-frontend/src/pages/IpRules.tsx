@@ -131,7 +131,7 @@ export default function IpRulesPage() {
           <h1 className="text-2xl font-bold text-slate-900">IP Rules</h1>
           <p className="text-sm text-muted mt-1">
             Control which IP addresses can or cannot reach your links
-            <HelpTooltip text="An IP address is like a computer's home address on the internet. Allow rules let specific IPs through and are checked first — they always win, so whitelisted IPs are never flagged again. Deny rules block traffic next. After that, automated bot detection and rate limits apply. You can use CIDR ranges like 192.168.1.0/24 to cover many addresses at once." side="right" />
+            <HelpTooltip text="An IP address is like a computer's home address on the internet. Allow rules let specific IPs through and are checked first — they always win, so whitelisted IPs are never flagged again. Deny rules block traffic next. After that, automated bot detection and rate limits apply. You can use CIDR ranges like 192.168.1.0/24 to cover many addresses at once." side="bottom" />
           </p>
         </div>
         <button
@@ -288,14 +288,14 @@ export default function IpRulesPage() {
                   <td className="px-6 py-4">
                     <div className="flex items-center justify-end gap-1">
                       {canExpire(rule) && (
-                        <button onClick={() => handleExpire(rule)} className="p-2 rounded-lg hover:bg-warning/10 transition-colors" title="Expire now">
+                        <button onClick={() => handleExpire(rule)} className="p-2.5 rounded-lg hover:bg-warning/10 transition-colors" title="Expire now">
                           <HugeiconsIcon icon={Clock02Icon} className="w-4 h-4 text-warning" />
                         </button>
                       )}
-                      <button onClick={() => openEdit(rule)} className="p-2 rounded-lg hover:bg-neutral-100 transition-colors" title="Edit">
+                      <button onClick={() => openEdit(rule)} className="p-2.5 rounded-lg hover:bg-neutral-100 transition-colors" title="Edit">
                         <HugeiconsIcon icon={Edit01Icon} className="w-4 h-4 text-muted" />
                       </button>
-                      <button onClick={() => setDeleteTarget(rule)} className="p-2 rounded-lg hover:bg-error/10 transition-colors" title="Delete">
+                      <button onClick={() => setDeleteTarget(rule)} className="p-2.5 rounded-lg hover:bg-error/10 transition-colors" title="Delete">
                         <HugeiconsIcon icon={Cancel01Icon} className="w-4 h-4 text-error" />
                       </button>
                     </div>

@@ -165,14 +165,14 @@ export default function BlockedIPsPage() {
             <button
               disabled={page <= 1}
               onClick={() => setPage(p => p - 1)}
-              className="p-2 rounded-xl border border-neutral-200 hover:bg-neutral-50 disabled:opacity-40 transition-colors"
+              className="p-2.5 rounded-xl border border-neutral-200 hover:bg-neutral-50 disabled:opacity-40 transition-colors"
             >
               <HugeiconsIcon icon={ArrowLeft02Icon} className="w-4 h-4" />
             </button>
             <button
               disabled={page >= totalPages}
               onClick={() => setPage(p => p + 1)}
-              className="p-2 rounded-xl border border-neutral-200 hover:bg-neutral-50 disabled:opacity-40 transition-colors"
+              className="p-2.5 rounded-xl border border-neutral-200 hover:bg-neutral-50 disabled:opacity-40 transition-colors"
             >
               <HugeiconsIcon icon={ArrowRight02Icon} className="w-4 h-4" />
             </button>

@@ -361,6 +361,11 @@ class ClickLog(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['-created_at'], name='clicklog_created_idx'),
+            models.Index(fields=['link', '-created_at'], name='clicklog_link_created_idx'),
+            models.Index(fields=['link', 'decision', '-created_at'], name='clicklog_link_dec_created_idx'),
+        ]
 
     def __str__(self):
         return f'{self.ip} -> {self.link.slug} ({"bot" if self.is_bot else "human"})'

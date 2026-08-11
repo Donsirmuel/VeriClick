@@ -228,16 +228,16 @@ export default function LinksPage() {
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center justify-end gap-1">
-                      <button onClick={() => handleCopyTrackedLink(link)} className="p-2 rounded-lg hover:bg-neutral-100 transition-colors" title="Copy tracked link">
+                      <button onClick={() => handleCopyTrackedLink(link)} className="p-2.5 rounded-lg hover:bg-neutral-100 transition-colors" title="Copy tracked link">
                         <HugeiconsIcon icon={Copy01Icon} className="w-4 h-4 text-muted" />
                       </button>
-                      <button onClick={() => handlePreviewDestination(link)} className="p-2 rounded-lg hover:bg-neutral-100 transition-colors" title="Preview destination">
+                      <button onClick={() => handlePreviewDestination(link)} className="p-2.5 rounded-lg hover:bg-neutral-100 transition-colors" title="Preview destination">
                         <HugeiconsIcon icon={ExternalLinkIcon} className="w-4 h-4 text-muted" />
                       </button>
-                      <button onClick={() => setEditTarget(link)} className="p-2 rounded-lg hover:bg-neutral-100 transition-colors" title="Edit">
+                      <button onClick={() => setEditTarget(link)} className="p-2.5 rounded-lg hover:bg-neutral-100 transition-colors" title="Edit">
                         <HugeiconsIcon icon={Edit01Icon} className="w-4 h-4 text-muted" />
                       </button>
-                      <button onClick={() => setDeleteTarget(link)} className="p-2 rounded-lg hover:bg-error/10 transition-colors" title="Delete">
+                      <button onClick={() => setDeleteTarget(link)} className="p-2.5 rounded-lg hover:bg-error/10 transition-colors" title="Delete">
                         <HugeiconsIcon icon={Cancel01Icon} className="w-4 h-4 text-error" />
                       </button>
                     </div>
@@ -260,14 +260,14 @@ export default function LinksPage() {
             <button
               disabled={page <= 1}
               onClick={() => setPage(p => p - 1)}
-              className="p-2 rounded-xl border border-neutral-200 hover:bg-neutral-50 disabled:opacity-40 transition-colors"
+              className="p-2.5 rounded-xl border border-neutral-200 hover:bg-neutral-50 disabled:opacity-40 transition-colors"
             >
               <HugeiconsIcon icon={ArrowLeft02Icon} className="w-4 h-4" />
             </button>
             <button
               disabled={page >= totalPages}
               onClick={() => setPage(p => p + 1)}
-              className="p-2 rounded-xl border border-neutral-200 hover:bg-neutral-50 disabled:opacity-40 transition-colors"
+              className="p-2.5 rounded-xl border border-neutral-200 hover:bg-neutral-50 disabled:opacity-40 transition-colors"
             >
               <HugeiconsIcon icon={ArrowRight02Icon} className="w-4 h-4" />
             </button>

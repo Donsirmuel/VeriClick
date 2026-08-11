@@ -10,7 +10,8 @@ import { ChatWidget } from './components/chat/ChatWidget'
 import PublicOnly from './components/PublicOnly'
 import DashboardLayout from './components/layout/DashboardLayout'
 import { PageLoader } from './components/ui/PageLoader'
-import Landing from './pages/Landing'
+
+const Landing = lazy(() => import('./pages/Landing'))
 
 const Login = lazy(() => import('./pages/Login'))
 const Register = lazy(() => import('./pages/Register'))

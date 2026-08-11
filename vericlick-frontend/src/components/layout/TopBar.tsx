@@ -43,7 +43,7 @@ export function TopBar({ onMenuToggle }: { onMenuToggle: () => void }) {
       <div className="flex items-center gap-4">
         <button 
           onClick={onMenuToggle}
-          className="lg:hidden p-2 rounded-lg hover:bg-slate-100 transition-colors"
+          className="lg:hidden p-2.5 rounded-lg hover:bg-slate-100 transition-colors"
         >
           <HugeiconsIcon icon={Menu01Icon} className="w-5 h-5 text-muted" />
         </button>

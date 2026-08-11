@@ -47,8 +47,8 @@ export function Sidebar({ onClose: _onClose }: { onClose: () => void }) {
   }
 
   return (
-    <aside className="w-72 h-full bg-sidebar flex flex-col p-6 border-r border-neutral-800">
-      <div className="flex items-center gap-3 mb-12 px-2">
+    <aside className="w-72 h-full bg-sidebar flex flex-col p-6 border-r border-neutral-800 overflow-y-auto">
+      <div className="flex items-center gap-3 mb-12 px-2 shrink-0">
         <Link to="/" className="flex items-center gap-3">
           <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center">
             <Logo variant="dark" className="w-6 h-6" />

@@ -104,7 +104,7 @@ export function ChatWidget() {
   return (
     <>
       {open && (
-        <div className="fixed bottom-24 right-4 md:right-6 z-100 w-[calc(100vw-2rem)] max-w-100 h-140 max-h-[calc(100vh-8rem)] bg-white rounded-2xl border border-neutral-200 shadow-2xl flex flex-col overflow-hidden">
+        <div className="fixed bottom-24 right-4 md:right-6 z-40 w-[calc(100vw-2rem)] max-w-100 h-[min(560px,calc(100vh-8rem))] bg-white rounded-2xl border border-neutral-200 shadow-2xl flex flex-col overflow-hidden">
           <div className="bg-neutral-950 text-white px-4 py-3.5 flex items-center gap-3 shrink-0">
             <div className="w-9 h-9 rounded-xl bg-white text-black flex items-center justify-center">
               <HugeiconsIcon icon={ChatBotIcon} className="w-5 h-5" />
@@ -168,7 +168,7 @@ export function ChatWidget() {
       <button
         onClick={() => setOpen(!open)}
         className={cn(
-          'fixed bottom-6 right-4 md:right-6 z-100 w-14 h-14 rounded-full shadow-xl flex items-center justify-center transition-all',
+          'fixed bottom-6 right-4 md:right-6 z-40 w-14 h-14 rounded-full shadow-xl flex items-center justify-center transition-all',
           open ? 'bg-neutral-800 hover:bg-neutral-700' : 'bg-neutral-900 hover:bg-neutral-700'
         )}
         aria-label={open ? 'Close chat assistant' : 'Open chat assistant'}

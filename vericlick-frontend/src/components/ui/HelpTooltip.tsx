@@ -17,6 +17,13 @@ export function HelpTooltip({ text, side = 'top' }: HelpTooltipProps) {
     right: 'left-full ml-2 top-1/2 -translate-y-1/2',
   }
 
+  const arrowClasses = {
+    top: 'top-full -translate-x-1/2 left-1/2 -mt-1',
+    bottom: 'bottom-full -translate-x-1/2 left-1/2 -mb-1',
+    left: 'left-full -translate-y-1/2 top-1/2 -ml-1',
+    right: 'right-full -translate-y-1/2 top-1/2 -mr-1',
+  }
+
   return (
     <span className="relative inline-flex items-center">
       <button
@@ -24,7 +31,8 @@ export function HelpTooltip({ text, side = 'top' }: HelpTooltipProps) {
         onMouseEnter={() => setShow(true)}
         onMouseLeave={() => setShow(false)}
         onClick={() => setShow(!show)}
-        className="text-muted hover:text-slate-600 transition-colors focus:outline-none"
+        aria-label="Help"
+        className="text-muted hover:text-slate-600 transition-colors focus:outline-none p-2 -m-2"
       >
         <HugeiconsIcon icon={HelpCircleIcon} className="w-4 h-4" />
       </button>
@@ -33,12 +41,7 @@ export function HelpTooltip({ text, side = 'top' }: HelpTooltipProps) {
           <div className="fixed inset-0 z-40" onClick={() => setShow(false)} />
           <div className={`absolute z-50 ${sideClasses[side]} w-64 max-w-[calc(100vw-2rem)] p-3 bg-slate-900 text-white text-xs leading-relaxed rounded-xl shadow-xl pointer-events-none`}>
             {text}
-            <div className={`absolute w-2 h-2 bg-slate-900 transform rotate-45 ${
-              side === 'top' ? 'top-full -translate-x-1/2 left-1/2 -mt-1' :
-              side === 'bottom' ? 'bottom-full -translate-x-1/2 left-1/2 -mb-1' :
-              side === 'left' ? 'left-full -translate-y-1/2 top-1/2 -ml-1' :
-              'right-full -translate-y-1/2 top-1/2 -mr-1'
-            }`} />
+            <div className={`absolute w-2 h-2 bg-slate-900 transform rotate-45 ${arrowClasses[side]}`} />
           </div>
         </>
       )}

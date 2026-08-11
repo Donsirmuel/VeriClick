@@ -148,27 +148,48 @@ def refresh_stale_domains(workspace, max_age_minutes=15, limit=10):
     return stale
 
 
+_refresh_locks = {}
+_refresh_pending = {}
+
+
 def refresh_stale_domains_async(workspace):
     # Fire-and-forget stale-domain refresh. Health checks resolve real DNS
     # (with multi-second timeouts), so they must never run synchronously inside
     # an HTTP request — that is what made page loads block for seconds. The
     # refresh happens on a daemon thread and the response returns immediately;
     # statuses catch up within seconds.
+    #
+    # Sweeps are coalesced per workspace: only ONE sweep thread runs at a time.
+    # React-query refetches dashboard/domains on mount and window focus, which
+    # can fire several requests within seconds; without coalescing each one
+    # would spawn its own DNS-refresh thread and swamp the server (and its DB
+    # connections). A retry flag makes the active thread sweep again if new
+    # requests arrive while it is mid-sweep, so statuses stay fresh.
     import threading
     from django.db import close_old_connections
 
     workspace_id = workspace.id
+    _refresh_pending[workspace_id] = True
+    lock = _refresh_locks.setdefault(workspace_id, threading.Lock())
+
+    if not lock.acquire(blocking=False):
+        return
 
     def _run():
         from .models import Workspace
 
         try:
-            ws = Workspace.objects.get(id=workspace_id)
-            refresh_stale_domains(ws)
-        except Exception:
-            pass
+            while _refresh_pending.get(workspace_id):
+                _refresh_pending[workspace_id] = False
+                try:
+                    ws = Workspace.objects.get(id=workspace_id)
+                    refresh_stale_domains(ws)
+                except Exception:
+                    break
+                finally:
+                    close_old_connections()
         finally:
-            close_old_connections()
+            lock.release()
 
     threading.Thread(target=_run, daemon=True).start()
 

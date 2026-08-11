@@ -18,9 +18,9 @@ export function AddDomainDialog({ onClose, onSubmit, loading }: AddDomainDialogP
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-4 overflow-y-auto">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md border border-neutral-200">
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md border border-neutral-200 my-8 max-h-[calc(100vh-2rem)] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-neutral-200">
           <h2 className="text-lg font-bold text-slate-900">Add Domain</h2>

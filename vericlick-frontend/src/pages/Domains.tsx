@@ -347,21 +347,21 @@ export default function DomainsPage() {
                     <div className="flex items-center justify-end gap-1">
                       <button
                         onClick={() => recheckMutation.mutate(domain.id)}
-                        className="p-2 rounded-lg hover:bg-neutral-100 transition-colors"
+                        className="p-2.5 rounded-lg hover:bg-neutral-100 transition-colors"
                         title="Re-check domain health"
                       >
                         <HugeiconsIcon icon={RefreshIcon} className="w-4 h-4 text-muted" />
                       </button>
                       <button
                         onClick={() => handleStartEdit(domain.id, domain.domain)}
-                        className="p-2 rounded-lg hover:bg-neutral-100 transition-colors"
+                        className="p-2.5 rounded-lg hover:bg-neutral-100 transition-colors"
                         title="Edit domain"
                       >
                         <HugeiconsIcon icon={Edit01Icon} className="w-4 h-4 text-muted" />
                       </button>
                       <button
                         onClick={() => setDeleteTarget(domain)}
-                        className="p-2 rounded-lg hover:bg-error/10 transition-colors"
+                        className="p-2.5 rounded-lg hover:bg-error/10 transition-colors"
                         title="Remove domain"
                       >
                         <HugeiconsIcon icon={Cancel01Icon} className="w-4 h-4 text-error" />
