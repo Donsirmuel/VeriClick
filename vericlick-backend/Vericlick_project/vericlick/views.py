@@ -729,7 +729,7 @@ class DomainRegistryViewSet(viewsets.ModelViewSet):
         # the app and can no longer be acted on.
         return qs.filter(removed_at__isnull=True).annotate(
             links_count=Count('links', filter=Q(links__removed_at__isnull=True))
-        )
+        ).order_by('-created_at')
 
     def perform_create(self, serializer):
         workspace = get_user_workspace(self.request.user)

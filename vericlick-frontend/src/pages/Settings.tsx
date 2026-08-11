@@ -159,11 +159,11 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          <div className="p-4 rounded-xl bg-neutral-900 text-neutral-100 text-xs font-mono leading-relaxed overflow-x-auto whitespace-nowrap">
+          <div className="p-4 rounded-xl bg-neutral-900 text-neutral-100 text-xs font-mono leading-relaxed break-all min-w-0">
             {snippet || (
               <div className="space-y-2">
-                <Skeleton className="h-3.5 w-72" />
-                <Skeleton className="h-3.5 w-96" />
+                <Skeleton className="h-3.5 w-72 max-w-full" />
+                <Skeleton className="h-3.5 w-96 max-w-full" />
               </div>
             )}
           </div>
