@@ -1,4 +1,4 @@
-export const CONTACT_EMAIL = 'samuel@donlabs.site'
+export const CONTACT_EMAIL = 'support@getvericlick.site'
 export const COMPANY_NAME = 'DonLabs'
 export const COMPANY_URL = 'https://donlabs.site'
 export const PRODUCT_NAME = 'VeriClick'

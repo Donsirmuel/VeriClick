@@ -21,7 +21,7 @@ from decouple import config
 
 from .models import (
     Workspace, DomainRegistry, TrackingLink, ClickLog, IPRule, TrackerEvent,
-    Plan, DiscountCode, SiteConfig, CheckoutIntent, tracking_host,
+    Plan, DiscountCode, SiteConfig, CheckoutIntent,
 )
 from .serializers import (
     UserSerializer,
@@ -42,7 +42,7 @@ from .services import (
     lookup_location,
     get_safe_destination,
     verify_domain_ownership,
-    refresh_stale_domains,
+    refresh_stale_domains_async,
 )
 
 
@@ -253,11 +253,14 @@ def tls_allowed(request):
     # domain (e.g. donnable.site) can't hold a CNAME, so its branded links run
     # on the `t.` subdomain (t.donnable.site) which Caddy must also serve TLS
     # for.
-    allowed = False
-    for d in DomainRegistry.objects.filter(verified=True, removed_at__isnull=True):
-        if d.domain == host or tracking_host(d.domain) == host:
-            allowed = True
-            break
+    candidates = [host]
+    if host.startswith('t.'):
+        apex = host[2:]
+        if apex.count('.') == 1:
+            candidates.append(apex)
+    allowed = DomainRegistry.objects.filter(
+        verified=True, removed_at__isnull=True, domain__in=candidates
+    ).exists()
     if not allowed:
         return Response(status=status.HTTP_403_FORBIDDEN)
     return Response(status=status.HTTP_200_OK)
@@ -513,9 +516,9 @@ def dashboard_stats(request):
     if not workspace:
         return Response({'error': 'No workspace found'}, status=status.HTTP_404_NOT_FOUND)
 
-    # Refresh stale domain health from inside the app so the dashboard counts
-    # reflect current status without depending on an external scheduler.
-    refresh_stale_domains(workspace)
+    # Refresh stale domain health asynchronously so this request never blocks
+    # on DNS lookups. The page shows the last-known status immediately.
+    refresh_stale_domains_async(workspace)
 
     now = timezone.now()
     twenty_four_hours_ago = now - timedelta(hours=24)
@@ -709,11 +712,11 @@ class DomainRegistryViewSet(viewsets.ModelViewSet):
     serializer_class = DomainRegistrySerializer
 
     def list(self, request, *args, **kwargs):
-        # Health checks run automatically in-app when a domain is stale, so
-        # no external cron/systemd job is required to keep statuses current.
+        # Health checks run asynchronously so the list never blocks on DNS
+        # lookups; the page shows the last-known status immediately.
         workspace = get_user_workspace(self.request.user)
         if workspace:
-            refresh_stale_domains(workspace)
+            refresh_stale_domains_async(workspace)
         return super().list(request, *args, **kwargs)
 
     def get_queryset(self):
@@ -724,7 +727,9 @@ class DomainRegistryViewSet(viewsets.ModelViewSet):
         # Removed (soft-deleted) domains stay in the DB so they keep counting
         # toward the plan limit until the period ends, but they are hidden from
         # the app and can no longer be acted on.
-        return qs.filter(removed_at__isnull=True)
+        return qs.filter(removed_at__isnull=True).annotate(
+            links_count=Count('links', filter=Q(links__removed_at__isnull=True))
+        )
 
     def perform_create(self, serializer):
         workspace = get_user_workspace(self.request.user)

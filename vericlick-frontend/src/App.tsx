@@ -5,6 +5,7 @@ import { Toaster } from 'react-hot-toast'
 import { queryClient } from './lib/queryClient'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { SEOHead } from './components/SEOHead'
+import ScrollToTop from './components/ScrollToTop'
 import { ChatWidget } from './components/chat/ChatWidget'
 import PublicOnly from './components/PublicOnly'
 import DashboardLayout from './components/layout/DashboardLayout'
@@ -42,6 +43,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <SEOHead />
+        <ScrollToTop />
         <Routes>
           {/* Landing is public even for signed-in users (nav adapts to show "Dashboard"). */}
           <Route path="/" element={withSuspense(<Landing />)} />

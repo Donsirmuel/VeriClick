@@ -114,7 +114,7 @@ function PlanCard({ plan, popular }: { plan: Plan; popular?: boolean }) {
           popular ? 'bg-white hover:bg-neutral-200 text-black' : 'border border-neutral-700 hover:border-neutral-500 text-white'
         }`}
       >
-        Get started free
+        Choose {plan.name}
         <HugeiconsIcon icon={ArrowRight01Icon} className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
       </Link>
     </div>

@@ -123,3 +123,23 @@ def send_plan_upgraded_email(user, workspace, plan):
 </p>
 """
     return send_email(user.email, subject, _layout(body))
+
+
+def send_payment_admin_notification(workspace, plan, user, charge_id=''):
+    # Internal notification to the owner + senior engineer whenever a paid plan
+    # is granted, so payments can be confirmed without logging into the admin.
+    subject = f'New VeriClick payment: {plan.name}'
+    body = f"""
+<p style="color:#a3a3a3;font-size:15px;">A workspace just went paid.</p>
+<table style="width:100%;color:#d4d4d4;font-size:14px;line-height:1.8;margin:16px 0;">
+  <tr><td style="color:#525252;width:120px;">Workspace</td><td style="color:#ffffff;font-weight:bold;">{workspace.name}</td></tr>
+  <tr><td style="color:#525252;">Account</td><td style="color:#ffffff;">{user.email} ({user.username})</td></tr>
+  <tr><td style="color:#525252;">Plan</td><td style="color:#ffffff;">{plan.name} — ${plan.monthly_price}/month</td></tr>
+  <tr><td style="color:#525252;">Charge</td><td style="color:#ffffff;">{charge_id or 'n/a'}</td></tr>
+</table>
+<p style="color:#525252;font-size:13px;margin-bottom:0;">
+  Review it in the admin: {settings.SITE_URL}/admin/vericlick/workspace/
+</p>
+"""
+    for to in getattr(settings, 'PAYMENT_NOTIFY_EMAILS', []):
+        send_email(to, subject, _layout(body))

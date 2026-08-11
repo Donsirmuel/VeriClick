@@ -212,6 +212,12 @@ class DomainRegistrySerializer(serializers.ModelSerializer):
         }
 
     def get_links_count(self, obj):
+        # Prefer the annotated count added by the viewset queryset to avoid an
+        # N+1 query when listing many domains; fall back to a live count for
+        # single-object serialization paths.
+        annotated = getattr(obj, 'links_count', None)
+        if annotated is not None:
+            return annotated
         return obj.links.filter(removed_at__isnull=True).count()
 
     def get_ready(self, obj):

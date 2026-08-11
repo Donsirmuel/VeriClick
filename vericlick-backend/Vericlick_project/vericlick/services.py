@@ -148,6 +148,31 @@ def refresh_stale_domains(workspace, max_age_minutes=15, limit=10):
     return stale
 
 
+def refresh_stale_domains_async(workspace):
+    # Fire-and-forget stale-domain refresh. Health checks resolve real DNS
+    # (with multi-second timeouts), so they must never run synchronously inside
+    # an HTTP request — that is what made page loads block for seconds. The
+    # refresh happens on a daemon thread and the response returns immediately;
+    # statuses catch up within seconds.
+    import threading
+    from django.db import close_old_connections
+
+    workspace_id = workspace.id
+
+    def _run():
+        from .models import Workspace
+
+        try:
+            ws = Workspace.objects.get(id=workspace_id)
+            refresh_stale_domains(ws)
+        except Exception:
+            pass
+        finally:
+            close_old_connections()
+
+    threading.Thread(target=_run, daemon=True).start()
+
+
 def reason_label(decision, reason='', matched_rule=''):
     # Plain-language summary of a click decision, so the dashboard explains
     # bot-vs-human outcomes without reading technical logs. The raw `reason`

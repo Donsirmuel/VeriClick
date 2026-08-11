@@ -260,6 +260,15 @@ RESEND_API_KEY = _env_str('RESEND_API_KEY')
 RESEND_FROM_EMAIL = _env_str('RESEND_FROM_EMAIL', 'VeriClick <noreply@getvericlick.site>')
 SITE_URL = _env_str('SITE_URL', 'https://getvericlick.site').rstrip('/')
 
+# Comma-separated addresses notified on successful payments (owner + senior
+# engineer). Email delivery is a no-op when RESEND_API_KEY is blank.
+PAYMENT_NOTIFY_EMAILS = [
+    e.strip() for e in _env_str(
+        'PAYMENT_NOTIFY_EMAILS',
+        'support@getvericlick.site,getpulsecharts@gmail.com',
+    ).split(',') if e.strip()
+]
+
 
 # Bachs payments. Blank api key = billing off (the upgrade endpoint returns a
 # clear 503 and the webhook view rejects everything). Sandbox keys are the

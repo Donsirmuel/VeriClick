@@ -132,7 +132,7 @@ def fulfil_paid_checkout(checkout_id, charge_id=''):
     Idempotent: an intent is only matched while OPEN, so re-deliveries of the
     same event can't double-grant or double-email. Returns the intent when
     payment was just granted to the workspace, else None."""
-    from .emails import send_plan_upgraded_email
+    from .emails import send_payment_admin_notification, send_plan_upgraded_email
     from .models import CheckoutIntent
 
     if not checkout_id:
@@ -162,4 +162,11 @@ def fulfil_paid_checkout(checkout_id, charge_id=''):
             send_plan_upgraded_email(intent.user, intent.workspace, intent.plan)
         except Exception:
             logger.exception('Upgrade email failed for checkout %s', checkout_id)
+    if intent.user is not None:
+        try:
+            send_payment_admin_notification(
+                intent.workspace, intent.plan, intent.user, charge_id=intent.charge_id,
+            )
+        except Exception:
+            logger.exception('Payment admin notification failed for checkout %s', checkout_id)
     return intent

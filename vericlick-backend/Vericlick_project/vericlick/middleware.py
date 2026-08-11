@@ -1,6 +1,6 @@
 from django.conf import settings
 
-from .models import DomainRegistry, tracking_host
+from .models import DomainRegistry
 
 
 class RegisteredDomainHostMiddleware:
@@ -27,12 +27,22 @@ class RegisteredDomainHostMiddleware:
         host = (request.META.get('HTTP_HOST') or '').split(':')[0].strip().lower()
         if host and host not in settings.ALLOWED_HOSTS:
             try:
-                matches = host in self.INTERNAL_HOSTS or any(
-                    d.domain == host or tracking_host(d.domain) == host
-                    for d in DomainRegistry.objects.filter(
-                        removed_at__isnull=True
-                    ).only('domain').iterator()
-                )
+                if host in self.INTERNAL_HOSTS:
+                    matches = True
+                else:
+                    # Candidate registered domains for this request Host. A
+                    # subdomain registration keeps its own name, so the Host
+                    # itself is always a candidate. A `t.` host can also be the
+                    # tracking subdomain of a 2-label apex registration
+                    # (t.example.com -> example.com), so that apex is checked too.
+                    candidates = [host]
+                    if host.startswith('t.'):
+                        apex = host[2:]
+                        if apex.count('.') == 1:
+                            candidates.append(apex)
+                    matches = DomainRegistry.objects.filter(
+                        removed_at__isnull=True, domain__in=candidates
+                    ).exists()
                 if matches:
                     allowed = list(settings.ALLOWED_HOSTS)
                     allowed.append(host)

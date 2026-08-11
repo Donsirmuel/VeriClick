@@ -1670,21 +1670,21 @@ class InAppDomainRefreshTests(APITestCase):
         checked = refresh_stale_domains(self.workspace)
         self.assertNotIn(self.domain, checked)
 
-    def test_list_endpoint_triggers_in_app_check(self):
+    def test_list_endpoint_triggers_async_check(self):
+        from unittest.mock import patch
         self.assertIsNone(self.domain.last_checked)
-        res = self.client.get('/api/domains/')
+        with patch('vericlick.views.refresh_stale_domains_async') as mock:
+            res = self.client.get('/api/domains/')
         self.assertEqual(res.status_code, status.HTTP_200_OK)
-        self.domain.refresh_from_db()
-        self.assertIsNotNone(self.domain.last_checked)
-        self.workspace.refresh_from_db()
-        self.assertIsNotNone(self.workspace.last_domain_scan_at)
+        mock.assert_called_once()
 
-    def test_dashboard_stats_triggers_in_app_check(self):
+    def test_dashboard_stats_triggers_async_check(self):
+        from unittest.mock import patch
         self.assertIsNone(self.domain.last_checked)
-        res = self.client.get('/api/dashboard/stats/')
+        with patch('vericlick.views.refresh_stale_domains_async') as mock:
+            res = self.client.get('/api/dashboard/stats/')
         self.assertEqual(res.status_code, status.HTTP_200_OK)
-        self.domain.refresh_from_db()
-        self.assertIsNotNone(self.domain.last_checked)
+        mock.assert_called_once()
         self.assertIn('domainsHealthy', res.json())
 
 
@@ -2380,6 +2380,20 @@ class BachsWebhookEndpointTests(APITestCase):
         self.intent.refresh_from_db()
         self.assertEqual(self.workspace.plan.code, 'plus')
         self.assertEqual(self.intent.status, CheckoutIntent.Status.PAID)
+
+    @override_settings(BACHS_WEBHOOK_SECRET='whsec_test_secret')
+    @override_settings(PAYMENT_NOTIFY_EMAILS=['owner@example.com', 'engineer@example.com'])
+    @patch('vericlick.emails.send_payment_admin_notification')
+    def test_paid_collection_notifies_owner_and_engineer(self, mock_notify):
+        body, ts, sig = self._signed_delivery(self._collection_event())
+        res = self._post(body, ts, sig)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.workspace.refresh_from_db()
+        self.intent.refresh_from_db()
+        self.assertEqual(self.workspace.plan.code, 'plus')
+        self.assertEqual(self.intent.status, CheckoutIntent.Status.PAID)
+        mock_notify.assert_called_once()
+        self.assertEqual(mock_notify.call_args.kwargs['charge_id'], 'chr_test1')
 
     @override_settings(BACHS_WEBHOOK_SECRET='whsec_test_secret')
     def test_bad_signature_rejected(self):
