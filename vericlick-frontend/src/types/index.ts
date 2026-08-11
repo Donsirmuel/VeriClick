@@ -92,7 +92,11 @@ export interface Workspace {
   domainLimit: number | null
   domainsUsed: number
   canAddDomain: boolean
-  betaFreeMode: boolean
+  linkLimit: number | null
+  linksUsed: number
+  canAddLink: boolean
+  trialExpiresAt: string | null
+  trialActive: boolean
 }
 
 export interface Plan {
@@ -105,7 +109,6 @@ export interface Plan {
 }
 
 export interface PricingResponse {
-  betaFreeMode: boolean
   plans: Plan[]
 }
 
@@ -117,7 +120,6 @@ export interface CheckoutSession {
 }
 
 export interface SiteConfig {
-  betaFreeMode: boolean
   signupsOpen: boolean
 }
 

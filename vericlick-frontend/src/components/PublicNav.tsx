@@ -1,13 +1,13 @@
 import { Link } from 'react-router-dom'
 import { Logo } from '@/components/Logo'
-import { BetaBadge } from '@/components/BetaBadge'
+import { useAuth } from '@/hooks/useAuth'
 
 interface PublicNavProps {
   featuresHref?: string
 }
 
 export function PublicNav({ featuresHref = '#features' }: PublicNavProps) {
-  const isLoggedIn = Boolean(localStorage.getItem('token'))
+  const { isLoggedIn } = useAuth()
   return (
     <nav className="flex items-center justify-between px-6 py-4 max-w-7xl mx-auto border-b border-neutral-800/50">
       <Link to="/" className="flex items-center gap-2.5">
@@ -15,7 +15,6 @@ export function PublicNav({ featuresHref = '#features' }: PublicNavProps) {
           <Logo variant="dark" className="w-5 h-5 text-black" />
         </div>
         <span className="text-xl font-bold tracking-tight">VeriClick</span>
-        <BetaBadge />
       </Link>
       <div className="hidden md:flex items-center gap-8 text-sm font-medium text-neutral-400">
         <Link to="/" className="hover:text-white transition-colors">Home</Link>

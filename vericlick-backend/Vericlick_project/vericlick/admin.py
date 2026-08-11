@@ -24,24 +24,28 @@ class TrackingLinkInline(admin.TabularInline):
 @admin.register(Workspace)
 class WorkspaceAdmin(admin.ModelAdmin):
     list_display = ('name', 'owner', 'plan', 'domain_count', 'tracker_secret', 'created_at')
+    # `plan` is editable inline from the list page so an admin can upgrade a
+    # workspace (e.g. hand testers a higher tier) without going through checkout.
+    list_editable = ('plan',)
+    list_select_related = ('owner', 'plan')
     list_filter = ('plan', 'created_at')
     search_fields = ('name', 'owner__username', 'owner__email')
-    readonly_fields = ('id', 'tracker_secret', 'created_at', 'last_domain_scan_at')
+    readonly_fields = ('id', 'tracker_secret', 'created_at', 'last_domain_scan_at', 'plan_started_at')
     inlines = [DomainRegistryInline, TrackingLinkInline]
     autocomplete_fields = ['owner']
     date_hierarchy = 'created_at'
 
-    @admin.display(description='Domains')
+    @admin.display(description='Domains (verified)')
     def domain_count(self, obj):
-        return obj.domains.count()
+        return obj.domains_in_use()
 
 
 @admin.register(DomainRegistry)
 class DomainRegistryAdmin(admin.ModelAdmin):
-    list_display = ('domain', 'workspace', 'health_status', 'verified', 'last_checked', 'created_at')
-    list_filter = ('health_status', 'verified', 'last_checked')
+    list_display = ('domain', 'workspace', 'health_status', 'verified', 'removed_at', 'last_checked', 'created_at')
+    list_filter = ('health_status', 'verified', 'removed_at', 'last_checked')
     search_fields = ('domain', 'workspace__name', 'workspace__owner__username')
-    readonly_fields = ('id', 'verification_token', 'verification_record', 'created_at', 'last_checked')
+    readonly_fields = ('id', 'verification_token', 'verification_record', 'created_at', 'last_checked', 'removed_at')
     actions = ['recheck_domains']
     date_hierarchy = 'created_at'
 
@@ -59,10 +63,10 @@ class DomainRegistryAdmin(admin.ModelAdmin):
 
 @admin.register(TrackingLink)
 class TrackingLinkAdmin(admin.ModelAdmin):
-    list_display = ('slug', 'workspace', 'domain', 'destination_url', 'status', 'total_clicks', 'bot_clicks', 'created_at')
-    list_filter = ('status', 'created_at')
+    list_display = ('slug', 'workspace', 'domain', 'destination_url', 'status', 'removed_at', 'total_clicks', 'bot_clicks', 'created_at')
+    list_filter = ('status', 'removed_at', 'created_at')
     search_fields = ('slug', 'destination_url', 'workspace__name')
-    readonly_fields = ('id', 'total_clicks', 'bot_clicks', 'created_at', 'updated_at')
+    readonly_fields = ('id', 'total_clicks', 'bot_clicks', 'created_at', 'updated_at', 'removed_at')
     autocomplete_fields = ['workspace', 'domain']
     date_hierarchy = 'created_at'
 
@@ -121,9 +125,9 @@ class CheckoutIntentAdmin(admin.ModelAdmin):
 class SiteConfigAdmin(admin.ModelAdmin):
     # The singleton business-toggle row. Because SiteConfig.save() forces
     # key='default', there is only ever one of these.
-    list_display = ('key', 'beta_free_mode', 'signups_open', 'updated_at')
+    list_display = ('key', 'signups_open', 'updated_at')
     fieldsets = (
-        (None, {'fields': ('beta_free_mode', 'signups_open')}),
+        (None, {'fields': ('signups_open',)}),
         ('Meta', {'fields': ('key',)}),
     )
     readonly_fields = ('key',)

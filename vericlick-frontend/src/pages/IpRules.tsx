@@ -4,6 +4,8 @@ import { HugeiconsIcon } from '@hugeicons/react'
 import { PlusSignIcon, Edit01Icon, Cancel01Icon, ShieldIcon, Clock02Icon } from '@hugeicons/core-free-icons'
 import toast from 'react-hot-toast'
 import { fetchIPRules, createIPRule, updateIPRule, deleteIPRule } from '@/api/ip_rules'
+import { fetchWorkspace } from '@/api/workspace'
+import { FreeTierBanner } from '@/components/FreeTierBanner'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { HelpTooltip } from '@/components/ui/HelpTooltip'
@@ -32,7 +34,18 @@ export default function IpRulesPage() {
     queryFn: fetchIPRules,
   })
 
+  const { data: workspace } = useQuery({
+    queryKey: ['workspace'],
+    queryFn: fetchWorkspace,
+  })
+
   const rules = rulesData?.results ?? []
+
+  // IP rules are a paid feature, but free workspaces can use them during their
+  // 7-day trial. Once the trial ends the UI locks the rule form and points to upgrade.
+  const canManageRules = !workspace
+    ? true
+    : workspace.planName !== null || workspace.trialActive
 
   const createMutation = useMutation({
     mutationFn: createIPRule,
@@ -123,11 +136,17 @@ export default function IpRulesPage() {
         </div>
         <button
           onClick={openCreate}
-          className="bg-black hover:bg-neutral-800 text-white px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-sm shrink-0 self-start"
+          disabled={!canManageRules}
+          title={canManageRules ? undefined : 'IP rules are a paid feature. Your free trial ended — upgrade to continue.'}
+          className="bg-black hover:bg-neutral-800 disabled:bg-neutral-300 disabled:cursor-not-allowed text-white px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-sm shrink-0 self-start"
         >
           <HugeiconsIcon icon={PlusSignIcon} className="w-4 h-4" />
           Add Rule
         </button>
+      </div>
+
+      <div className="mb-6">
+        <FreeTierBanner workspace={workspace} />
       </div>
 
       {showForm && (
@@ -199,7 +218,7 @@ export default function IpRulesPage() {
             icon={ShieldIcon}
             title="No IP rules yet"
             description="Create rules to allow trusted IPs through or block suspicious traffic before it reaches your links."
-            action={{ label: 'Add your first rule', onClick: openCreate }}
+            action={canManageRules ? { label: 'Add your first rule', onClick: openCreate } : undefined}
           />
         </div>
       ) : (

@@ -594,7 +594,12 @@ class LinksEndpointTests(APITestCase):
         )
         res = self.client.delete(f'/api/links/{link.id}/')
         self.assertEqual(res.status_code, status.HTTP_204_NO_CONTENT)
-        self.assertFalse(TrackingLink.objects.filter(id=link.id).exists())
+        # Soft delete: the row stays so it keeps counting toward plan limits.
+        link.refresh_from_db()
+        self.assertIsNotNone(link.removed_at)
+        self.assertFalse(
+            TrackingLink.objects.filter(id=link.id, removed_at__isnull=True).exists()
+        )
 
     def test_pagination_defaults(self):
         for i in range(25):
@@ -735,7 +740,13 @@ class DomainsEndpointTests(APITestCase):
         )
         res = self.client.delete(f'/api/domains/{domain.id}/')
         self.assertEqual(res.status_code, status.HTTP_204_NO_CONTENT)
-        self.assertFalse(DomainRegistry.objects.filter(id=domain.id).exists())
+        # Soft delete: the row stays so a verified domain keeps counting toward
+        # the plan limit until the period ends.
+        domain.refresh_from_db()
+        self.assertIsNotNone(domain.removed_at)
+        self.assertFalse(
+            DomainRegistry.objects.filter(id=domain.id, removed_at__isnull=True).exists()
+        )
 
     def test_delete_domain_removes_its_links(self):
         domain = DomainRegistry.objects.create(
@@ -748,9 +759,16 @@ class DomainsEndpointTests(APITestCase):
         ClickLog.objects.create(link=link, ip='9.9.9.9')
         res = self.client.delete(f'/api/domains/{domain.id}/')
         self.assertEqual(res.status_code, status.HTTP_204_NO_CONTENT)
-        self.assertFalse(DomainRegistry.objects.filter(id=domain.id).exists())
-        self.assertFalse(TrackingLink.objects.filter(id=link.id).exists())
-        self.assertFalse(ClickLog.objects.filter(link=link).exists())
+        domain.refresh_from_db()
+        link.refresh_from_db()
+        self.assertIsNotNone(domain.removed_at)
+        self.assertIsNotNone(link.removed_at)
+        # Click logs are retained for the soft-deleted link.
+        self.assertTrue(ClickLog.objects.filter(link=link).exists())
+        # Removed links no longer appear in the API list.
+        self.assertFalse(
+            TrackingLink.objects.filter(id=link.id, removed_at__isnull=True).exists()
+        )
 
     def test_recheck_updates_last_checked(self):
         domain = DomainRegistry.objects.create(
@@ -1884,11 +1902,10 @@ class BlockedIPTests(APITestCase):
 
 
 class PricingEndpointTests(APITestCase):
-    def test_pricing_returns_seeded_plans_and_beta_free(self):
+    def test_pricing_returns_seeded_plans(self):
         res = self.client.get('/api/pricing/')
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         body = res.json()
-        self.assertTrue(body['betaFreeMode'])
         codes = [p['code'] for p in body['plans']]
         self.assertEqual(codes, ['basic', 'plus', 'pro'])
         by_code = {p['code']: p for p in body['plans']}
@@ -1905,21 +1922,15 @@ class PricingEndpointTests(APITestCase):
         codes = [p['code'] for p in res.json()['plans']]
         self.assertNotIn('pro', codes)
 
-    def test_pricing_reflects_admin_beta_toggle(self):
-        SiteConfig.load()
-        SiteConfig.objects.update(beta_free_mode=False)
-        res = self.client.get('/api/pricing/')
-        self.assertFalse(res.json()['betaFreeMode'])
-
 
 class DiscountCodeEndpointTests(APITestCase):
     def setUp(self):
         DiscountCode.objects.create(
-            code='BETA20', discount_percent=20, max_uses=100,
+            code='SPRING20', discount_percent=20, max_uses=100,
         )
 
     def test_validate_valid_code(self):
-        res = self.client.post('/api/discount-codes/validate/', {'code': 'beta20'}, format='json')
+        res = self.client.post('/api/discount-codes/validate/', {'code': 'spring20'}, format='json')
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         body = res.json()
         self.assertTrue(body['valid'])
@@ -1970,21 +1981,24 @@ class DomainLimitTests(APITestCase):
         self.client.force_authenticate(user=self.user)
         self.workspace = Workspace.objects.get(owner=self.user)
 
-    def test_beta_free_mode_ignores_domain_limit(self):
+    def test_paid_plan_allows_adding_under_limit(self):
         plan = Plan.objects.get(code='basic')
         self.workspace.plan = plan
         self.workspace.save()
-        DomainRegistry.objects.create(workspace=self.workspace, domain='one.example.com')
+        DomainRegistry.objects.create(
+            workspace=self.workspace, domain='one.example.com', verified=True,
+        )
         res = self.client.post('/api/domains/', {'domain': 'two.example.com'}, format='json')
         self.assertEqual(res.status_code, status.HTTP_201_CREATED)
 
-    def test_limit_enforced_when_beta_ends(self):
-        SiteConfig.objects.update(beta_free_mode=False)
+    def test_plan_domain_limit_enforced(self):
         plan = Plan.objects.get(code='basic')
         self.workspace.plan = plan
         self.workspace.save()
         for i in range(5):
-            DomainRegistry.objects.create(workspace=self.workspace, domain=f'domain{i}.example.com')
+            DomainRegistry.objects.create(
+                workspace=self.workspace, domain=f'domain{i}.example.com', verified=True,
+            )
         res = self.client.post('/api/domains/', {'domain': 'overflow.example.com'}, format='json')
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertFalse(
@@ -1992,11 +2006,12 @@ class DomainLimitTests(APITestCase):
         )
 
     def test_workspace_serializer_exposes_plan_usage(self):
-        SiteConfig.objects.update(beta_free_mode=False)
         plan = Plan.objects.get(code='plus')
         self.workspace.plan = plan
         self.workspace.save()
-        DomainRegistry.objects.create(workspace=self.workspace, domain='usage.example.com')
+        DomainRegistry.objects.create(
+            workspace=self.workspace, domain='usage.example.com', verified=True,
+        )
         res = self.client.get('/api/workspace/')
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         body = res.json()
@@ -2004,7 +2019,237 @@ class DomainLimitTests(APITestCase):
         self.assertEqual(body['domainLimit'], 10)
         self.assertEqual(body['domainsUsed'], 1)
         self.assertTrue(body['canAddDomain'])
-        self.assertFalse(body['betaFreeMode'])
+
+
+class FreeTierTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='freetieruser', password='testpass123')
+        self.client.force_authenticate(user=self.user)
+        self.workspace = Workspace.objects.get(owner=self.user)
+
+    def _create_link(self, slug):
+        return self.client.post('/api/links/', {
+            'slug': slug,
+            'destinationUrl': 'https://example.com/landing',
+        }, format='json')
+
+    def test_workspace_serializer_exposes_free_tier_and_trial(self):
+        res = self.client.get('/api/workspace/')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        body = res.json()
+        self.assertIsNone(body['plan'])
+        self.assertEqual(body['domainLimit'], 1)
+        self.assertEqual(body['linkLimit'], 1)
+        self.assertEqual(body['domainsUsed'], 0)
+        self.assertEqual(body['linksUsed'], 0)
+        self.assertTrue(body['canAddDomain'])
+        self.assertTrue(body['canAddLink'])
+        self.assertTrue(body['trialActive'])
+        self.assertIsNotNone(body['trialExpiresAt'])
+
+    def test_free_workspace_can_add_one_domain_only(self):
+        res = self.client.post('/api/domains/', {'domain': 'one.example.com'}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        # The slot is only consumed once the domain is verified (a typo you can
+        # never verify never counts, so you can re-add it).
+        DomainRegistry.objects.filter(workspace=self.workspace, domain='one.example.com').update(verified=True)
+        res = self.client.post('/api/domains/', {'domain': 'two.example.com'}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('free trial', res.json()['errors'][0]['detail'].lower())
+        self.assertFalse(
+            DomainRegistry.objects.filter(workspace=self.workspace, domain='two.example.com').exists()
+        )
+
+    def test_free_unverified_typo_domain_does_not_consume_slot(self):
+        # A domain you can't verify (e.g. a typo) never counts toward the limit,
+        # so removing it costs nothing and you can register again.
+        res = self.client.post('/api/domains/', {'domain': 'goglee.com'}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        typo = DomainRegistry.objects.get(workspace=self.workspace, domain='goglee.com')
+        res = self.client.delete(f'/api/domains/{typo.id}/')
+        self.assertEqual(res.status_code, status.HTTP_204_NO_CONTENT)
+        res = self.client.post('/api/domains/', {'domain': 'google.com'}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+
+    def test_free_workspace_can_add_one_link_only(self):
+        DomainRegistry.objects.create(
+            workspace=self.workspace, domain='brand.example.com', verified=True,
+        )
+        res = self.client.post('/api/links/', {
+            'slug': 'trial-one',
+            'domain': 'brand.example.com',
+            'destinationUrl': 'https://example.com/landing',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        res = self._create_link('trial-two')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('free trial', res.json()['errors'][0]['detail'].lower())
+        self.assertFalse(TrackingLink.objects.filter(workspace=self.workspace, slug='trial-two').exists())
+
+    def test_free_workspace_can_use_ip_rules_during_trial(self):
+        res = self.client.post('/api/ip-rules/', {
+            'ipOrCidr': '1.2.3.4',
+            'action': 'deny',
+            'reason': 'trial test',
+            'isActive': True,
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+
+    def test_expired_trial_blocks_creation_until_upgrade(self):
+        self.workspace.trial_started_at = timezone.now() - timedelta(days=8)
+        self.workspace.save()
+
+        res = self.client.get('/api/workspace/')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertFalse(res.json()['trialActive'])
+        self.assertFalse(res.json()['canAddDomain'])
+        self.assertFalse(res.json()['canAddLink'])
+
+        res = self.client.post('/api/domains/', {'domain': 'late.example.com'}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('trial ended', res.json()['errors'][0]['detail'].lower())
+
+        res = self._create_link('late-link')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('trial ended', res.json()['errors'][0]['detail'].lower())
+
+        res = self.client.post('/api/ip-rules/', {
+            'ipOrCidr': '5.6.7.8',
+            'action': 'deny',
+            'reason': 'after trial',
+            'isActive': True,
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('paid feature', res.json()['errors'][0]['detail'].lower())
+
+    def test_upgrade_after_trial_expiry_restores_creation(self):
+        self.workspace.trial_started_at = timezone.now() - timedelta(days=8)
+        self.workspace.plan = Plan.objects.get(code='basic')
+        self.workspace.save()
+
+        res = self.client.post('/api/domains/', {'domain': 'paid.example.com'}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+
+        res = self._create_link('paid-link')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+
+        res = self.client.get('/api/workspace/')
+        body = res.json()
+        self.assertEqual(body['plan'], 'basic')
+        self.assertFalse(body['trialActive'])
+        self.assertTrue(body['canAddDomain'])
+        self.assertTrue(body['canAddLink'])
+
+
+class DeletionCountingPolicyTests(APITestCase):
+    # Anti-abuse rule: only VERIFIED domains count toward plan limits, and
+    # deleting a verified domain (or a link on one) keeps its slot occupied
+    # until the current plan/trial period ends. Unverified "typo" domains never
+    # count and can be removed and re-added freely.
+    def setUp(self):
+        self.user = User.objects.create_user(username='deleterule', password='testpass123')
+        self.client.force_authenticate(user=self.user)
+        self.workspace = Workspace.objects.get(owner=self.user)
+        self.plan = Plan.objects.get(code='basic')
+
+    def _verified_domain(self, domain):
+        return DomainRegistry.objects.create(
+            workspace=self.workspace, domain=domain, verified=True,
+        )
+
+    def test_verified_domain_counts_and_removal_keeps_slot_until_period_ends(self):
+        # The app starts the trial clock before any domain can be created.
+        self.workspace.ensure_trial_started()
+        domain = self._verified_domain('keep.example.com')
+        self.assertEqual(self.workspace.domains_in_use(), 1)
+        res = self.client.delete(f'/api/domains/{domain.id}/')
+        self.assertEqual(res.status_code, status.HTTP_204_NO_CONTENT)
+        # The slot is NOT freed within the current period.
+        self.assertEqual(self.workspace.domains_in_use(), 1)
+        res = self.client.post('/api/domains/', {'domain': 'second.example.com'}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_removed_domain_released_when_plan_period_advances(self):
+        self.workspace.plan = self.plan
+        self.workspace.save()
+        old = self._verified_domain('old-month.example.com')
+        recent = self._verified_domain('recent-month.example.com')
+        old.removed_at = timezone.now() - timedelta(days=40)
+        old.save(update_fields=['removed_at'])
+        recent.removed_at = timezone.now()
+        recent.save(update_fields=['removed_at'])
+        # Plan started 65 days ago -> the current period began ~5 days ago, so
+        # the 40-day-old removal was in a previous period (released) while the
+        # recent one still occupies its slot.
+        self.workspace.plan_started_at = timezone.now() - timedelta(days=65)
+        self.workspace.save(update_fields=['plan_started_at'])
+        self.assertEqual(self.workspace.domains_in_use(), 1)
+
+    def test_free_trial_removed_domain_released_after_upgrade(self):
+        self.workspace.trial_started_at = timezone.now() - timedelta(days=5)
+        self.workspace.save(update_fields=['trial_started_at'])
+        domain = self._verified_domain('trial.example.com')
+        domain.removed_at = timezone.now() - timedelta(days=1)
+        domain.save(update_fields=['removed_at'])
+        # Removed during the trial -> still counted within the trial period.
+        self.assertEqual(self.workspace.domains_in_use(), 1)
+        # Upgrading starts a fresh paid period, releasing the trial-era removal.
+        self.workspace.plan = self.plan
+        self.workspace.save()
+        self.assertEqual(self.workspace.domains_in_use(), 0)
+
+    def test_links_on_verified_domain_count_and_stay_after_removal(self):
+        self.workspace.plan = self.plan
+        self.workspace.save()
+        domain = self._verified_domain('brand.example.com')
+        link = TrackingLink.objects.create(
+            workspace=self.workspace, domain=domain,
+            slug='brand-link', destination_url='https://example.com',
+        )
+        self.assertEqual(self.workspace.links_in_use(), 1)
+        res = self.client.delete(f'/api/links/{link.id}/')
+        self.assertEqual(res.status_code, status.HTTP_204_NO_CONTENT)
+        # A removed link on a verified domain keeps counting until the period ends.
+        self.assertEqual(self.workspace.links_in_use(), 1)
+
+    def test_links_without_verified_domain_do_not_count(self):
+        TrackingLink.objects.create(
+            workspace=self.workspace, slug='plain-link', destination_url='https://example.com',
+        )
+        unverified = DomainRegistry.objects.create(workspace=self.workspace, domain='no.example.com')
+        TrackingLink.objects.create(
+            workspace=self.workspace, domain=unverified,
+            slug='unverified-link', destination_url='https://example.com',
+        )
+        self.assertEqual(self.workspace.links_in_use(), 0)
+
+    def test_unverified_domains_never_count(self):
+        DomainRegistry.objects.create(workspace=self.workspace, domain='typo.example.com')
+        DomainRegistry.objects.create(workspace=self.workspace, domain='other.example.com')
+        self.assertEqual(self.workspace.domains_in_use(), 0)
+
+    def test_removed_domain_stops_serving_links(self):
+        domain = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='gone.example.com', verified=True,
+            points_to_server=True, health_status=DomainRegistry.HealthStatus.HEALTHY,
+        )
+        link = TrackingLink.objects.create(
+            workspace=self.workspace, domain=domain,
+            slug='gone-link', destination_url='https://example.com',
+        )
+        domain.removed_at = timezone.now()
+        domain.save(update_fields=['removed_at'])
+        from vericlick.services import get_public_tracking_url
+        self.assertNotIn('gone.example.com', get_public_tracking_url(link))
+
+    def test_removed_link_does_not_serve(self):
+        link = TrackingLink.objects.create(
+            workspace=self.workspace, slug='removed-serve', destination_url='https://example.com',
+        )
+        link.removed_at = timezone.now()
+        link.save(update_fields=['removed_at'])
+        res = self.client.get(f'/r/{link.slug}/')
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
 
 
 class SiteConfigEndpointTests(APITestCase):
@@ -2012,15 +2257,13 @@ class SiteConfigEndpointTests(APITestCase):
         res = self.client.get('/api/site-config/')
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         body = res.json()
-        self.assertTrue(body['betaFreeMode'])
         self.assertTrue(body['signupsOpen'])
 
     def test_site_config_reflects_admin_changes(self):
-        SiteConfig.objects.update(beta_free_mode=False, signups_open=False)
+        SiteConfig.objects.update(signups_open=False)
         res = self.client.get('/api/site-config/')
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         body = res.json()
-        self.assertFalse(body['betaFreeMode'])
         self.assertFalse(body['signupsOpen'])
 
 
@@ -2038,7 +2281,6 @@ class UpgradeEndpointTests(APITestCase):
 
     @patch('vericlick.payments.create_checkout_session')
     def test_upgrade_creates_checkout_session(self, mock_create):
-        SiteConfig.objects.update(beta_free_mode=False)
         mock_create.return_value = {
             'checkout_id': 'chk_test123',
             'checkout_url': 'https://checkout.bachs.io/c/tok_test',
@@ -2057,12 +2299,7 @@ class UpgradeEndpointTests(APITestCase):
         self.assertEqual(intent.checkout_id, 'chk_test123')
         self.assertEqual(intent.plan.code, 'plus')
 
-    def test_upgrade_blocked_during_beta(self):
-        res = self.client.post('/api/upgrade/', {'plan_code': 'plus'}, format='json')
-        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
-
     def test_upgrade_plan_without_product_rejected(self):
-        SiteConfig.objects.update(beta_free_mode=False)
         Plan.objects.filter(code='plus').update(bachs_product_id='')
         res = self.client.post('/api/upgrade/', {'plan_code': 'plus'}, format='json')
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)

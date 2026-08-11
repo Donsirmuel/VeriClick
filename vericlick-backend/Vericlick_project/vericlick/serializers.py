@@ -66,19 +66,27 @@ class WorkspaceSerializer(serializers.ModelSerializer):
     domain_limit = serializers.SerializerMethodField()
     domains_used = serializers.SerializerMethodField()
     can_add_domain = serializers.SerializerMethodField()
-    beta_free_mode = serializers.SerializerMethodField()
+    link_limit = serializers.SerializerMethodField()
+    links_used = serializers.SerializerMethodField()
+    can_add_link = serializers.SerializerMethodField()
+    trial_expires_at = serializers.SerializerMethodField()
+    trial_active = serializers.SerializerMethodField()
 
     class Meta:
         model = Workspace
         fields = [
             'id', 'name', 'tracker_secret', 'safe_destination',
             'created_at', 'last_domain_scan_at', 'plan', 'plan_name',
-            'domain_limit', 'domains_used', 'can_add_domain', 'beta_free_mode',
+            'domain_limit', 'domains_used', 'can_add_domain',
+            'link_limit', 'links_used', 'can_add_link',
+            'trial_expires_at', 'trial_active',
         ]
         read_only_fields = [
             'id', 'tracker_secret', 'created_at', 'last_domain_scan_at',
             'plan', 'plan_name', 'domain_limit', 'domains_used',
-            'can_add_domain', 'beta_free_mode',
+            'can_add_domain',
+            'link_limit', 'links_used', 'can_add_link',
+            'trial_expires_at', 'trial_active',
         ]
 
     def get_domain_limit(self, obj):
@@ -90,8 +98,20 @@ class WorkspaceSerializer(serializers.ModelSerializer):
     def get_can_add_domain(self, obj):
         return obj.can_add_domain
 
-    def get_beta_free_mode(self, obj):
-        return SiteConfig.is_beta_free_mode()
+    def get_link_limit(self, obj):
+        return obj.effective_link_limit
+
+    def get_links_used(self, obj):
+        return obj.links_in_use()
+
+    def get_can_add_link(self, obj):
+        return obj.can_add_link
+
+    def get_trial_expires_at(self, obj):
+        return obj.trial_expires_at
+
+    def get_trial_active(self, obj):
+        return obj.trial_active
 
 
 class PlanSerializer(serializers.ModelSerializer):
@@ -192,7 +212,7 @@ class DomainRegistrySerializer(serializers.ModelSerializer):
         }
 
     def get_links_count(self, obj):
-        return obj.links.count()
+        return obj.links.filter(removed_at__isnull=True).count()
 
     def get_ready(self, obj):
         return bool(
@@ -245,6 +265,7 @@ class TrackingLinkSerializer(serializers.ModelSerializer):
             return None
         return bool(
             domain.verified
+            and domain.removed_at is None
             and domain.points_to_server
             and domain.health_status == DomainRegistry.HealthStatus.HEALTHY
         )

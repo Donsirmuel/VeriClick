@@ -5,8 +5,8 @@ import { HugeiconsIcon } from '@hugeicons/react'
 import { Globe02Icon, PlusSignIcon, RefreshIcon, Search01Icon, Edit01Icon, Cancel01Icon, Clock03Icon, LinkSquare02Icon, CheckmarkCircle02Icon } from '@hugeicons/core-free-icons'
 import toast from 'react-hot-toast'
 import { AddDomainDialog } from '@/components/domains/AddDomainDialog'
-import { VerifyDomainDialog } from '@/components/domains/VerifyDomainDialog'
 import { DnsSetupDialog } from '@/components/domains/DnsSetupDialog'
+import { FreeTierBanner } from '@/components/FreeTierBanner'
 import { fetchDomains, createDomain, updateDomain, deleteDomain, recheckDomain } from '@/api/domains'
 import { fetchWorkspace } from '@/api/workspace'
 import { formatRelativeTime } from '@/lib/utils'
@@ -56,11 +56,9 @@ export default function DomainsPage() {
   const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
   const [showAddDialog, setShowAddDialog] = useState(false)
-  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
-  const [deleteName, setDeleteName] = useState('')
+  const [deleteTarget, setDeleteTarget] = useState<Domain | null>(null)
   const [editTarget, setEditTarget] = useState<{ id: string; domain: string } | null>(null)
   const [editValue, setEditValue] = useState('')
-  const [verifyTarget, setVerifyTarget] = useState<Domain | null>(null)
   const [dnsSetupTarget, setDnsSetupTarget] = useState<Domain | null>(null)
 
   const { data: domains = [], isLoading } = useQuery({
@@ -73,22 +71,24 @@ export default function DomainsPage() {
     queryFn: fetchWorkspace,
   })
 
-  const planLabel = workspace?.betaFreeMode
-    ? 'Free beta'
-    : workspace?.planName ?? 'Free'
+  const planLabel = workspace?.planName ?? (workspace?.trialActive ? 'Free trial' : 'Free')
   const domainUsage = workspace
     ? workspace.domainLimit
       ? `${workspace.domainsUsed} / ${workspace.domainLimit}`
       : `${workspace.domainsUsed} / unlimited`
     : null
-  const atLimit = Boolean(workspace && !workspace.betaFreeMode && !workspace.canAddDomain)
+  const atLimit = Boolean(workspace && !workspace.canAddDomain)
 
   const createMutation = useMutation({
     mutationFn: createDomain,
-    onSuccess: () => {
+    onSuccess: (created) => {
       queryClient.invalidateQueries({ queryKey: ['domains'] })
+      queryClient.invalidateQueries({ queryKey: ['workspace'] })
       toast.success('Domain registered successfully')
       setShowAddDialog(false)
+      // Jump straight into the combined DNS setup so both records are added
+      // in one take.
+      setDnsSetupTarget(created)
     },
   })
 
@@ -138,12 +138,7 @@ export default function DomainsPage() {
 
   const handleDelete = () => {
     if (!deleteTarget) return
-    deleteMutation.mutate(deleteTarget)
-  }
-
-  const handleVerified = () => {
-    queryClient.invalidateQueries({ queryKey: ['domains'] })
-    queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
+    deleteMutation.mutate(deleteTarget.id)
   }
 
   return (
@@ -162,7 +157,7 @@ export default function DomainsPage() {
             }`}>
               <HugeiconsIcon icon={Globe02Icon} className="w-4 h-4" />
               {planLabel}: {domainUsage}{' '}
-              {workspace?.betaFreeMode ? 'domains' : workspace?.domainLimit ? 'domains used' : 'domains'}
+              {workspace?.domainLimit ? 'domains used' : 'domains'}
             </span>
           )}
           {atLimit && (
@@ -183,6 +178,10 @@ export default function DomainsPage() {
             Add Domain
           </button>
         </div>
+      </div>
+
+      <div className="mb-6">
+        <FreeTierBanner workspace={workspace} />
       </div>
 
       <div className="relative max-w-md mb-6">
@@ -295,11 +294,11 @@ export default function DomainsPage() {
                             </span>
                           ) : (
                             <button
-                              onClick={() => setVerifyTarget(domain)}
+                              onClick={() => setDnsSetupTarget(domain)}
                               className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-warning bg-warning/10 hover:bg-warning/20 px-2 py-0.5 rounded-full transition-colors"
-                              title="Verify ownership with a TXT record"
+                              title="Set up ownership (TXT) and DNS pointing (CNAME)"
                             >
-                              Verify ownership
+                              Set up DNS
                             </button>
                           )}
                         </div>
@@ -361,7 +360,7 @@ export default function DomainsPage() {
                         <HugeiconsIcon icon={Edit01Icon} className="w-4 h-4 text-muted" />
                       </button>
                       <button
-                        onClick={() => { setDeleteTarget(domain.id); setDeleteName(domain.domain) }}
+                        onClick={() => setDeleteTarget(domain)}
                         className="p-2 rounded-lg hover:bg-error/10 transition-colors"
                         title="Remove domain"
                       >
@@ -385,15 +384,6 @@ export default function DomainsPage() {
         />
       )}
 
-      {verifyTarget && (
-        <VerifyDomainDialog
-          domain={verifyTarget}
-          onClose={() => setVerifyTarget(null)}
-          onVerified={handleVerified}
-          onRequestDnsSetup={(d) => setDnsSetupTarget(d)}
-        />
-      )}
-
       {dnsSetupTarget && (
         <DnsSetupDialog
           domain={dnsSetupTarget}
@@ -401,6 +391,7 @@ export default function DomainsPage() {
           onRechecked={() => {
             queryClient.invalidateQueries({ queryKey: ['domains'] })
             queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
+            queryClient.invalidateQueries({ queryKey: ['workspace'] })
           }}
         />
       )}
@@ -408,7 +399,14 @@ export default function DomainsPage() {
       <ConfirmDialog
         open={!!deleteTarget}
         title="Remove domain"
-        message={`Are you sure you want to remove "${deleteName}"? Links using this domain will continue to work but will show as "No domain".`}
+        message={(() => {
+          if (!deleteTarget) return ''
+          const base = `Are you sure you want to remove "${deleteTarget.domain}"? Its links are removed too.`
+          if (deleteTarget.verified) {
+            return `${base} This domain is verified, so removing it does NOT free up one of your domain slots — it keeps counting toward your plan limit until the current period ends.`
+          }
+          return `${base} This domain was never verified, so it never counted toward your plan limit — you can register another one anytime.`
+        })()}
         confirmLabel="Remove"
         variant="danger"
         onConfirm={handleDelete}

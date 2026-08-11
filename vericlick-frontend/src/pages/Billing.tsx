@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { CheckmarkCircle02Icon, Globe02Icon, ShieldIcon, Tag01Icon } from '@hugeicons/core-free-icons'
+import { CheckmarkCircle02Icon, Globe02Icon, ShieldIcon } from '@hugeicons/core-free-icons'
 import toast from 'react-hot-toast'
 import { fetchPricing } from '@/api/pricing'
 import { fetchWorkspace, startCheckout } from '@/api/workspace'
@@ -39,7 +39,6 @@ export default function Billing() {
   }, [])
 
   const current = workspace?.plan ?? null
-  const betaFree = pricing?.betaFreeMode ?? false
   const plans = pricing?.plans ?? []
 
   const isCurrent = (code: string) => current === code
@@ -52,21 +51,6 @@ export default function Billing() {
           Your plan controls how many tracked domains your workspace can register.
         </p>
       </div>
-
-      {betaFree && (
-        <div className="flex items-start gap-3 bg-neutral-50 border border-neutral-200 rounded-2xl p-5">
-          <div className="w-9 h-9 bg-neutral-900 rounded-xl flex items-center justify-center shrink-0">
-            <HugeiconsIcon icon={Tag01Icon} className="w-4 h-4 text-white" />
-          </div>
-          <div>
-            <h3 className="text-sm font-bold text-slate-900 mb-1">You're not charged during beta</h3>
-            <p className="text-sm text-muted leading-relaxed">
-              Every feature is free while beta mode is on, so domain limits aren't enforced.
-              Plans go on sale when billing launches.
-            </p>
-          </div>
-        </div>
-      )}
 
       {justPaid && (
         <div className="flex items-start gap-3 bg-green-50 border border-green-200 rounded-2xl p-5">
@@ -87,7 +71,7 @@ export default function Billing() {
         <div className="bg-white border border-neutral-200 rounded-2xl p-5">
           <div className="text-xs font-bold text-muted uppercase tracking-wider mb-1">Current plan</div>
           <div className="text-xl font-bold text-slate-900">
-            {betaFree ? 'Free beta' : (workspace?.planName ?? 'No plan')}
+            {workspace?.planName ?? 'No plan'}
           </div>
         </div>
         <div className="bg-white border border-neutral-200 rounded-2xl p-5">
@@ -101,7 +85,7 @@ export default function Billing() {
         <div className="bg-white border border-neutral-200 rounded-2xl p-5">
           <div className="text-xs font-bold text-muted uppercase tracking-wider mb-1">Status</div>
           <div className="text-xl font-bold text-slate-900">
-            {workspace?.canAddDomain || betaFree ? 'Active' : 'At limit'}
+            {workspace?.canAddDomain ? 'Active' : 'At limit'}
           </div>
         </div>
       </div>
@@ -160,7 +144,7 @@ export default function Billing() {
                     disabled={checkoutMutation.isPending}
                     className="bg-black hover:bg-neutral-800 disabled:bg-neutral-300 text-white px-4 py-3 rounded-xl text-sm font-bold transition-all"
                   >
-                    {checkoutMutation.isPending ? 'Opening checkout…' : betaFree ? 'Choose plan' : `Switch to ${plan.name}`}
+                    {checkoutMutation.isPending ? 'Opening checkout…' : `Switch to ${plan.name}`}
                   </button>
                 )}
               </div>

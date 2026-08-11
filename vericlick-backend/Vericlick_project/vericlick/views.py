@@ -76,6 +76,9 @@ def workspace_detail(request):
         return Response({'error': 'No workspace found'}, status=status.HTTP_404_NOT_FOUND)
 
     if request.method == 'GET':
+        # First touch starts the free-trial clock for workspaces with no paid
+        # plan, so the UI can show how long their free allowance lasts.
+        workspace.ensure_trial_started()
         serializer = WorkspaceSerializer(workspace)
         return Response(serializer.data)
 
@@ -94,12 +97,10 @@ def health_check(request):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def pricing(request):
-    # Public pricing data for the pricing page. During beta, SiteConfig marks
-    # the product free, so the page shows "free for now" while still advertising
-    # the upcoming paid tiers (admin-managed via SiteConfig.beta_free_mode).
+    # Public pricing data for the pricing page: every tier gets the full
+    # protection engine; plans differ by how many domains you can register.
     plans = Plan.objects.filter(is_active=True).order_by('sort_order', 'code')
     return Response({
-        'beta_free_mode': SiteConfig.is_beta_free_mode(),
         'plans': PlanSerializer(plans, many=True).data,
     })
 
@@ -108,10 +109,8 @@ def pricing(request):
 @permission_classes([AllowAny])
 def site_config(request):
     # Public, unauthenticated status flags mirror what the admin exposes. The
-    # frontend uses these to adapt copy and gate features (beta free mode, or
-    # signups closed).
+    # frontend uses these to adapt copy and gate features (e.g. signups closed).
     return Response({
-        'beta_free_mode': SiteConfig.is_beta_free_mode(),
         'signups_open': SiteConfig.signups_allowed(),
     })
 
@@ -126,11 +125,6 @@ def upgrade_workspace(request):
     workspace = get_user_workspace(request.user)
     if not workspace:
         return Response({'error': 'No workspace found'}, status=status.HTTP_404_NOT_FOUND)
-    if SiteConfig.is_beta_free_mode():
-        return Response(
-            {'errors': [{'field': 'plan', 'detail': 'Billing launches after beta — you can\'t buy a plan while beta free mode is on.'}]},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
 
     code = (request.data.get('plan_code') or '').strip()
     try:
@@ -260,7 +254,7 @@ def tls_allowed(request):
     # on the `t.` subdomain (t.donnable.site) which Caddy must also serve TLS
     # for.
     allowed = False
-    for d in DomainRegistry.objects.filter(verified=True):
+    for d in DomainRegistry.objects.filter(verified=True, removed_at__isnull=True):
         if d.domain == host or tracking_host(d.domain) == host:
             allowed = True
             break
@@ -548,15 +542,20 @@ def dashboard_stats(request):
     else:
         clicks_trend = None
 
-    active_links = TrackingLink.objects.filter(workspace=workspace, status=TrackingLink.Status.ACTIVE).count()
+    active_links = TrackingLink.objects.filter(
+        workspace=workspace, status=TrackingLink.Status.ACTIVE, removed_at__isnull=True
+    ).count()
     domains_healthy = DomainRegistry.objects.filter(
-        workspace=workspace, health_status=DomainRegistry.HealthStatus.HEALTHY
+        workspace=workspace, removed_at__isnull=True,
+        health_status=DomainRegistry.HealthStatus.HEALTHY
     ).count()
     domains_degraded = DomainRegistry.objects.filter(
-        workspace=workspace, health_status=DomainRegistry.HealthStatus.DEGRADED
+        workspace=workspace, removed_at__isnull=True,
+        health_status=DomainRegistry.HealthStatus.DEGRADED
     ).count()
     domains_blacklisted = DomainRegistry.objects.filter(
-        workspace=workspace, health_status=DomainRegistry.HealthStatus.BLACKLISTED
+        workspace=workspace, removed_at__isnull=True,
+        health_status=DomainRegistry.HealthStatus.BLACKLISTED
     ).count()
 
     data = {
@@ -676,12 +675,32 @@ class TrackingLinkViewSet(viewsets.ModelViewSet):
         workspace = get_user_workspace(self.request.user)
         if workspace:
             qs = qs.filter(workspace=workspace)
-        return qs
+        # Soft-deleted links stay in the DB (they keep counting toward the plan
+        # limit until the period ends) but are hidden from the app and no longer
+        # serve traffic.
+        return qs.filter(removed_at__isnull=True)
+
+    def perform_destroy(self, instance):
+        instance.removed_at = timezone.now()
+        instance.save(update_fields=['removed_at'])
 
     def perform_create(self, serializer):
         workspace = get_user_workspace(self.request.user)
         if not workspace:
             raise PermissionError('No workspace found')
+        workspace.ensure_trial_started()
+        if not workspace.can_add_link:
+            if workspace.plan:
+                raise ValidationError({
+                    'detail': 'You have reached the link limit for your plan. Remove a link or upgrade to add more.'
+                })
+            raise ValidationError({
+                'detail': (
+                    'Your free trial ended. Upgrade to any plan to keep creating links.'
+                    if not workspace.trial_active
+                    else 'Your free trial includes 1 link. Upgrade to create more.'
+                )
+            })
         serializer.save(workspace=workspace)
 
 
@@ -702,18 +721,30 @@ class DomainRegistryViewSet(viewsets.ModelViewSet):
         workspace = get_user_workspace(self.request.user)
         if workspace:
             qs = qs.filter(workspace=workspace)
-        return qs
+        # Removed (soft-deleted) domains stay in the DB so they keep counting
+        # toward the plan limit until the period ends, but they are hidden from
+        # the app and can no longer be acted on.
+        return qs.filter(removed_at__isnull=True)
 
     def perform_create(self, serializer):
         workspace = get_user_workspace(self.request.user)
         if not workspace:
             raise ValidationError({'detail': 'No workspace found for this account.'})
+        workspace.ensure_trial_started()
         if not workspace.can_add_domain:
-            limit = workspace.effective_domain_limit
+            if workspace.plan:
+                limit = workspace.effective_domain_limit
+                raise ValidationError({
+                    'detail': (
+                        f'You have reached the {limit}-domain limit for your plan. '
+                        'Remove a domain or upgrade to a higher plan to add more.'
+                    )
+                })
             raise ValidationError({
                 'detail': (
-                    f'You have reached the {limit}-domain limit for your plan. '
-                    'Remove a domain or upgrade to a higher plan to add more.'
+                    'Your free trial ended. Upgrade to any plan to keep adding domains.'
+                    if not workspace.trial_active
+                    else 'Your free trial includes 1 domain. Upgrade to add more.'
                 )
             })
         domain = serializer.save(workspace=workspace)
@@ -726,11 +757,15 @@ class DomainRegistryViewSet(viewsets.ModelViewSet):
             domain.save(update_fields=['health_status', 'last_checked'])
 
     def perform_destroy(self, instance):
-        # A domain owns its links. Deleting the domain removes the links
-        # (and their click logs, which cascade) — otherwise orphaned links would
-        # keep serving on a domain the user just removed.
-        instance.links.all().delete()
-        instance.delete()
+        # Soft delete: a verified domain (and its links) keep counting toward
+        # the plan limit until the current period ends, so users can't churn
+        # domains to dodge their limit. Unverified domains (e.g. a typo) never
+        # counted, so removing one costs nothing. Links are soft-deleted along
+        # with the domain and stop serving.
+        stamp = timezone.now()
+        instance.links.update(removed_at=stamp)
+        instance.removed_at = stamp
+        instance.save(update_fields=['removed_at'])
 
     @action(detail=True, methods=['post'])
     def recheck(self, request, pk=None):
@@ -775,7 +810,10 @@ class DomainRegistryViewSet(viewsets.ModelViewSet):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def redirect_click(request, slug):
-    link = get_object_or_404(TrackingLink, slug=slug, status=TrackingLink.Status.ACTIVE)
+    link = get_object_or_404(
+        TrackingLink, slug=slug, status=TrackingLink.Status.ACTIVE,
+        removed_at__isnull=True,
+    )
 
     ip = request.META.get('REMOTE_ADDR', '127.0.0.1')
     forwarded = request.META.get('HTTP_X_FORWARDED_FOR')
@@ -837,6 +875,14 @@ class IPRuleViewSet(viewsets.ModelViewSet):
         workspace = get_user_workspace(self.request.user)
         if not workspace:
             raise PermissionError('No workspace found')
+        workspace.ensure_trial_started()
+        if not (workspace.plan or workspace.trial_active):
+            raise ValidationError({
+                'detail': (
+                    'IP rules are a paid feature. Your free trial ended — '
+                    'upgrade to any plan to keep using them.'
+                )
+            })
         serializer.save(workspace=workspace, created_by=self.request.user)
 
     @action(detail=True, methods=['post'])

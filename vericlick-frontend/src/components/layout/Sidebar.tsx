@@ -4,8 +4,8 @@ import { useQuery } from '@tanstack/react-query'
 import { DashboardSquare01Icon, LinkSquare02Icon, Globe02Icon, Settings01Icon, Logout01Icon, HelpCircleIcon, ChevronRightIcon, ShieldIcon, BlockedIcon, Wallet01Icon } from '@hugeicons/core-free-icons'
 import { cn } from '@/lib/utils'
 import { Logo } from '@/components/Logo'
-import { BetaBadge } from '@/components/BetaBadge'
 import { fetchWorkspace } from '@/api/workspace'
+import { notifyAuthChanged } from '@/hooks/useAuth'
 
 interface NavItemProps {
   to: string
@@ -42,19 +42,22 @@ export function Sidebar({ onClose: _onClose }: { onClose: () => void }) {
   const handleSignOut = () => {
     localStorage.removeItem('token')
     localStorage.removeItem('refresh')
+    notifyAuthChanged()
     navigate('/auth/login')
   }
 
   return (
     <aside className="w-72 h-full bg-sidebar flex flex-col p-6 border-r border-neutral-800">
       <div className="flex items-center gap-3 mb-12 px-2">
-        <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center">
-          <Logo variant="dark" className="w-6 h-6" />
-        </div>
-        <div>
-          <h2 className="text-xl font-bold text-white tracking-tight leading-none mb-1 flex items-center gap-2">VeriClick <BetaBadge /></h2>
-          <p className="text-[10px] text-neutral-400 font-bold uppercase tracking-widest">{workspace?.name ?? 'Workspace'}</p>
-        </div>
+        <Link to="/" className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center">
+            <Logo variant="dark" className="w-6 h-6" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-white tracking-tight leading-none mb-1">VeriClick</h2>
+            <p className="text-[10px] text-neutral-400 font-bold uppercase tracking-widest">{workspace?.name ?? 'Workspace'}</p>
+          </div>
+        </Link>
       </div>
 
       <nav className="flex-1 space-y-2">

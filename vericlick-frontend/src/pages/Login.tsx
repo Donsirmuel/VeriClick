@@ -7,6 +7,7 @@ import { Logo } from '@/components/Logo'
 import { GoogleSignInButton } from '@/components/auth/GoogleSignInButton'
 import { login } from '@/api/auth'
 import { parseApiError } from '@/lib/errors'
+import { notifyAuthChanged } from '@/hooks/useAuth'
 
 export default function Login() {
   const [username, setUsername] = useState('')
@@ -28,6 +29,7 @@ export default function Login() {
       const res = await login(username, password)
       localStorage.setItem('token', res.access)
       localStorage.setItem('refresh', res.refresh)
+      notifyAuthChanged()
       toast.success('Signed in successfully')
       navigate('/app/dashboard')
     } catch (err) {
@@ -55,7 +57,7 @@ export default function Login() {
               Verify every click.<br />Block every bot.
             </h2>
             <p className="text-neutral-400 text-lg leading-relaxed max-w-md">
-              VeriClick checks every click against your rules before it reaches your page. Free during beta.
+              VeriClick checks every click against your rules before it reaches your page. Start free — 1 domain, 1 link for 7 days.
             </p>
           </div>
 

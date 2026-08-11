@@ -112,7 +112,7 @@ export function ChatWidget() {
             <div className="flex-1 min-w-0">
               <div className="text-sm font-bold leading-tight">{PRODUCT_NAME} Assistant</div>
               <div className="text-[11px] text-neutral-400 leading-tight truncate">
-                Free during beta
+                Built-in help
               </div>
             </div>
             <Link

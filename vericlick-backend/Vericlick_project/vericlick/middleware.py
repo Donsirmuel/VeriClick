@@ -29,7 +29,9 @@ class RegisteredDomainHostMiddleware:
             try:
                 matches = host in self.INTERNAL_HOSTS or any(
                     d.domain == host or tracking_host(d.domain) == host
-                    for d in DomainRegistry.objects.only('domain').iterator()
+                    for d in DomainRegistry.objects.filter(
+                        removed_at__isnull=True
+                    ).only('domain').iterator()
                 )
                 if matches:
                     allowed = list(settings.ALLOWED_HOSTS)

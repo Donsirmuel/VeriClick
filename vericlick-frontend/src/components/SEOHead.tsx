@@ -9,12 +9,12 @@ const PAGE_META: Record<string, { title: string; description: string }> = {
   '/': {
     title: 'VeriClick — Protect Your Links From Bots & Suspicious Traffic',
     description:
-      'VeriClick checks every click against your IP rules and bot detection before it reaches your page, and explains exactly why each request was flagged. Free during beta.',
+      'VeriClick checks every click against your IP rules and bot detection before it reaches your page, and explains exactly why each request was flagged. Start with a free 7-day trial.',
   },
   '/pricing': {
     title: 'Pricing — VeriClick',
     description:
-      'Simple monthly plans for VeriClick link protection: Basic, Plus, and Pro. Free during beta.',
+      'Simple monthly plans for VeriClick link protection: Basic, Plus, and Pro. Start with a free 7-day trial.',
   },
   '/contact': {
     title: 'Contact — VeriClick',

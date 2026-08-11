@@ -7,7 +7,7 @@ import {
 } from '@hugeicons/core-free-icons'
 import { PublicNav } from '@/components/PublicNav'
 import { PublicFooter } from '@/components/PublicFooter'
-import { useSiteConfig } from '@/hooks/useSiteConfig'
+import { useAuth } from '@/hooks/useAuth'
 import { useState, useEffect, useRef } from 'react'
 
 function useInView(threshold = 0.15) {
@@ -183,10 +183,8 @@ function FloatingParticles() {
   )
 }
 
-const HERO_POINTS = ({ betaFree }: { betaFree: boolean }) => [
-  betaFree
-    ? { title: 'Free during beta', desc: 'No credit card required.' }
-    : { title: 'Simple plans', desc: 'Basic, Plus, and Pro.' },
+const HERO_POINTS = [
+  { title: 'Simple plans', desc: 'Basic, Plus, and Pro.' },
   { title: 'IP allow/deny rules', desc: 'Allow rules always win.' },
   { title: 'Domain health + ownership', desc: 'Checked in-app, proven via TXT.' },
   { title: 'Every decision explained', desc: 'Plain-language reasons.' },
@@ -223,10 +221,111 @@ const REASON_LABELS = [
   'Blocked by automated detection',
 ]
 
+const SPOTLIGHT_FEATURES = [
+  {
+    icon: FingerPrintIcon,
+    tag: '01',
+    title: 'Click verification',
+    desc: 'Every click is checked before it reaches your page — IP rules first, then bot signatures, then rate limits. The decision is recorded every time.',
+    points: ['IP allow/deny rules checked first', 'Bot signature and user-agent detection', 'Per-address rate limiting'],
+  },
+  {
+    icon: LockIcon,
+    tag: '02',
+    title: 'IP rules',
+    desc: 'Allow trusted addresses through and deny known-bad ones. Allow rules are checked first and always win, so whitelisted IPs are never flagged again.',
+    points: ['Allow rules always win', 'Deny by single IP or CIDR block', 'Optional expiry on every rule'],
+  },
+  {
+    icon: ServerStackIcon,
+    tag: '03',
+    title: 'Safe routing',
+    desc: 'Flagged traffic is diverted to a safe destination you control — never your real page, never a bare error.',
+    points: ['Set your own safe destination', 'Blocked traffic never reaches your page', 'Every diversion is logged with a reason'],
+  },
+  {
+    icon: Globe02Icon,
+    tag: '04',
+    title: 'Tracking domains',
+    desc: 'Run your links on a domain you own. Prove ownership with a TXT record, point it at VeriClick, and your links carry your brand.',
+    points: ['DNS TXT ownership verification', 'CNAME to your t. subdomain', 'Automatic in-app health checks'],
+  },
+  {
+    icon: Chart03Icon,
+    tag: '05',
+    title: 'Live dashboard',
+    desc: 'Traffic chart, activity feed, domain health, and a blocked-IP review queue — with a plain-language reason for every decision it makes.',
+    points: ['Human/bot breakdown per link', 'Real-time activity feed', 'Blocked-IP review queue'],
+  },
+]
+
+function FeatureSpotlight() {
+  const [active, setActive] = useState(0)
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setActive((i) => (i + 1) % SPOTLIGHT_FEATURES.length)
+    }, 4500)
+    return () => clearInterval(timer)
+  }, [active])
+
+  const feature = SPOTLIGHT_FEATURES[active]
+
+  return (
+    <div className="grid lg:grid-cols-2 gap-10 items-stretch">
+      <div className="space-y-3">
+        {SPOTLIGHT_FEATURES.map((f, i) => {
+          const isActive = i === active
+          return (
+            <button
+              key={f.tag}
+              onClick={() => setActive(i)}
+              className={`w-full text-left flex items-start gap-4 p-5 rounded-2xl border transition-all duration-300 ${
+                isActive
+                  ? 'border-neutral-500/60 bg-neutral-950 shadow-lg shadow-white/5'
+                  : 'border-neutral-800/60 bg-transparent hover:border-neutral-700/60'
+              }`}
+            >
+              <span className={`font-mono text-xs mt-1 ${isActive ? 'text-white' : 'text-neutral-600'}`}>{f.tag}</span>
+              <div className="flex-1">
+                <div className={`text-base font-bold mb-1 flex items-center gap-2 ${isActive ? 'text-white' : 'text-neutral-300'}`}>
+                  {f.title}
+                  {isActive && <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse-dot" />}
+                </div>
+                <p className={`text-sm leading-relaxed ${isActive ? 'text-neutral-300' : 'text-neutral-500'}`}>{f.desc}</p>
+              </div>
+            </button>
+          )
+        })}
+      </div>
+
+      <div key={active} className="relative rounded-2xl border border-neutral-800 bg-neutral-950 p-8 overflow-hidden">
+        <div className="absolute -top-20 -right-20 w-48 h-48 bg-white/2 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute inset-x-0 top-0 h-px bg-linear-to-r from-transparent via-white/20 to-transparent" />
+        <div className="relative z-10 opacity-0" style={{ animation: 'fade-in-up 0.5s ease-out forwards' }}>
+          <div className="w-12 h-12 bg-neutral-800/80 rounded-xl flex items-center justify-center mb-6">
+            <HugeiconsIcon icon={feature.icon} className="w-6 h-6" />
+          </div>
+          <div className="font-mono text-[10px] text-neutral-500 uppercase tracking-widest mb-2">Capability {feature.tag}</div>
+          <h3 className="text-2xl font-bold mb-3">{feature.title}</h3>
+          <p className="text-neutral-400 leading-relaxed mb-6">{feature.desc}</p>
+          <ul className="space-y-2.5">
+            {feature.points.map((pt) => (
+              <li key={pt} className="flex items-start gap-2.5 text-sm text-neutral-300">
+                <HugeiconsIcon icon={CheckmarkCircle02Icon} className="w-4 h-4 text-neutral-400 shrink-0 mt-0.5" />
+                {pt}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function Landing() {
   const heroStats = useInView(0.2)
-  const { data: site } = useSiteConfig()
-  const betaFree = site?.betaFreeMode ?? true
+  const { isLoggedIn } = useAuth()
 
   return (
     <div className="bg-black text-white selection:bg-white selection:text-black">
@@ -256,21 +355,22 @@ export default function Landing() {
               <p className="text-lg md:text-xl text-neutral-400 mb-10 leading-relaxed max-w-lg opacity-0" style={{ animation: 'fade-in-up 0.6s ease-out 0.35s forwards' }}>
                 VeriClick protects your links from bots and suspicious traffic. Create a tracked link,
                 and every click is checked — IP rules first, then bot detection, then rate limits.
-                Humans get through; flagged requests are diverted. {betaFree ? 'Free during beta.' : 'Simple plans, from just $25/month.'}
+                Humans get through; flagged requests are diverted. Start free for 7 days, then simple
+                plans from $25/month.
               </p>
 
               <div className="flex flex-col sm:flex-row items-center gap-4 mb-14 opacity-0" style={{ animation: 'fade-in-up 0.6s ease-out 0.45s forwards' }}>
-                <Link to="/auth/register" className="w-full sm:w-auto bg-white hover:bg-neutral-200 text-black px-8 py-4 rounded-xl text-lg font-bold flex items-center justify-center gap-2 transition-all group shadow-lg shadow-white/5">
-                  {betaFree ? 'Get started free' : 'Get started'}
+                <Link to={isLoggedIn ? '/app/dashboard' : '/auth/register'} className="w-full sm:w-auto bg-white hover:bg-neutral-200 text-black px-8 py-4 rounded-xl text-lg font-bold flex items-center justify-center gap-2 transition-all group shadow-lg shadow-white/5">
+                  {isLoggedIn ? 'Go to dashboard' : 'Get started'}
                   <HugeiconsIcon icon={ArrowRight01Icon} className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                 </Link>
-                <Link to="/app/dashboard" className="w-full sm:w-auto bg-neutral-800/50 hover:bg-neutral-800 border border-neutral-700/50 px-8 py-4 rounded-xl text-lg font-bold transition-all text-center">
-                  See dashboard
+                <Link to={isLoggedIn ? '/pricing' : '/app/dashboard'} className="w-full sm:w-auto bg-neutral-800/50 hover:bg-neutral-800 border border-neutral-700/50 px-8 py-4 rounded-xl text-lg font-bold transition-all text-center">
+                  {isLoggedIn ? 'View pricing' : 'See dashboard'}
                 </Link>
               </div>
 
               <div ref={heroStats.ref} className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8 border-t border-neutral-800/60 pt-10 opacity-0" style={{ animation: 'fade-in-up 0.6s ease-out 0.55s forwards' }}>
-                {HERO_POINTS({ betaFree }).map((p) => (
+                {HERO_POINTS.map((p) => (
                   <div key={p.title}>
                     <div className="flex items-center gap-2 mb-1">
                       <HugeiconsIcon icon={CheckmarkCircle02Icon} className="w-4 h-4 text-neutral-400" />
@@ -295,13 +395,35 @@ export default function Landing() {
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <p className="text-xs font-bold text-neutral-500 uppercase tracking-widest">What sets VeriClick apart</p>
             <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-3 text-neutral-500">
-              <div className="flex items-center gap-2 text-sm font-medium"><HugeiconsIcon icon={Tick02Icon} className="w-4 h-4 text-white/40" /> {betaFree ? 'Free during beta' : 'Simple, flat pricing'}</div>
+              <div className="flex items-center gap-2 text-sm font-medium"><HugeiconsIcon icon={Tick02Icon} className="w-4 h-4 text-white/40" /> Simple, flat pricing</div>
               <div className="flex items-center gap-2 text-sm font-medium"><HugeiconsIcon icon={Tick02Icon} className="w-4 h-4 text-white/40" /> Your domains, your links</div>
               <div className="flex items-center gap-2 text-sm font-medium"><HugeiconsIcon icon={Tick02Icon} className="w-4 h-4 text-white/40" /> Every decision explained</div>
             </div>
           </div>
         </div>
       </div>
+
+      {/* ─── Feature Spotlight ─── */}
+      <section className="py-16 sm:py-24 lg:py-32 px-6 bg-neutral-950/30">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center mb-16">
+            <AnimatedBlock>
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-neutral-800/50 border border-neutral-700/40 text-white text-xs font-bold uppercase tracking-wider mb-6">
+                Feature Spotlight
+              </div>
+            </AnimatedBlock>
+            <AnimatedBlock delay={80}>
+              <h2 className="text-4xl md:text-5xl font-bold mb-6">One engine, five ways it protects you</h2>
+            </AnimatedBlock>
+            <AnimatedBlock delay={160}>
+              <p className="text-neutral-400 text-lg max-w-2xl mx-auto">
+                Select a capability to see exactly what it does for your traffic — it cycles automatically.
+              </p>
+            </AnimatedBlock>
+          </div>
+          <FeatureSpotlight />
+        </div>
+      </section>
 
       {/* ─── Features Grid ─── */}
       <section id="features" className="py-16 sm:py-24 lg:py-32 px-6">
@@ -466,15 +588,13 @@ export default function Landing() {
           </AnimatedBlock>
           <AnimatedBlock delay={100}>
             <p className="text-neutral-400 text-lg mb-12 max-w-xl mx-auto">
-              {betaFree
-                ? 'Free during beta. Set up your first tracked link in minutes — no credit card required.'
-                : 'Pick a plan, add your domain, and start protecting your links today.'}
+              Pick a plan, add your domain, and start protecting your links today.
             </p>
           </AnimatedBlock>
           <AnimatedBlock delay={200}>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Link to="/auth/register" className="bg-white hover:bg-neutral-200 text-black px-10 py-4 rounded-xl text-lg font-bold flex items-center justify-center gap-2 transition-all group shadow-lg shadow-white/5">
-                {betaFree ? 'Get started free' : 'Get started'}
+              <Link to={isLoggedIn ? '/app/dashboard' : '/auth/register'} className="bg-white hover:bg-neutral-200 text-black px-10 py-4 rounded-xl text-lg font-bold flex items-center justify-center gap-2 transition-all group shadow-lg shadow-white/5">
+                {isLoggedIn ? 'Go to dashboard' : 'Get started'}
                 <HugeiconsIcon icon={ArrowRight01Icon} className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
               </Link>
               <Link to="/pricing" className="border border-neutral-700 hover:border-neutral-500 hover:bg-neutral-900/50 px-10 py-4 rounded-xl text-lg font-bold transition-all text-center">

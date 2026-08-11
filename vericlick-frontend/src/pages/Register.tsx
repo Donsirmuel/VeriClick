@@ -7,6 +7,7 @@ import { Logo } from '@/components/Logo'
 import { GoogleSignInButton } from '@/components/auth/GoogleSignInButton'
 import { register, login } from '@/api/auth'
 import { parseApiError } from '@/lib/errors'
+import { notifyAuthChanged } from '@/hooks/useAuth'
 
 export default function Register() {
   const [name, setName] = useState('')
@@ -24,6 +25,7 @@ export default function Register() {
       const res = await login(email, password)
       localStorage.setItem('token', res.access)
       localStorage.setItem('refresh', res.refresh)
+      notifyAuthChanged()
       navigate('/app/dashboard')
     } catch (err) {
       toast.error(parseApiError(err))
@@ -73,7 +75,7 @@ export default function Register() {
             </div>
             <div className="flex items-center gap-2">
               <div className="w-1.5 h-1.5 rounded-full bg-white" />
-              <span>Free during beta</span>
+              <span>7-day free trial</span>
             </div>
           </div>
         </div>

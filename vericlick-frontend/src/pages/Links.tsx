@@ -12,6 +12,8 @@ import toast from 'react-hot-toast'
 import { CreateLinkModal } from '@/components/links/CreateLinkModal'
 import { fetchLinks, createLink, updateLink, deleteLink } from '@/api/links'
 import { fetchDomains } from '@/api/domains'
+import { fetchWorkspace } from '@/api/workspace'
+import { FreeTierBanner } from '@/components/FreeTierBanner'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { TableSkeleton } from '@/components/ui/TableSkeleton'
@@ -35,8 +37,20 @@ export default function LinksPage() {
     queryFn: fetchDomains,
   })
 
+  const { data: workspace } = useQuery({
+    queryKey: ['workspace'],
+    queryFn: fetchWorkspace,
+  })
+
   const links = linksData?.results ?? []
   const totalPages = linksData ? Math.ceil(linksData.count / 20) : 0
+
+  // Paid workspaces can always create links. Free workspaces get 1 link during
+  // their 7-day trial; after it ends (or the link is used up) the create button
+  // is disabled and the FreeTierBanner points to upgrade.
+  const canCreateLink = !workspace
+    ? true
+    : workspace.planName !== null || workspace.canAddLink
 
   const createMutation = useMutation({
     mutationFn: createLink,
@@ -105,11 +119,17 @@ export default function LinksPage() {
         </div>
         <button
           onClick={() => setShowCreateModal(true)}
-          className="bg-black hover:bg-neutral-800 text-white px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-sm shrink-0 self-start"
+          disabled={!canCreateLink}
+          title={canCreateLink ? undefined : 'Your free trial includes 1 link. Upgrade to create more.'}
+          className="bg-black hover:bg-neutral-800 disabled:bg-neutral-300 disabled:cursor-not-allowed text-white px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-sm shrink-0 self-start"
         >
           <HugeiconsIcon icon={PlusSignIcon} className="w-4 h-4" />
           Create Link
         </button>
+      </div>
+
+      <div className="mb-6">
+        <FreeTierBanner workspace={workspace} />
       </div>
 
       <div className="flex items-center gap-3 mb-6">
@@ -138,7 +158,7 @@ export default function LinksPage() {
             icon={LinkSquare02Icon}
             title="No links yet"
             description="Create your first tracking link to start monitoring clicks and blocking bots."
-            action={search ? undefined : { label: 'Create your first link', onClick: () => setShowCreateModal(true) }}
+            action={search ? undefined : canCreateLink ? { label: 'Create your first link', onClick: () => setShowCreateModal(true) } : undefined}
           />
         </div>
       ) : (
@@ -275,7 +295,14 @@ export default function LinksPage() {
       <ConfirmDialog
         open={!!deleteTarget}
         title="Delete link"
-        message={`Are you sure you want to delete "${deleteTarget?.slug}"? This action cannot be undone. All click data for this link will be lost.`}
+        message={(() => {
+          if (!deleteTarget) return ''
+          const linkDomain = domains?.find(d => d.domain === deleteTarget.domain)
+          const countsTowardLimit = Boolean(linkDomain?.verified)
+          return countsTowardLimit
+            ? `Deleting "${deleteTarget.slug}" stops it serving but does NOT free up your link slot — links on a verified domain keep counting toward your plan limit until the current period ends.`
+            : `Are you sure you want to delete "${deleteTarget.slug}"? This action cannot be undone. All click data for this link will be lost.`
+        })()}
         confirmLabel="Delete"
         variant="danger"
         onConfirm={handleDelete}

@@ -79,8 +79,8 @@ const TOPICS: ChatTopic[] = [
   },
   {
     id: 'pricing',
-    keywords: ['price', 'pricing', 'cost', 'free', 'paid', 'plan', 'money', 'charge', 'billing', 'subscription', 'upgrade', 'premium'],
-    answer: `VeriClick is free while it's in beta — no credit card required, and every feature is included. Paid plans are planned for the future but aren't available yet. When pricing launches you'll be able to see it on the Pricing page.`,
+    keywords: ['price', 'pricing', 'cost', 'free', 'paid', 'plan', 'money', 'charge', 'billing', 'subscription', 'upgrade', 'premium', 'trial'],
+    answer: `Every new account starts with a free 7-day trial — 1 domain and 1 link, no credit card required. After that you'll need a plan to keep creating links and domains; your existing tracked links keep working. Plans are Basic (5 domains), Plus (10), and Pro (20) — all from just $25/month. Head to the Pricing page to compare, and to Billing to upgrade.`,
   },
   {
     id: 'site-script',

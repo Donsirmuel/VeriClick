@@ -54,7 +54,7 @@ export function PublicFooter() {
             <div className="col-span-2 sm:col-span-1">
               <h5 className="font-bold text-white mb-5 text-sm">Support</h5>
               <p className="text-xs text-neutral-500 leading-relaxed mb-4">
-                Free during beta. Ask the assistant in the bottom-right or use the contact button.
+                Start with a free 7-day trial — 1 domain, 1 link. Ask the assistant in the bottom-right or use the contact button.
               </p>
               <Link
                 to="/contact"

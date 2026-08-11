@@ -132,7 +132,7 @@ def refresh_stale_domains(workspace, max_age_minutes=15, limit=10):
     # resolves; ownership verification remains a separate DNS TXT step.
     cutoff = timezone.now() - timedelta(minutes=max_age_minutes)
     stale = list(
-        DomainRegistry.objects.filter(workspace=workspace).filter(
+        DomainRegistry.objects.filter(workspace=workspace, removed_at__isnull=True).filter(
             Q(last_checked__isnull=True) | Q(last_checked__lt=cutoff)
         )[:limit]
     )
@@ -196,6 +196,7 @@ def get_public_tracking_url(link, request=None):
         domain
         and domain.domain
         and domain.verified
+        and domain.removed_at is None
         and domain.health_status == DomainRegistry.HealthStatus.HEALTHY
         and domain.points_to_server
     ):

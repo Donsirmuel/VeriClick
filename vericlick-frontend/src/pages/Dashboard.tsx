@@ -10,6 +10,8 @@ import { DomainHealthWidget } from '@/components/dashboard/DomainHealthWidget'
 import { BlockedQueueWidget } from '@/components/dashboard/BlockedQueueWidget'
 import { fetchDashboardStats, fetchTrafficData, fetchActivity } from '@/api/dashboard'
 import { fetchDomains } from '@/api/domains'
+import { fetchWorkspace } from '@/api/workspace'
+import { FreeTierBanner } from '@/components/FreeTierBanner'
 import { DashboardSkeleton } from '@/components/ui/DashboardSkeleton'
 import type { TimeRange } from '@/types'
 
@@ -35,6 +37,11 @@ export default function DashboardPage() {
   const { data: domains, isLoading: domainsLoading } = useQuery({
     queryKey: ['domains'],
     queryFn: fetchDomains,
+  })
+
+  const { data: workspace } = useQuery({
+    queryKey: ['workspace'],
+    queryFn: fetchWorkspace,
   })
 
   const totalClicks = stats?.totalClicks24h ?? 0
@@ -167,6 +174,10 @@ export default function DashboardPage() {
               : 'No domain scan yet'}
           </span>
         </div>
+      </div>
+
+      <div className="mb-8">
+        <FreeTierBanner workspace={workspace} />
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">

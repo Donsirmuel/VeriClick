@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { CheckmarkCircle02Icon, ArrowRight01Icon, Mail01Icon, ZapIcon, ShieldIcon, Globe02Icon, LockIcon, Chart03Icon, LinkSquare02Icon, Tag01Icon } from '@hugeicons/core-free-icons'
+import { CheckmarkCircle02Icon, ArrowRight01Icon, Mail01Icon, ZapIcon, ShieldIcon, Globe02Icon, Chart03Icon, LinkSquare02Icon, Tag01Icon } from '@hugeicons/core-free-icons'
 import toast from 'react-hot-toast'
 import { PublicNav } from '@/components/PublicNav'
 import { PublicFooter } from '@/components/PublicFooter'
@@ -24,6 +24,48 @@ const HIGHLIGHTS = [
   { icon: Globe02Icon, title: 'Domain health + ownership', desc: 'Domains are health-checked automatically and ownership is proven with a DNS TXT record.' },
   { icon: Chart03Icon, title: 'Live dashboard', desc: 'Traffic chart, activity feed, domain health, and a blocked-IP review queue — all explained in plain language.' },
 ]
+
+const FREE_FEATURES = [
+  '1 verified domain',
+  '1 tracked link on your own domain',
+  'Full protection engine — bot detection, IP rules, rate limits',
+  '7-day trial, no credit card required',
+]
+
+function FreeTierCard() {
+  return (
+    <div className="relative flex flex-col lg:flex-row lg:items-center lg:justify-between gap-8 bg-neutral-950 border border-dashed border-neutral-600 rounded-3xl p-6 sm:p-8 mb-8">
+      <div className="flex-1">
+        <div className="flex items-center gap-2 mb-3">
+          <h3 className="text-xl font-bold">Free trial</h3>
+          <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-300 bg-neutral-800/70 px-2 py-0.5 rounded-full">7 days</span>
+        </div>
+        <div className="text-4xl font-bold mb-5">
+          $0
+          <span className="text-base text-neutral-500 font-normal">/month</span>
+        </div>
+        <ul className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5 text-sm text-neutral-300">
+          {FREE_FEATURES.map((f) => (
+            <li key={f} className="flex items-start gap-2.5">
+              <HugeiconsIcon icon={CheckmarkCircle02Icon} className="w-4 h-4 text-neutral-400 shrink-0 mt-0.5" />
+              {f}
+            </li>
+          ))}
+        </ul>
+      </div>
+      <div className="shrink-0 flex flex-col items-start lg:items-center gap-3">
+        <Link
+          to="/auth/register"
+          className="inline-flex items-center justify-center gap-2 border border-neutral-600 hover:border-neutral-400 text-white px-6 py-3.5 rounded-xl text-sm font-bold transition-all"
+        >
+          Start free trial
+          <HugeiconsIcon icon={ArrowRight01Icon} className="w-4 h-4" />
+        </Link>
+        <p className="text-xs text-neutral-500">1 domain, 1 link, full protection engine.</p>
+      </div>
+    </div>
+  )
+}
 
 function PlanCard({ plan, popular }: { plan: Plan; popular?: boolean }) {
   return (
@@ -81,7 +123,6 @@ function PlanCard({ plan, popular }: { plan: Plan; popular?: boolean }) {
 
 export default function Pricing() {
   const { data: pricing, isLoading, isError, refetch } = useQuery({ queryKey: ['pricing'], queryFn: fetchPricing })
-  const betaFree = pricing?.betaFreeMode ?? false
   const plans = pricing?.plans ?? []
 
   const [discountCode, setDiscountCode] = useState('')
@@ -120,11 +161,11 @@ export default function Pricing() {
             Pricing
           </div>
           <h1 className="text-4xl md:text-6xl font-bold tracking-tight mb-6 leading-tight">
-            {betaFree ? <>Free while it's<br />in beta</> : <>Simple plans.<br />Clear pricing.</>}
+            Simple plans.<br />Clear pricing.
           </h1>
           <p className="text-lg text-neutral-400 max-w-2xl mx-auto mb-4 leading-relaxed">
-            VeriClick is an MVP in active development, and it's {betaFree ? 'free' : 'affordable'}.
-            {betaFree ? ' No credit card, no trial clock, no feature gates — everything below is included during beta.' : ' Pick the plan that fits your domain count — every tier gets the full protection engine.'}
+            Start with a free 7-day trial — 1 domain and 1 link, no credit card required. Then pick
+            the plan that fits your domain count; every tier gets the full protection engine.
           </p>
         </div>
       </section>
@@ -132,24 +173,6 @@ export default function Pricing() {
       {/* Paid plans */}
       <section className="px-6 pb-16">
         <div className="max-w-6xl mx-auto">
-          {betaFree && (
-            <div className="mb-10 bg-neutral-900/40 border border-neutral-800/60 rounded-2xl p-6 flex flex-col sm:flex-row items-start sm:items-center gap-4">
-              <div className="w-10 h-10 bg-neutral-800 rounded-xl flex items-center justify-center shrink-0">
-                <HugeiconsIcon icon={LockIcon} className="w-5 h-5 text-neutral-300" />
-              </div>
-              <div className="flex-1">
-                <h3 className="text-sm font-bold mb-1">You're not charged during beta</h3>
-                <p className="text-sm text-neutral-400 leading-relaxed">
-                  Paid plans below are what launches later. Right now every workspace gets unlimited domains and the full product for free.
-                </p>
-              </div>
-              <Link to="/auth/register" className="inline-flex items-center gap-2 text-sm font-bold text-black bg-white hover:bg-neutral-200 px-4 py-2.5 rounded-xl transition-colors shrink-0">
-                Get started free
-                <HugeiconsIcon icon={ArrowRight01Icon} className="w-4 h-4" />
-              </Link>
-            </div>
-          )}
-
           {isLoading && (
             <p className="text-center text-sm text-neutral-500 py-16">Loading plans…</p>
           )}
@@ -163,11 +186,14 @@ export default function Pricing() {
             </div>
           )}
           {!isLoading && !isError && (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {plans.map((plan) => (
-              <PlanCard key={plan.code} plan={plan} popular={plan.code === 'plus'} />
-            ))}
-          </div>
+          <>
+            <FreeTierCard />
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {plans.map((plan) => (
+                <PlanCard key={plan.code} plan={plan} popular={plan.code === 'plus'} />
+              ))}
+            </div>
+          </>
           )}
 
           <p className="text-center text-sm text-neutral-500 mt-8">
@@ -184,7 +210,7 @@ export default function Pricing() {
               <HugeiconsIcon icon={Tag01Icon} className="w-4 h-4 text-neutral-300" />
               <h3 className="text-sm font-bold">Have a discount code?</h3>
             </div>
-            <p className="text-xs text-neutral-400 mb-4">Enter it and we'll remember it when paid plans launch.</p>
+            <p className="text-xs text-neutral-400 mb-4">Enter a code to check whether it's valid.</p>
             <div className="flex gap-2">
               <input
                 type="text"
@@ -193,7 +219,7 @@ export default function Pricing() {
                   setDiscountCode(e.target.value)
                   setApplied(null)
                 }}
-                placeholder="e.g. BETA20"
+                placeholder="e.g. LAUNCH20"
                 className="flex-1 bg-black border border-neutral-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-neutral-500 transition-colors placeholder:text-neutral-600"
               />
               <button
@@ -206,7 +232,7 @@ export default function Pricing() {
             </div>
             {applied && (
               <p className="text-xs text-success mt-3">
-                {applied.code} applied — {applied.percent}% off when billing launches.
+                {applied.code} is valid — {applied.percent}% off.
               </p>
             )}
           </div>
@@ -241,7 +267,7 @@ export default function Pricing() {
           <HugeiconsIcon icon={ZapIcon} className="w-8 h-8 mx-auto mb-6" />
           <h2 className="text-3xl md:text-5xl font-bold mb-4">Set up your first tracked link in minutes</h2>
           <p className="text-neutral-400 text-lg mb-8 max-w-xl mx-auto">
-            {betaFree ? 'Create a free account, add your domain, and start protecting your links today.' : 'Create your account, add your domain, and start protecting your links today.'}
+            Create your account, add your domain, and start protecting your links today.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link to="/auth/register" className="bg-white hover:bg-neutral-200 text-black px-8 py-4 rounded-xl text-lg font-bold transition-all">

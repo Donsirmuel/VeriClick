@@ -11,8 +11,8 @@ const SECTIONS = [
     body: 'You must provide accurate account information and keep your credentials secure. You are responsible for everything that happens under your account. One free workspace is created per account.',
   },
   {
-    title: 'Beta status',
-    body: 'VeriClick is an MVP in beta and is currently offered free of charge. Features may change, be removed, or be moved behind paid plans in the future. We will announce changes before charging for the service.',
+    title: 'Free trial & plans',
+    body: 'New accounts get a free 7-day trial with 1 domain and 1 link. After the trial, a paid plan is required to keep creating links and domains; your existing tracked links continue to work. Paid plans are billed monthly through our payment provider.',
   },
   {
     title: 'Acceptable use',
@@ -20,7 +20,7 @@ const SECTIONS = [
   },
   {
     title: 'No warranty',
-    body: 'The service is provided "as is" and "as available" during beta. To the maximum extent permitted by law, DonLabs makes no warranties of any kind about the service, including that it will be uninterrupted, error-free, or fit for a particular purpose.',
+    body: 'The service is provided "as is" and "as available". To the maximum extent permitted by law, DonLabs makes no warranties of any kind about the service, including that it will be uninterrupted, error-free, or fit for a particular purpose.',
   },
   {
     title: 'Limitation of liability',
@@ -42,7 +42,7 @@ export default function TermsOfService() {
           <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-4">Terms of Service</h1>
           <p className="text-neutral-400 text-lg leading-relaxed">
             The short version: use VeriClick for its intended purpose, keep your account secure,
-            and understand it's a beta product offered free of charge.
+            and understand the free trial limits and paid plans.
           </p>
         </div>
 

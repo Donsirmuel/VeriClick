@@ -43,7 +43,8 @@ function App() {
       <BrowserRouter>
         <SEOHead />
         <Routes>
-          <Route path="/" element={<PublicOnly><Landing /></PublicOnly>} />
+          {/* Landing is public even for signed-in users (nav adapts to show "Dashboard"). */}
+          <Route path="/" element={withSuspense(<Landing />)} />
           <Route path="/pricing" element={withSuspense(<Pricing />)} />
           <Route path="/contact" element={withSuspense(<Contact />)} />
           <Route path="/privacy" element={withSuspense(<PrivacyPolicy />)} />

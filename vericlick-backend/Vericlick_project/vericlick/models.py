@@ -3,7 +3,9 @@ import secrets
 import string
 import socket
 import re
+from datetime import timedelta
 from django.db import models
+from django.db.models import Q
 from django.contrib.auth.models import User
 from django.db.models.signals import post_save
 from django.dispatch import receiver
@@ -88,9 +90,28 @@ class Workspace(models.Model):
     plan = models.ForeignKey(
         'Plan', on_delete=models.SET_NULL, null=True, blank=True,
         related_name='workspaces',
-        help_text='The paid plan this workspace is on. Null means free/beta (no paid plan).',
+        help_text='The paid plan this workspace is on. Null means the free tier (no paid plan).',
     )
     created_at = models.DateTimeField(auto_now_add=True)
+    trial_started_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text=(
+            'When the free-trial clock started for this workspace. Only set once '
+            'a workspace has no paid plan; the workspace then gets 7 days to use '
+            'its free allowance (1 domain, 1 link) before creation is locked '
+            'until it upgrades.'
+        ),
+    )
+    plan_started_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text=(
+            'When the current paid-plan period began. Used to decide when '
+            'soft-deleted domains/links stop counting toward the plan limits: '
+            'a removed verified domain (or a link on one) keeps its slot until '
+            'the current period ends. Set automatically the first time a plan '
+            'is assigned.'
+        ),
+    )
     last_domain_scan_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
@@ -99,25 +120,102 @@ class Workspace(models.Model):
     def __str__(self):
         return self.name
 
+    def save(self, *args, **kwargs):
+        # Start the paid-plan period clock the first time a plan is assigned
+        # (covers the webhook, the Django admin's inline plan edits, and any
+        # test/script path uniformly).
+        if self.plan_id is not None and not self.plan_started_at:
+            self.plan_started_at = now()
+        super().save(*args, **kwargs)
+
     @property
     def effective_domain_limit(self):
-        # The number of domains a workspace may register. During beta
-        # (SiteConfig.beta_free_mode) and for workspaces with no paid plan the
-        # limit is unlimited (None). Once beta ends, the limit comes from the
-        # plan.
-        if SiteConfig.is_beta_free_mode() or not self.plan:
-            return None
+        # The number of domains a workspace may register. Paid workspaces get
+        # their plan's limit; free workspaces get exactly 1 domain for the
+        # trial week (unlimited is never returned now that beta is gone).
+        if not self.plan:
+            return 1
         return self.plan.domain_limit
 
+    @property
+    def effective_link_limit(self):
+        # Free workspaces get 1 link during their trial week. Paid workspaces
+        # have no link limit.
+        if not self.plan:
+            return 1
+        return None
+
+    @property
+    def current_period_start(self):
+        # The date the current counting period began. Paid workspaces advance a
+        # 30-day period (lazily, from when the plan was assigned); free
+        # workspaces use the 7-day trial window. Soft-deleted domains/links stop
+        # counting once their removal predates this boundary.
+        if self.plan:
+            base = self.plan_started_at or now()
+            period = base
+            while period + timedelta(days=PLAN_PERIOD_DAYS) <= now():
+                period += timedelta(days=PLAN_PERIOD_DAYS)
+            return period
+        return self.trial_started_at
+
     def domains_in_use(self):
-        return self.domains.count()
+        # Only VERIFIED domains occupy a plan slot — a typo you can never
+        # verify doesn't count, so you can remove and re-add it freely. Deleting
+        # a verified domain keeps it counted until the current plan/trial period
+        # ends, so users can't churn domains to dodge their limit.
+        period = self.current_period_start
+        if period is None:
+            return 0
+        return self.domains.filter(verified=True).filter(
+            Q(removed_at__isnull=True) | Q(removed_at__gte=period)
+        ).count()
+
+    def links_in_use(self):
+        # Only links on a VERIFIED domain count toward the link limit. Links on
+        # the shared VeriClick host (no custom domain, or an unverified one) are
+        # not plan-gated. Deleted links keep their slot until the period ends.
+        period = self.current_period_start
+        if period is None:
+            return 0
+        return self.links.filter(domain__verified=True).filter(
+            Q(removed_at__isnull=True) | Q(removed_at__gte=period)
+        ).count()
+
+    def ensure_trial_started(self):
+        # The 7-day free trial begins the first time a free workspace is
+        # touched. Upgrading makes the trial permanently irrelevant.
+        if self.trial_started_at is None and not self.plan:
+            self.trial_started_at = now()
+            self.save(update_fields=['trial_started_at'])
+        return self.trial_started_at
+
+    @property
+    def trial_expires_at(self):
+        if self.plan or not self.trial_started_at:
+            return None
+        return self.trial_started_at + timedelta(days=FREE_TRIAL_DAYS)
+
+    @property
+    def trial_active(self):
+        expires = self.trial_expires_at
+        return expires is not None and now() < expires
 
     @property
     def can_add_domain(self):
-        limit = self.effective_domain_limit
-        if limit is None:
+        if self.plan:
+            return self.domains_in_use() < self.effective_domain_limit
+        if not self.trial_active:
+            return False
+        return self.domains_in_use() < 1
+
+    @property
+    def can_add_link(self):
+        if self.plan:
             return True
-        return self.domains_in_use() < limit
+        if not self.trial_active:
+            return False
+        return self.links_in_use() < 1
 
 
 class DomainRegistry(models.Model):
@@ -157,6 +255,14 @@ class DomainRegistry(models.Model):
     )
     last_checked = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    removed_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text=(
+            'Soft-delete marker. A verified domain keeps occupying its plan '
+            'slot until the current period ends even after removal; unverified '
+            'domains never count and can be removed and re-added freely.'
+        ),
+    )
 
     class Meta:
         verbose_name_plural = 'Domain registries'
@@ -216,6 +322,13 @@ class TrackingLink(models.Model):
     bot_clicks = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    removed_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text=(
+            'Soft-delete marker. A link on a verified domain keeps occupying '
+            'its plan slot until the current period ends even after removal.'
+        ),
+    )
 
     class Meta:
         ordering = ['-created_at']
@@ -301,19 +414,15 @@ class TrackerEvent(models.Model):
         return f'{self.ip} -> {self.page_url}'
 
 
+FREE_TRIAL_DAYS = 7
+PLAN_PERIOD_DAYS = 30
+
+
 class SiteConfig(models.Model):
     # Admin-managed business toggles (a singleton: only the 'default' row is
     # ever used). These live in the database so an operator can flip them from
     # the Jazzmin admin without editing .env or redeploying.
     key = models.CharField(max_length=50, primary_key=True, default='default')
-    beta_free_mode = models.BooleanField(
-        default=True,
-        help_text=(
-            'While True (beta), every feature is free: plan limits are not '
-            'enforced and workspaces get unlimited domains. Set False to start '
-            'enforcing the paid plan domain limits.'
-        ),
-    )
     signups_open = models.BooleanField(
         default=True,
         help_text='While True, new accounts (register and Google sign-in) are allowed.',
@@ -336,15 +445,6 @@ class SiteConfig(models.Model):
     def load(cls):
         obj, _ = cls.objects.get_or_create(key='default')
         return obj
-
-    @classmethod
-    def is_beta_free_mode(cls):
-        # Fail-open: if the DB row cannot be read (e.g. migrations not run),
-        # assume beta/free so the app never locks users out unexpectedly.
-        try:
-            return cls.load().beta_free_mode
-        except Exception:
-            return True
 
     @classmethod
     def signups_allowed(cls):

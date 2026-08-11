@@ -62,9 +62,7 @@ export function TopBar({ onMenuToggle }: { onMenuToggle: () => void }) {
           >
             <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${workspace.canAddDomain ? 'bg-success' : 'bg-warning'}`} />
             <span className="truncate">
-            {workspace.betaFreeMode
-              ? 'Free beta'
-              : `${workspace.planName ?? 'No plan'}${workspace.domainLimit ? ` · ${workspace.domainsUsed}/${workspace.domainLimit}` : ''}`}
+            {`${workspace.planName ?? 'No plan'}${workspace.domainLimit ? ` · ${workspace.domainsUsed}/${workspace.domainLimit}` : ''}`}
             </span>
           </Link>
         )}
