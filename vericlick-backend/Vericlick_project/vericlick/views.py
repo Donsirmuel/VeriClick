@@ -41,7 +41,6 @@ from .services import (
     classify_request,
     lookup_location,
     get_safe_destination,
-    load_datacenter_ranges,
     verify_domain_ownership,
     refresh_stale_domains_async,
 )
@@ -86,10 +85,6 @@ def workspace_detail(request):
     serializer = WorkspaceSerializer(workspace, data=request.data, partial=True)
     serializer.is_valid(raise_exception=True)
     serializer.save()
-    if serializer.instance.auto_reputation_enabled:
-        # Warm the in-memory datacenter range table now so the first tracked
-        # redirect after enabling never pays the one-time cold-cache load.
-        load_datacenter_ranges()
     return Response(serializer.data)
 
 

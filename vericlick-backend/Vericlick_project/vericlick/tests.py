@@ -1217,19 +1217,20 @@ class WorkspaceEndpointTests(APITestCase):
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         self.assertEqual(str(self.workspace.tracker_secret), original)
 
-    def test_enable_auto_reputation_prewarms_datacenter_cache(self):
-        from .models import IpAsnRange
-        from .services import _datacenter_ranges, reset_datacenter_cache
-        IpAsnRange.objects.create(start_ip='8.8.8.0', end_ip='8.8.8.255')
-        reset_datacenter_cache()
+    def test_auto_reputation_already_on_and_not_api_toggleable(self):
+        # Auto-reputation is a built-in protection: on by default for every
+        # workspace, and deliberately not exposed through the public API so
+        # customers can't switch it off for normal usage.
+        self.assertTrue(self.workspace.auto_reputation_enabled)
         res = self.client.patch(
             '/api/workspace/',
-            {'autoReputationEnabled': True},
+            {'autoReputationEnabled': False},
             format='json',
         )
         self.assertEqual(res.status_code, status.HTTP_200_OK)
-        self.assertTrue(res.json()['autoReputationEnabled'])
-        self.assertIsNotNone(_datacenter_ranges)
+        self.assertNotIn('autoReputationEnabled', res.json())
+        self.workspace.refresh_from_db()
+        self.assertTrue(self.workspace.auto_reputation_enabled)
 
 
 # Detection Engine / Services
