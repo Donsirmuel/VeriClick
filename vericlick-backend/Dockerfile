@@ -19,5 +19,6 @@ EXPOSE 8000
 
 CMD ["sh", "-c", \
     "python manage.py migrate --noinput && \
+     python manage.py import_asn || true && \
      python manage.py collectstatic --noinput && \
      gunicorn Vericlick_project.wsgi:application --workers 3 --bind 0.0.0.0:8000"]

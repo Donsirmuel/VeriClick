@@ -1,9 +1,18 @@
 import ipaddress
 import re
+from bisect import bisect_right
 from datetime import timedelta
 from django.db.models import Q
 from django.utils import timezone
-from .models import IPRule, ClickLog, DomainRegistry
+from .models import IPRule, ClickLog, DomainRegistry, IpAsnRange
+
+
+# How often an IP must trip the traffic checks before it is auto-denied, and
+# how long that auto-deny lasts. These are deliberately small: four flags in a
+# quarter hour is clearly not a human clicking a link.
+AUTO_REP_FLAG_THRESHOLD = 4
+AUTO_REP_WINDOW_MINUTES = 15
+AUTO_REP_DENY_HOURS = 24
 
 
 KNOWN_BOT_UA_PATTERNS = [
@@ -49,6 +58,83 @@ def check_rate_limit(ip, workspace, max_clicks=60, window_seconds=60):
         link__workspace=workspace, ip=ip, created_at__gte=cutoff,
     ).count()
     return recent >= max_clicks
+
+
+_datacenter_ranges = None
+
+
+def reset_datacenter_cache():
+    # Tests load fresh ranges per test; prod data is imported once at boot by
+    # `manage.py import_asn` before gunicorn starts.
+    global _datacenter_ranges
+    _datacenter_ranges = None
+
+
+def load_datacenter_ranges():
+    global _datacenter_ranges
+    if _datacenter_ranges is None:
+        ranges = sorted(
+            (int(ipaddress.ip_address(r.start_ip)), int(ipaddress.ip_address(r.end_ip)))
+            for r in IpAsnRange.objects.only('start_ip', 'end_ip')
+        )
+        _datacenter_ranges = ([r[0] for r in ranges], ranges)
+    return _datacenter_ranges
+
+
+def is_datacenter_ip(ip):
+    """True when the IP belongs to a hosting/datacenter/cloud/VPN network per
+    the loaded IP->ASN dataset. Cheap: one binary search over ~43k ranges."""
+    try:
+        ip_int = int(ipaddress.ip_address(ip))
+    except ValueError:
+        return False
+    starts, ranges = load_datacenter_ranges()
+    if not starts:
+        return False
+    idx = bisect_right(starts, ip_int) - 1
+    if idx < 0:
+        return False
+    start, end = ranges[idx]
+    return start <= ip_int <= end
+
+
+def check_auto_reputation(workspace, ip):
+    """If the IP keeps tripping the traffic checks, put it on the watchlist by
+    creating (or refreshing) a 24h auto-deny rule and block this request.
+    Returns a decision dict, or None when the IP is not a repeat offender."""
+    if not workspace.auto_reputation_enabled:
+        return None
+    cutoff = timezone.now() - timedelta(minutes=AUTO_REP_WINDOW_MINUTES)
+    flags = ClickLog.objects.filter(
+        link__workspace=workspace,
+        ip=ip,
+        created_at__gte=cutoff,
+        decision__in=(ClickLog.Decision.BLOCKED, ClickLog.Decision.CHALLENGED),
+    ).count()
+    if flags < AUTO_REP_FLAG_THRESHOLD:
+        return None
+
+    now = timezone.now()
+    existing = IPRule.objects.filter(
+        workspace=workspace, ip_or_cidr=ip, action=IPRule.Action.DENY,
+        is_active=True, source=IPRule.Source.AUTO,
+    ).filter(Q(expires_at__isnull=True) | Q(expires_at__gt=now)).exists()
+    if not existing:
+        IPRule.objects.create(
+            workspace=workspace,
+            ip_or_cidr=ip,
+            action=IPRule.Action.DENY,
+            reason=f'Auto-reputation: {flags} flags in {AUTO_REP_WINDOW_MINUTES} min',
+            source=IPRule.Source.AUTO,
+            expires_at=now + timedelta(hours=AUTO_REP_DENY_HOURS),
+        )
+
+    return {
+        'is_bot': True,
+        'reason': 'Auto-reputation: repeated suspicious traffic',
+        'decision': 'blocked',
+        'matched_rule': ip,
+    }
 
 
 def _lookup_country(ip):
@@ -211,6 +297,10 @@ def reason_label(decision, reason='', matched_rule=''):
             return 'Request looked automated (bot-like browser)'
         if reason == 'Rate limit':
             return 'Blocked — too many requests from this address'
+        if reason == 'Hosting/datacenter IP':
+            return 'Traffic from a hosting/datacenter/VPN network'
+        if reason == 'Auto-reputation: repeated suspicious traffic':
+            return 'Repeated suspicious traffic from this address'
         return 'Blocked by automated detection'
     return 'Flagged for review'
 
@@ -319,6 +409,21 @@ def classify_request(link, ip, user_agent, workspace):
             'decision': 'challenged',
             'matched_rule': '',
         }
+
+    if workspace.auto_reputation_enabled and is_datacenter_ip(ip):
+        # Bots and scanners overwhelmingly come from hosting/datacenter/VPN
+        # networks. Divert them unless the workspace turned this off. Each
+        # block also feeds the auto-reputation counter below.
+        return {
+            'is_bot': True,
+            'reason': 'Hosting/datacenter IP',
+            'decision': 'blocked',
+            'matched_rule': '',
+        }
+
+    auto_block = check_auto_reputation(workspace, ip)
+    if auto_block:
+        return auto_block
 
     return {
         'is_bot': False,

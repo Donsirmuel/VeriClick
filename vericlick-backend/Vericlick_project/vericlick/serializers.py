@@ -313,7 +313,7 @@ class IPRuleSerializer(serializers.ModelSerializer):
         model = IPRule
         fields = [
             'id', 'ip_or_cidr', 'action', 'reason', 'expires_at',
-            'is_active', 'created_by', 'created_by_username',
+            'is_active', 'source', 'created_by', 'created_by_username',
             'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'created_by', 'created_by_username', 'created_at', 'updated_at']

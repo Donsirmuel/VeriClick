@@ -151,6 +151,7 @@ export interface IPRule {
   reason: string
   expiresAt: string | null
   isActive: boolean
+  source: 'manual' | 'auto'
   createdBy: number | null
   createdByUsername: string | null
   createdAt: string

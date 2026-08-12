@@ -1217,6 +1217,20 @@ class WorkspaceEndpointTests(APITestCase):
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         self.assertEqual(str(self.workspace.tracker_secret), original)
 
+    def test_enable_auto_reputation_prewarms_datacenter_cache(self):
+        from .models import IpAsnRange
+        from .services import _datacenter_ranges, reset_datacenter_cache
+        IpAsnRange.objects.create(start_ip='8.8.8.0', end_ip='8.8.8.255')
+        reset_datacenter_cache()
+        res = self.client.patch(
+            '/api/workspace/',
+            {'autoReputationEnabled': True},
+            format='json',
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertTrue(res.json()['autoReputationEnabled'])
+        self.assertIsNotNone(_datacenter_ranges)
+
 
 # Detection Engine / Services
 
@@ -1580,6 +1594,153 @@ class RedirectEndpointTests(APITestCase):
         )
         self.assertEqual(res.status_code, status.HTTP_302_FOUND)
         self.assertEqual(res.url, 'https://safety.example.com/honeypot?utm_source=botcampaign')
+
+
+# Auto-reputation & datacenter detection
+
+class AutoReputationAndDatacenterTests(APITestCase):
+    def setUp(self):
+        from .models import TrackingLink, Workspace
+        self.user = User.objects.create_user(username='reputation_user')
+        self.workspace = Workspace.objects.get(owner=self.user)
+        self.link = TrackingLink.objects.create(
+            workspace=self.workspace,
+            slug='rep-test',
+            destination_url='https://example.com/landing',
+        )
+
+    def tearDown(self):
+        # The module-level datacenter cache must not leak into later tests.
+        from .services import reset_datacenter_cache
+        reset_datacenter_cache()
+
+    def _seed_datacenter_range(self):
+        from .models import IpAsnRange
+        from .services import reset_datacenter_cache
+        IpAsnRange.objects.create(
+            start_ip='8.8.8.0',
+            end_ip='8.8.8.255',
+            asn='AS15169', country='US', org='ExampleHosting LLC',
+        )
+        reset_datacenter_cache()
+
+    def test_datacenter_ip_blocked(self):
+        from .services import classify_request
+        self._seed_datacenter_range()
+        result = classify_request(
+            self.link, '8.8.8.8',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            self.workspace,
+        )
+        self.assertTrue(result['is_bot'])
+        self.assertEqual(result['decision'], 'blocked')
+        self.assertEqual(result['reason'], 'Hosting/datacenter IP')
+
+    def test_non_datacenter_ip_allowed(self):
+        from .services import classify_request
+        result = classify_request(
+            self.link, '1.1.1.1',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            self.workspace,
+        )
+        self.assertFalse(result['is_bot'])
+        self.assertEqual(result['decision'], 'allowed')
+
+    def test_allow_rule_overrides_datacenter(self):
+        from .models import IPRule
+        from .services import classify_request
+        self._seed_datacenter_range()
+        IPRule.objects.create(
+            workspace=self.workspace, ip_or_cidr='8.8.8.8',
+            action='allow', reason='Trusted',
+        )
+        result = classify_request(
+            self.link, '8.8.8.8',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            self.workspace,
+        )
+        self.assertFalse(result['is_bot'])
+        self.assertEqual(result['decision'], 'allowed')
+
+    def test_auto_reputation_below_threshold(self):
+        from .models import ClickLog
+        from .services import classify_request
+        for _ in range(3):
+            ClickLog.objects.create(
+                link=self.link, ip='9.9.9.9', is_bot=True,
+                decision=ClickLog.Decision.BLOCKED, reason='x',
+            )
+        result = classify_request(
+            self.link, '9.9.9.9',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            self.workspace,
+        )
+        self.assertFalse(result['is_bot'])
+        self.assertEqual(result['decision'], 'allowed')
+
+    def test_auto_reputation_creates_deny_rule(self):
+        from .models import ClickLog, IPRule
+        from .services import classify_request
+        for _ in range(4):
+            ClickLog.objects.create(
+                link=self.link, ip='9.9.9.9', is_bot=True,
+                decision=ClickLog.Decision.BLOCKED, reason='x',
+            )
+        result = classify_request(
+            self.link, '9.9.9.9',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            self.workspace,
+        )
+        self.assertTrue(result['is_bot'])
+        self.assertEqual(result['decision'], 'blocked')
+        rule = IPRule.objects.get(workspace=self.workspace, ip_or_cidr='9.9.9.9')
+        self.assertEqual(rule.source, IPRule.Source.AUTO)
+        self.assertIsNotNone(rule.expires_at)
+
+    def test_auto_reputation_disabled(self):
+        from .models import ClickLog
+        from .services import classify_request
+        self._seed_datacenter_range()
+        self.workspace.auto_reputation_enabled = False
+        self.workspace.save()
+        for _ in range(4):
+            ClickLog.objects.create(
+                link=self.link, ip='9.9.9.9', is_bot=True,
+                decision=ClickLog.Decision.BLOCKED, reason='x',
+            )
+        for ip in ('8.8.8.8', '9.9.9.9'):
+            result = classify_request(
+                self.link, ip,
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                self.workspace,
+            )
+            self.assertFalse(result['is_bot'])
+            self.assertEqual(result['decision'], 'allowed')
+
+    def test_redirect_datacenter_ip_diverted(self):
+        self._seed_datacenter_range()
+        res = self.client.get(
+            '/api/r/rep-test/',
+            REMOTE_ADDR='8.8.8.8',
+            HTTP_USER_AGENT='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        )
+        self.assertEqual(res.status_code, status.HTTP_302_FOUND)
+        self.assertTrue(res.url.endswith('/suspicious/'))
+
+    def test_redirect_auto_reputation_blocks_repeat_offender(self):
+        from .models import ClickLog
+        for _ in range(4):
+            ClickLog.objects.create(
+                link=self.link, ip='9.9.9.9', is_bot=True,
+                decision=ClickLog.Decision.BLOCKED, reason='x',
+            )
+        res = self.client.get(
+            '/api/r/rep-test/',
+            REMOTE_ADDR='9.9.9.9',
+            HTTP_USER_AGENT='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        )
+        self.assertEqual(res.status_code, status.HTTP_302_FOUND)
+        self.assertTrue(res.url.endswith('/suspicious/'))
 
 
 # SEO Endpoints

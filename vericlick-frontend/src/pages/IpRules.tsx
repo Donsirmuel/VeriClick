@@ -249,7 +249,14 @@ export default function IpRulesPage() {
               {rules.map((rule) => (
                 <tr key={rule.id} className="border-b border-neutral-100 hover:bg-neutral-50/50 transition-colors">
                   <td className="px-6 py-4">
-                    <span className="font-mono font-bold text-sm">{rule.ipOrCidr}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-bold text-sm">{rule.ipOrCidr}</span>
+                      {rule.source === 'auto' && (
+                        <span className="inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full bg-neutral-100 text-neutral-500 uppercase tracking-wider" title="Generated automatically after repeated suspicious traffic">
+                          Auto
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-6 py-4">
                     <span className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full ${
