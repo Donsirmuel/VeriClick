@@ -36,6 +36,7 @@ urlpatterns = [
     path('dashboard/activity/', views.dashboard_activity, name='dashboard-activity'),
     # Workspace
     path('workspace/', views.workspace_detail, name='workspace-detail'),
+    path('workspace/billing-history/', views.billing_history, name='billing-history'),
     # Public redirect
     path('r/<slug:slug>/', views.redirect_click, name='redirect-click'),
     # Tracker

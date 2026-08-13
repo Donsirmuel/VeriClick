@@ -54,8 +54,17 @@ def _request(method, path, payload=None, api_key=None, base_url=None, idempotenc
         raise BachsError(f'Could not reach Bachs: {exc.reason}')
 
 
-def create_checkout_session(intent, plan, user_email, user_name):
+ALL_PAYMENT_METHODS = ['card', 'crypto', 'bank_transfer', 'mobile_money']
+
+
+def create_checkout_session(intent, plan, user_email, user_name, payment_methods=None):
     """Starts a Bachs checkout session for the intent's plan.
+
+    ``payment_methods`` is the allowlist of channels to show at checkout
+    (card / crypto / bank_transfer / mobile_money). Recurring subscriptions
+    are card-only in Bachs ("Subscriptions are USD card only today"), so
+    subscription checkouts default to ``['card']``; one-time "period"
+    payments can use any channel.
 
     Returns the checkout dict from Bachs (`checkout_id`, `checkout_url`, ...).
     Raises BachsError when the request fails."""
@@ -66,6 +75,14 @@ def create_checkout_session(intent, plan, user_email, user_name):
     success_url = f'{settings.SITE_URL}/app/billing?billing=success'
     cancel_url = f'{settings.SITE_URL}/app/billing?billing=cancelled'
 
+    if intent.billing_mode == intent.BillingMode.PERIOD:
+        methods = payment_methods or ALL_PAYMENT_METHODS
+        invalid = [m for m in methods if m not in ALL_PAYMENT_METHODS]
+        if invalid:
+            raise BachsError(f'Unsupported payment method: {invalid[0]}')
+    else:
+        methods = ['card']
+
     payload = {
         'product_cart': [
             {'product_id': plan.bachs_product_id, 'quantity': 1},
@@ -73,12 +90,14 @@ def create_checkout_session(intent, plan, user_email, user_name):
         'customer': {'email': user_email or '', 'name': user_name or ''},
         'success_url': success_url,
         'cancel_url': cancel_url,
+        'allowed_payment_method_types': methods,
         # Our own idempotent reference: retrying the same intent never creates a
         # second checkout.
         'reference': f'vericlick-{intent.pk}',
         'metadata': {
             'workspace_id': str(intent.workspace_id),
             'plan_code': plan.code,
+            'billing_mode': intent.billing_mode,
         },
         'expires_in_minutes': 60,
     }
@@ -131,9 +150,12 @@ def fulfil_paid_checkout(checkout_id, charge_id=''):
 
     Idempotent: an intent is only matched while OPEN, so re-deliveries of the
     same event can't double-grant or double-email. Returns the intent when
-    payment was just granted to the workspace, else None."""
-    from .emails import send_payment_admin_notification, send_plan_upgraded_email
-    from .models import CheckoutIntent
+    payment was just granted to the workspace, else None.
+
+    One-time "period" payments set ``plan_expires_at`` so the workspace's
+    plan lapses after the period; card subscriptions leave it open-ended."""
+    from .emails import send_payment_admin_notification, send_payment_receipt_email, send_plan_upgraded_email
+    from .models import BillingEvent, CheckoutIntent, Workspace, PLAN_PERIOD_DAYS
 
     if not checkout_id:
         return None
@@ -144,6 +166,7 @@ def fulfil_paid_checkout(checkout_id, charge_id=''):
     if intent is None:
         return None
 
+    from datetime import timedelta
     from django.db import transaction
     from django.utils import timezone
 
@@ -154,12 +177,46 @@ def fulfil_paid_checkout(checkout_id, charge_id=''):
         intent.status = CheckoutIntent.Status.PAID
         intent.charge_id = charge_id or intent.charge_id
         intent.save(update_fields=['status', 'charge_id', 'updated_at'])
-        intent.workspace.plan = intent.plan
-        intent.workspace.save(update_fields=['plan'])
+
+        workspace = intent.workspace
+        is_period = intent.billing_mode == CheckoutIntent.BillingMode.PERIOD
+        if is_period:
+            workspace.plan_billing_mode = Workspace.BillingMode.PERIOD
+            workspace.plan_expires_at = timezone.now() + timedelta(days=PLAN_PERIOD_DAYS)
+        else:
+            workspace.plan_billing_mode = Workspace.BillingMode.SUBSCRIPTION
+            workspace.plan_expires_at = None
+        workspace.plan = intent.plan
+        workspace.save(update_fields=['plan', 'plan_billing_mode', 'plan_expires_at'])
+
+        kind = BillingEvent.Kind.PLAN_PERIOD_PAID if is_period else BillingEvent.Kind.PLAN_PURCHASED
+        BillingEvent.objects.create(
+            workspace=workspace,
+            kind=kind,
+            plan=intent.plan,
+            plan_name=intent.plan.name,
+            amount=intent.plan.monthly_price,
+            currency='USD',
+            charge_id=intent.charge_id,
+            checkout_id=checkout_id,
+            occurred_at=timezone.now(),
+            note='One-time payment for a billing period' if is_period else 'Plan purchased',
+            data={
+                'billing_mode': intent.billing_mode,
+                'payment_method': intent.payment_method,
+            },
+        )
 
     if intent.user is not None:
         try:
-            send_plan_upgraded_email(intent.user, intent.workspace, intent.plan)
+            if is_period:
+                send_payment_receipt_email(
+                    intent.user, intent.workspace, intent.plan, intent.charge_id,
+                    occurred_at=timezone.now(),
+                    note='One-time payment for the next billing period.',
+                )
+            else:
+                send_plan_upgraded_email(intent.user, intent.workspace, intent.plan)
         except Exception:
             logger.exception('Upgrade email failed for checkout %s', checkout_id)
     if intent.user is not None:
@@ -170,3 +227,107 @@ def fulfil_paid_checkout(checkout_id, charge_id=''):
         except Exception:
             logger.exception('Payment admin notification failed for checkout %s', checkout_id)
     return intent
+
+
+def record_recurring_collection(data):
+    """Record a subscription renewal (a `collection.succeeded` webhook without
+    a checkout_id). Recurring charges arrive without our checkout reference, so
+    this resolves the workspace via the metadata embedded on the subscription.
+
+    Returns True when a renewal was recorded, else False (nothing usable)."""
+    from .models import BillingEvent, Workspace
+
+    metadata = (data or {}).get('metadata') or {}
+    workspace_id = metadata.get('workspace_id')
+    plan_code = metadata.get('plan_code')
+    if not workspace_id:
+        reference = (data or {}).get('reference', '')
+        if reference.startswith('vericlick-'):
+            from .models import CheckoutIntent
+            intent = CheckoutIntent.objects.filter(pk=reference[len('vericlick-'):]).first()
+            if intent:
+                workspace_id = str(intent.workspace_id)
+                plan_code = intent.plan.code
+    if not workspace_id:
+        return False
+
+    from django.utils import timezone
+    from .models import Plan
+    from vericlick.emails import send_payment_receipt_email
+
+    workspace = Workspace.objects.filter(pk=workspace_id).first()
+    if workspace is None:
+        return False
+    if not workspace.is_plan_active():
+        return False
+
+    charge_id = (data or {}).get('charge_id', '')
+    if charge_id and BillingEvent.objects.filter(charge_id=charge_id).exists():
+        return True  # already recorded (idempotency)
+
+    plan = (Plan.objects.filter(code=plan_code).first() if plan_code else None) or workspace.plan
+    if plan is None:
+        return False
+
+    BillingEvent.objects.create(
+        workspace=workspace,
+        kind=BillingEvent.Kind.PLAN_RENEWED,
+        plan=plan,
+        plan_name=plan.name,
+        amount=plan.monthly_price,
+        currency='USD',
+        charge_id=charge_id,
+        checkout_id='',
+        occurred_at=timezone.now(),
+        note='Monthly subscription renewal',
+    )
+
+    try:
+        send_payment_receipt_email(
+            workspace.owner, workspace, plan, charge_id,
+            occurred_at=timezone.now(),
+            note='Monthly subscription renewal.',
+        )
+    except Exception:
+        logger.exception('Renewal receipt email failed for %s', workspace_id)
+    return True
+
+
+def record_failed_collection(data, event_type):
+    """Record a failed / abandoned / underpaid collection as a BillingEvent so
+    history and support can see it. Never affects the workspace's plan or
+    limits — only the ledger. Best-effort and silent on failures."""
+    from .models import BillingEvent, Workspace
+    from django.utils import timezone
+
+    metadata = (data or {}).get('metadata') or {}
+    workspace_id = metadata.get('workspace_id')
+    reference = (data or {}).get('reference', '')
+    if not workspace_id and reference.startswith('vericlick-'):
+        from .models import CheckoutIntent
+        intent = CheckoutIntent.objects.filter(pk=reference[len('vericlick-'):]).first()
+        if intent:
+            workspace_id = str(intent.workspace_id)
+    if not workspace_id:
+        return False
+    workspace = Workspace.objects.filter(pk=workspace_id).first()
+    if workspace is None:
+        return False
+
+    charge_id = (data or {}).get('charge_id', '')
+    if charge_id and BillingEvent.objects.filter(charge_id=charge_id, kind=BillingEvent.Kind.PAYMENT_FAILED).exists():
+        return True
+
+    BillingEvent.objects.create(
+        workspace=workspace,
+        kind=BillingEvent.Kind.PAYMENT_FAILED,
+        plan=workspace.plan,
+        plan_name=workspace.plan.name if workspace.plan else '',
+        amount=None,
+        currency='USD',
+        charge_id=charge_id,
+        checkout_id='',
+        occurred_at=timezone.now(),
+        note=f'{event_type.replace("collection.", "").replace("_", " ")} payment',
+    )
+    return True

@@ -126,8 +126,6 @@ def send_plan_upgraded_email(user, workspace, plan):
 
 
 def send_payment_admin_notification(workspace, plan, user, charge_id=''):
-    # Internal notification to the owner + senior engineer whenever a paid plan
-    # is granted, so payments can be confirmed without logging into the admin.
     subject = f'New VeriClick payment: {plan.name}'
     body = f"""
 <p style="color:#a3a3a3;font-size:15px;">A workspace just went paid.</p>
@@ -143,3 +141,88 @@ def send_payment_admin_notification(workspace, plan, user, charge_id=''):
 """
     for to in getattr(settings, 'PAYMENT_NOTIFY_EMAILS', []):
         send_email(to, subject, _layout(body))
+
+
+def _amount_line(amount):
+    if amount is None:
+        return ''
+    return f'<tr><td style="color:#525252;">Amount</td><td style="color:#ffffff;font-weight:bold;">${amount}</td></tr>'
+
+
+def send_payment_receipt_email(user, workspace, plan, charge_id='', occurred_at=None, note=''):
+    # Receipt for a renewal or a one-time period payment. Not sent for the very
+    # first purchase (that gets its own "welcome to the plan" email instead).
+    from django.utils import timezone
+    subject = f'VeriClick receipt: {plan.name}'
+    charged_line = _amount_line(plan.monthly_price)
+    when = (occurred_at or timezone.now()).strftime('%d %b %Y')
+    body = f"""
+<p style="color:#a3a3a3;font-size:15px;">Hi {user.first_name or user.username},</p>
+<p style="color:#d4d4d4;font-size:15px;line-height:1.6;">
+  Thanks for staying with VeriClick. Here's your receipt for
+  <strong style="color:#ffffff;">{plan.name}</strong> ({when}).
+</p>
+<table style="width:100%;color:#d4d4d4;font-size:14px;line-height:1.8;margin:16px 0;">
+  <tr><td style="color:#525252;width:120px;">Plan</td><td style="color:#ffffff;font-weight:bold;">{plan.name}</td></tr>
+  {charged_line}
+  <tr><td style="color:#525252;">Date</td><td style="color:#ffffff;">{when}</td></tr>
+  <tr><td style="color:#525252;">Reference</td><td style="color:#ffffff;">{charge_id or 'n/a'}</td></tr>
+</table>
+<div style="text-align:center;margin:32px 0;">
+  <a href="{settings.SITE_URL}/app/billing"
+     style="background-color:#ffffff;color:#0a0a0a;padding:14px 28px;border-radius:10px;text-decoration:none;font-weight:bold;font-size:14px;">
+    View payment history
+  </a>
+</div>
+<p style="color:#525252;font-size:13px;margin-bottom:0;">
+  {note} Questions? Reply to this email and we'll help.
+</p>
+"""
+    return send_email(user.email, subject, _layout(body))
+
+
+def send_period_expiring_email(user, workspace, plan, expires_at):
+    # Heads-up a few days before a one-time (bank/crypto/mobile) period ends so
+    # the customer can renew before the plan lapses.
+    from django.utils import timezone
+    when = expires_at.strftime('%d %b %Y')
+    subject = f'Your {plan.name} plan renews soon'
+    body = f"""
+<p style="color:#a3a3a3;font-size:15px;">Hi {user.first_name or user.username},</p>
+<p style="color:#d4d4d4;font-size:15px;line-height:1.6;">
+  Your current billing period for the <strong style="color:#ffffff;">{plan.name}</strong>
+  plan ends on <strong style="color:#ffffff;">{when}</strong>. After that, your
+  workspace returns to the free tier — domains you already have stay put, but
+  creating new ones needs an active plan.
+</p>
+<div style="text-align:center;margin:32px 0;">
+  <a href="{settings.SITE_URL}/app/billing"
+     style="background-color:#ffffff;color:#0a0a0a;padding:14px 28px;border-radius:10px;text-decoration:none;font-weight:bold;font-size:14px;">
+    Renew now
+  </a>
+</div>
+<p style="color:#525252;font-size:13px;margin-bottom:0;">Questions? Reply to this email and we'll help.</p>
+"""
+    return send_email(user.email, subject, _layout(body))
+
+
+def send_period_expired_email(user, workspace, plan, expires_at):
+    # Sent once when a one-time period lapses without renewal.
+    subject = f'Your {plan.name} plan period has ended'
+    body = f"""
+<p style="color:#a3a3a3;font-size:15px;">Hi {user.first_name or user.username},</p>
+<p style="color:#d4d4d4;font-size:15px;line-height:1.6;">
+  Your billing period for the <strong style="color:#ffffff;">{plan.name}</strong>
+  plan ended on <strong style="color:#ffffff;">{expires_at.strftime('%d %b %Y')}</strong>
+  and wasn't renewed, so your workspace is back on the free tier. Your existing
+  tracked links keep working at no cost.
+</p>
+<div style="text-align:center;margin:32px 0;">
+  <a href="{settings.SITE_URL}/app/billing"
+     style="background-color:#ffffff;color:#0a0a0a;padding:14px 28px;border-radius:10px;text-decoration:none;font-weight:bold;font-size:14px;">
+    Renew your plan
+  </a>
+</div>
+<p style="color:#525252;font-size:13px;margin-bottom:0;">Questions? Reply to this email and we'll help.</p>
+"""
+    return send_email(user.email, subject, _layout(body))

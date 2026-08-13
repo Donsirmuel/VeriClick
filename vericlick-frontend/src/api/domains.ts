@@ -1,5 +1,5 @@
 import { apiClient } from './client'
-import type { Domain, PaginatedResponse } from '@/types'
+import type { Domain, DomainDiagnosis, PaginatedResponse } from '@/types'
 
 export async function fetchDomains(): Promise<Domain[]> {
   const { data } = await apiClient.get<PaginatedResponse<Domain>>('/domains/')
@@ -25,12 +25,13 @@ export async function deleteDomain(id: string): Promise<void> {
   await apiClient.delete(`/domains/${id}/`)
 }
 
-export async function recheckDomain(id: string): Promise<{ status: string; healthStatus: string; pointsToServer: boolean; lastChecked: string }> {
-  const { data } = await apiClient.post<{ status: string; healthStatus: string; pointsToServer: boolean; lastChecked: string }>(`/domains/${id}/recheck/`)
+export async function recheckDomain(id: string): Promise<{ status: string; healthStatus: string; pointsToServer: boolean; healthDetail: DomainDiagnosis; lastChecked: string }> {
+  const { data } = await apiClient.post<{ status: string; healthStatus: string; pointsToServer: boolean; healthDetail: DomainDiagnosis; lastChecked: string }>(`/domains/${id}/recheck/`)
   return {
     status: data.status,
     healthStatus: data.healthStatus,
     pointsToServer: data.pointsToServer,
+    healthDetail: data.healthDetail,
     lastChecked: data.lastChecked,
   }
 }

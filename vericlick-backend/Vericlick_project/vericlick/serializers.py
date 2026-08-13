@@ -6,7 +6,7 @@ from django.contrib.auth.models import User
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from .models import (
     Workspace, DomainRegistry, TrackingLink, ClickLog, IPRule, TrackerEvent,
-    Plan, DiscountCode, SiteConfig,
+    Plan, DiscountCode, SiteConfig, BillingEvent,
 )
 
 
@@ -61,8 +61,10 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class WorkspaceSerializer(serializers.ModelSerializer):
-    plan = serializers.CharField(source='plan.code', read_only=True, default=None)
-    plan_name = serializers.CharField(source='plan.name', read_only=True, default=None)
+    plan = serializers.SerializerMethodField()
+    plan_name = serializers.SerializerMethodField()
+    plan_billing_mode = serializers.CharField(read_only=True)
+    plan_expires_at = serializers.DateTimeField(read_only=True)
     domain_limit = serializers.SerializerMethodField()
     domains_used = serializers.SerializerMethodField()
     can_add_domain = serializers.SerializerMethodField()
@@ -77,17 +79,26 @@ class WorkspaceSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'tracker_secret', 'safe_destination',
             'created_at', 'last_domain_scan_at', 'plan', 'plan_name',
+            'plan_billing_mode', 'plan_expires_at',
             'domain_limit', 'domains_used', 'can_add_domain',
             'link_limit', 'links_used', 'can_add_link',
             'trial_expires_at', 'trial_active',
         ]
         read_only_fields = [
             'id', 'tracker_secret', 'created_at', 'last_domain_scan_at',
-            'plan', 'plan_name', 'domain_limit', 'domains_used',
-            'can_add_domain',
+            'plan', 'plan_name', 'plan_billing_mode', 'plan_expires_at',
+            'domain_limit', 'domains_used', 'can_add_domain',
             'link_limit', 'links_used', 'can_add_link',
             'trial_expires_at', 'trial_active',
         ]
+
+    def get_plan(self, obj):
+        active = obj.active_plan
+        return active.code if active else None
+
+    def get_plan_name(self, obj):
+        active = obj.active_plan
+        return active.name if active else None
 
     def get_domain_limit(self, obj):
         return obj.effective_domain_limit
@@ -150,6 +161,9 @@ class DomainRegistrySerializer(serializers.ModelSerializer):
     verification_record = serializers.CharField(read_only=True)
     # Readiness = verified ownership AND resolving to our server. Cheap and
     # always current because points_to_server is refreshed by run_health_check.
+    # The apex itself is NOT required to resolve (e.g. a root domain with no A
+    # record still serves its links on t.<domain>); only the tracking host has
+    # to reach us.
     ready = serializers.SerializerMethodField()
     # Plain-language guidance for the DNS step that makes a domain really
     # serve tracking: what to add (A vs CNAME) and to what value. This is the
@@ -162,12 +176,12 @@ class DomainRegistrySerializer(serializers.ModelSerializer):
         fields = [
             'id', 'domain', 'health_status', 'verified', 'points_to_server',
             'verification_token', 'verification_record', 'last_checked',
-            'links_count', 'ready', 'dns_setup', 'created_at',
+            'health_detail', 'links_count', 'ready', 'dns_setup', 'created_at',
         ]
         read_only_fields = [
             'id', 'health_status', 'verified', 'points_to_server',
             'verification_token', 'verification_record', 'last_checked',
-            'links_count', 'ready', 'dns_setup', 'created_at',
+            'health_detail', 'links_count', 'ready', 'dns_setup', 'created_at',
         ]
 
     def get_dns_setup(self, obj):
@@ -224,7 +238,6 @@ class DomainRegistrySerializer(serializers.ModelSerializer):
         return bool(
             obj.verified
             and obj.points_to_server
-            and obj.health_status == DomainRegistry.HealthStatus.HEALTHY
         )
 
     def validate_domain(self, value):
@@ -243,8 +256,9 @@ class TrackingLinkSerializer(serializers.ModelSerializer):
         source='domain.health_status', read_only=True, default=None
     )
     # Explains why a tracked link is (or isn't) running on its custom domain.
-    # tracking_domain_ready = True when the link's domain is verified, healthy
-    # and points at this server so the branded URL is live.
+    # tracking_domain_ready = True when the link's domain is verified and
+    # points at this server so the branded URL is live. The apex resolving is
+    # not required — only the tracking host reaching us matters.
     tracking_domain_ready = serializers.SerializerMethodField()
     domain = serializers.SlugRelatedField(
         slug_field='domain', queryset=DomainRegistry.objects.all(), allow_null=True, required=False,
@@ -273,7 +287,6 @@ class TrackingLinkSerializer(serializers.ModelSerializer):
             domain.verified
             and domain.removed_at is None
             and domain.points_to_server
-            and domain.health_status == DomainRegistry.HealthStatus.HEALTHY
         )
 
     def get_tracking_url(self, obj):
@@ -343,3 +356,35 @@ class BlockedIPSerializer(serializers.ModelSerializer):
     def get_reason_label(self, obj):
         from .services import reason_label
         return reason_label(obj.decision, obj.reason, obj.matched_rule)
+
+
+def mask_reference_id(value):
+    # Show just enough of a Bachs ID to be recognisable in the UI without
+    # exposing the full reference: keep the prefix and the last 4 chars.
+    if not value:
+        return ''
+    if len(value) <= 12:
+        return f'{value[:3]}****{value[-4:]}' if len(value) > 7 else value
+    return f'{value[:5]}****{value[-4:]}'
+
+
+class BillingEventSerializer(serializers.ModelSerializer):
+    label = serializers.SerializerMethodField()
+    charge_id = serializers.SerializerMethodField()
+
+    class Meta:
+        model = BillingEvent
+        fields = [
+            'id', 'kind', 'label', 'plan_name', 'amount', 'currency',
+            'occurred_at', 'charge_id', 'checkout_id', 'note', 'data',
+        ]
+
+    def get_label(self, obj):
+        from .models import BillingEvent as BE
+        try:
+            return BE.Kind(obj.kind).label
+        except ValueError:
+            return obj.kind.replace('_', ' ').title()
+
+    def get_charge_id(self, obj):
+        return mask_reference_id(obj.charge_id)

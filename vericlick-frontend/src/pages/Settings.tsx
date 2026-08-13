@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { CodeIcon, Copy01Icon, Globe02Icon, ShieldIcon, Delete01Icon, UserIcon } from '@hugeicons/core-free-icons'
+import { CodeIcon, Copy01Icon, CreditCardIcon, Globe02Icon, ShieldIcon, Delete01Icon, UserIcon } from '@hugeicons/core-free-icons'
 import toast from 'react-hot-toast'
 import { fetchWorkspace, updateWorkspace } from '@/api/workspace'
 import { apiClient } from '@/api/client'
 import { deleteAccount, fetchMe } from '@/api/auth'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { parseApiError } from '@/lib/errors'
+import { formatDate } from '@/lib/utils'
 
 const API_BASE = (apiClient.defaults.baseURL ?? 'http://localhost:8000/api').replace(/\/$/, '')
 
@@ -143,6 +145,35 @@ export default function SettingsPage() {
             >
               {updateMutation.isPending ? 'Saving...' : 'Save changes'}
             </button>
+          </div>
+        </section>
+
+        <section className="bg-white rounded-2xl border border-border p-6 sm:p-8 shadow-sm space-y-6">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-neutral-100 flex items-center justify-center shrink-0">
+              <HugeiconsIcon icon={CreditCardIcon} className="w-5 h-5 text-slate-700" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-slate-900 mb-1">Plan &amp; billing</h3>
+              <p className="text-sm text-muted leading-relaxed">
+                {workspace?.planName ?? (workspace?.trialActive ? 'Free trial' : 'Free')} —{' '}
+                {workspace?.planBillingMode === 'subscription' ? 'monthly subscription' :
+                 workspace?.planBillingMode === 'period' ? '30-day period' :
+                 workspace?.trialActive ? `trial ends ${formatDate(workspace.trialExpiresAt)}` : 'no active plan'}
+                {workspace?.planBillingMode === 'period' && workspace?.planExpiresAt
+                  ? `, renews by ${formatDate(workspace.planExpiresAt)}`
+                  : ''}
+                .
+              </p>
+            </div>
+          </div>
+          <div className="flex justify-end pt-4 border-t border-border">
+            <Link
+              to="/app/billing"
+              className="w-full sm:w-auto text-center bg-black hover:bg-neutral-800 text-white px-6 py-2.5 rounded-xl text-sm font-bold transition-all"
+            >
+              Manage billing
+            </Link>
           </div>
         </section>
 

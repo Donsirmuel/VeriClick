@@ -4,6 +4,7 @@ from django.utils import timezone
 from .models import (
     Workspace, DomainRegistry, TrackingLink, ClickLog, IPRule,
     TrackerEvent, Plan, DiscountCode, SiteConfig, CheckoutIntent,
+    BillingEvent,
 )
 
 
@@ -42,23 +43,53 @@ class WorkspaceAdmin(admin.ModelAdmin):
 
 @admin.register(DomainRegistry)
 class DomainRegistryAdmin(admin.ModelAdmin):
-    list_display = ('domain', 'workspace', 'health_status', 'verified', 'removed_at', 'last_checked', 'created_at')
-    list_filter = ('health_status', 'verified', 'removed_at', 'last_checked')
+    list_display = ('domain', 'workspace', 'health_status', 'points_to_server', 'verified', 'removed_at', 'last_checked', 'created_at')
+    list_filter = ('health_status', 'points_to_server', 'verified', 'removed_at', 'last_checked')
     search_fields = ('domain', 'workspace__name', 'workspace__owner__username')
-    readonly_fields = ('id', 'verification_token', 'verification_record', 'created_at', 'last_checked', 'removed_at')
+    readonly_fields = ('id', 'verification_token', 'verification_record', 'health_detail_preview', 'created_at', 'last_checked', 'removed_at')
     actions = ['recheck_domains']
     date_hierarchy = 'created_at'
 
-    @admin.action(description='Re-check health for selected domains')
+    @admin.action(description='Re-check health (full DNS diagnosis) for selected domains')
     def recheck_domains(self, request, queryset):
         checked = 0
+        ready = 0
         for domain in queryset:
             try:
                 domain.run_health_check()
                 checked += 1
+                if domain.points_to_server:
+                    ready += 1
             except Exception:
                 continue
-        self.message_user(request, f'Re-checked {checked} domain(s).')
+        self.message_user(
+            request,
+            f'Re-checked {checked} domain(s); {ready} now point at this server. '
+            f'See each domain\'s "Health report" for what\'s wrong and how to fix it.',
+        )
+
+    @admin.display(description='Health report')
+    def health_detail_preview(self, obj):
+        if not obj.health_detail:
+            return 'No diagnosis recorded yet — run "Re-check health" on the list page.'
+        from django.utils.html import format_html, escape
+        lines = []
+        for finding in obj.health_detail.get('findings', []):
+            icon = {'ok': '✅', 'warn': '⚠️', 'error': '❌'}.get(finding.get('level'), '•')
+            lines.append(
+                f'{icon} <b>{escape(finding.get("title", ""))}</b><br>'
+                f'&nbsp;&nbsp;{escape(finding.get("message", ""))}'
+                + (f'<br>&nbsp;&nbsp;<span style="color:#9b6c00">Fix: {escape(finding.get("fix", ""))}</span>' if finding.get('fix') else '')
+            )
+        ready = obj.health_detail.get('ready')
+        status = 'READY for links' if ready else 'NOT ready for links'
+        summary = (
+            f'<b style="color:{("#1a7f37" if ready else "#cf222e")}">{status}</b>'
+            f' · tracking host {escape(obj.health_detail.get("tracking_host", ""))} '
+            f'→ points to us: {"yes" if obj.health_detail.get("points_to_us") else "no"}'
+            f' · checked {escape(obj.health_detail.get("generated_at", ""))}'
+        )
+        return format_html(summary + '<hr>' + '<hr>'.join(lines))
 
 
 @admin.register(TrackingLink)
@@ -103,7 +134,7 @@ class TrackerEventAdmin(admin.ModelAdmin):
 class PlanAdmin(admin.ModelAdmin):
     list_display = ('code', 'name', 'monthly_price', 'domain_limit', 'bachs_product_id', 'features_preview', 'is_active', 'sort_order')
     list_filter = ('is_active',)
-    search_fields = ('code', 'name')
+    search_fields = ('code', 'name', 'bachs_product_id', 'bachs_payment_link')
     list_editable = ('monthly_price', 'domain_limit', 'bachs_product_id', 'is_active', 'sort_order')
 
     @admin.display(description='Features')
@@ -113,12 +144,22 @@ class PlanAdmin(admin.ModelAdmin):
 
 @admin.register(CheckoutIntent)
 class CheckoutIntentAdmin(admin.ModelAdmin):
-    list_display = ('id', 'workspace', 'plan', 'status', 'checkout_id', 'created_at')
-    list_filter = ('status', 'created_at')
+    list_display = ('id', 'workspace', 'plan', 'status', 'billing_mode', 'checkout_id', 'created_at')
+    list_filter = ('status', 'billing_mode', 'created_at')
     search_fields = ('workspace__name', 'checkout_id', 'charge_id')
     readonly_fields = ('id', 'created_at', 'updated_at')
     autocomplete_fields = ['workspace', 'plan', 'user']
     date_hierarchy = 'created_at'
+
+
+@admin.register(BillingEvent)
+class BillingEventAdmin(admin.ModelAdmin):
+    list_display = ('workspace', 'kind', 'plan_name', 'amount', 'currency', 'charge_id', 'occurred_at')
+    list_filter = ('kind', 'currency', 'occurred_at')
+    search_fields = ('workspace__name', 'charge_id', 'checkout_id')
+    readonly_fields = ('id', 'occurred_at')
+    autocomplete_fields = ['workspace', 'plan']
+    date_hierarchy = 'occurred_at'
 
 
 @admin.register(SiteConfig)

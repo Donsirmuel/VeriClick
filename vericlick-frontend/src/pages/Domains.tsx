@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { Globe02Icon, PlusSignIcon, RefreshIcon, Search01Icon, Edit01Icon, Cancel01Icon, Clock03Icon, LinkSquare02Icon, CheckmarkCircle02Icon } from '@hugeicons/core-free-icons'
+import { Globe02Icon, PlusSignIcon, RefreshIcon, Search01Icon, Edit01Icon, Cancel01Icon, Clock03Icon, LinkSquare02Icon, CheckmarkCircle02Icon, ChevronDownIcon, ChevronUpIcon, AlertCircleIcon } from '@hugeicons/core-free-icons'
 import toast from 'react-hot-toast'
 import { AddDomainDialog } from '@/components/domains/AddDomainDialog'
 import { DnsSetupDialog } from '@/components/domains/DnsSetupDialog'
@@ -14,7 +14,7 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { HelpTooltip } from '@/components/ui/HelpTooltip'
 import { TableSkeleton } from '@/components/ui/TableSkeleton'
-import type { Domain } from '@/types'
+import type { Domain, DomainDiagnosis, DomainDiagnosisFinding } from '@/types'
 
 function healthBadge(status: string) {
   const styles: Record<string, string> = {
@@ -31,6 +31,73 @@ function healthBadge(status: string) {
       }`} />
       {status}
     </span>
+  )
+}
+
+const findingStyles: Record<string, { icon: string; badge: string; border: string }> = {
+  error: { icon: 'text-error', badge: 'bg-error/10 text-error border-error/20', border: 'border-error/30' },
+  warn: { icon: 'text-warning', badge: 'bg-warning/10 text-warning border-warning/20', border: 'border-warning/30' },
+  ok: { icon: 'text-success', badge: 'bg-success/10 text-success border-success/20', border: 'border-success/30' },
+}
+
+function FindingRow({ finding }: { finding: DomainDiagnosisFinding }) {
+  const style = findingStyles[finding.level] || findingStyles.ok
+  return (
+    <li className={`flex gap-3 rounded-xl border bg-white ${style.border}`}>
+      <div className="flex items-start gap-3 px-3 py-3 min-w-0">
+        <span className={`mt-0.5 shrink-0 w-4 h-4 rounded-full ${style.badge} flex items-center justify-center text-[10px]`}>
+          {finding.level === 'ok' ? '✓' : finding.level === 'warn' ? '!' : '✕'}
+        </span>
+        <div className="min-w-0">
+          <h4 className="text-xs font-bold text-slate-900">{finding.title}</h4>
+          <p className="text-xs text-slate-600 leading-relaxed mt-1">{finding.message}</p>
+          {finding.fix && (
+            <p className="text-xs leading-relaxed mt-2 bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-slate-800">
+              <span className="font-bold text-slate-900">How to fix: </span>{finding.fix}
+            </p>
+          )}
+        </div>
+      </div>
+    </li>
+  )
+}
+
+function DiagnosisPanel({ diagnosis, domain, onRecheck }: {
+  diagnosis: DomainDiagnosis
+  domain: Domain
+  onRecheck: () => void
+}) {
+  const issues = diagnosis.findings.filter(f => f.level !== 'ok')
+  return (
+    <div className="flex items-start gap-3 rounded-2xl border border-warning/30 bg-warning/10 p-4">
+      <div className="mt-0.5 shrink-0">
+        <HugeiconsIcon icon={AlertCircleIcon} className="w-5 h-5 text-warning" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-sm font-bold text-slate-900">What's wrong with {domain.domain}</h3>
+          <span className="text-[11px] text-muted">
+            Checked {domain.lastChecked ? formatRelativeTime(domain.lastChecked) : 'recently'}
+          </span>
+        </div>
+        {issues.length > 0 ? (
+          <ul className="mt-3 space-y-2">
+            {issues.map(f => <FindingRow key={f.key} finding={f} />)}
+          </ul>
+        ) : (
+          <p className="text-sm text-slate-600 leading-relaxed mt-2">
+            Nothing looks broken right now. The domain may just need another check.
+          </p>
+        )}
+        <button
+          onClick={onRecheck}
+          className="mt-3 inline-flex items-center gap-2 bg-black hover:bg-neutral-800 text-white px-4 py-2 rounded-lg text-xs font-bold transition-all shadow-sm"
+        >
+          <HugeiconsIcon icon={RefreshIcon} className="w-3.5 h-3.5" />
+          Re-check now
+        </button>
+      </div>
+    </div>
   )
 }
 
@@ -60,6 +127,7 @@ export default function DomainsPage() {
   const [editTarget, setEditTarget] = useState<{ id: string; domain: string } | null>(null)
   const [editValue, setEditValue] = useState('')
   const [dnsSetupTarget, setDnsSetupTarget] = useState<Domain | null>(null)
+  const [expandedDiagnosis, setExpandedDiagnosis] = useState<string | null>(null)
 
   const { data: domains = [], isLoading } = useQuery({
     queryKey: ['domains'],
@@ -266,7 +334,8 @@ export default function DomainsPage() {
             </thead>
             <tbody>
               {filteredDomains.map(domain => (
-                <tr key={domain.id} className="border-b border-neutral-100 hover:bg-neutral-50/50 transition-colors">
+                <Fragment key={domain.id}>
+                <tr className="border-b border-neutral-100 hover:bg-neutral-50/50 transition-colors">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 bg-neutral-100 rounded-lg flex items-center justify-center">
@@ -327,6 +396,16 @@ export default function DomainsPage() {
                               ? 'Not resolving'
                               : 'Verify ownership first'}
                           </span>
+                          {domain.healthStatus === 'degraded' && domain.healthDetail && (
+                            <button
+                              onClick={() => setExpandedDiagnosis(expandedDiagnosis === domain.id ? null : domain.id)}
+                              className="inline-flex items-center gap-1 text-xs font-bold text-slate-700 underline decoration-neutral-300 hover:decoration-black underline-offset-2 transition-colors"
+                            >
+                              {expandedDiagnosis === domain.id
+                                ? <>Hide details <HugeiconsIcon icon={ChevronUpIcon} className="w-3 h-3" /></>
+                                : <>What's wrong / How to fix <HugeiconsIcon icon={ChevronDownIcon} className="w-3 h-3" /></>}
+                            </button>
+                          )}
                         </>
                       )}
                     </div>
@@ -369,6 +448,18 @@ export default function DomainsPage() {
                     </div>
                   </td>
                 </tr>
+                {expandedDiagnosis === domain.id && domain.healthDetail && (
+                  <tr className="border-b border-neutral-100 bg-warning/5">
+                    <td colSpan={5} className="px-6 py-4">
+                      <DiagnosisPanel
+                        diagnosis={domain.healthDetail}
+                        domain={domain}
+                        onRecheck={() => recheckMutation.mutate(domain.id)}
+                      />
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               ))}
             </tbody>
           </table>

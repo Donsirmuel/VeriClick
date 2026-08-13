@@ -1,5 +1,5 @@
 import { apiClient } from './client'
-import type { Workspace, CheckoutSession } from '@/types'
+import type { BillingHistory, BillingMode, CheckoutSession, PaymentMethod, Workspace } from '@/types'
 
 interface WorkspaceUpdateInput {
   name?: string
@@ -16,7 +16,20 @@ export async function updateWorkspace(input: WorkspaceUpdateInput): Promise<Work
   return data
 }
 
-export async function startCheckout(planCode: string): Promise<CheckoutSession> {
-  const { data } = await apiClient.post<CheckoutSession>('/upgrade/', { plan_code: planCode })
+export async function startCheckout(
+  planCode: string,
+  billingMode?: BillingMode,
+  paymentMethods?: PaymentMethod[],
+): Promise<CheckoutSession> {
+  const { data } = await apiClient.post<CheckoutSession>('/upgrade/', {
+    plan_code: planCode,
+    billing_mode: billingMode,
+    payment_methods: paymentMethods,
+  })
+  return data
+}
+
+export async function fetchBillingHistory(): Promise<BillingHistory> {
+  const { data } = await apiClient.get<BillingHistory>('/workspace/billing-history/')
   return data
 }

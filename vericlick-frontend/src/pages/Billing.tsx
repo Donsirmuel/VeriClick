@@ -2,22 +2,66 @@ import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { CheckmarkCircle02Icon, Globe02Icon, ShieldIcon } from '@hugeicons/core-free-icons'
+import { CheckmarkCircle02Icon, CreditCardIcon, Globe02Icon, Invoice01Icon, RefreshIcon, ShieldIcon } from '@hugeicons/core-free-icons'
 import toast from 'react-hot-toast'
 import { fetchPricing } from '@/api/pricing'
-import { fetchWorkspace, startCheckout } from '@/api/workspace'
+import { fetchWorkspace, fetchBillingHistory, startCheckout } from '@/api/workspace'
 import { parseApiError } from '@/lib/errors'
-import type { Plan } from '@/types'
+import { formatDate, formatCurrency } from '@/lib/utils'
+import type { BillingMode, PaymentMethod, Plan } from '@/types'
+
+const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
+  card: 'Card',
+  crypto: 'Crypto',
+  bank_transfer: 'Bank transfer',
+  mobile_money: 'Mobile money',
+}
+
+// Subscriptions are billed by card only at Bachs; one-time "period" payments
+// accept every channel (card, crypto, bank transfer, mobile money).
+const SUBSCRIPTION_METHODS: PaymentMethod[] = ['card']
+
+function ModeToggle({ value, onChange }: { value: BillingMode; onChange: (m: BillingMode) => void }) {
+  return (
+    <div className="inline-flex rounded-xl border border-neutral-200 bg-neutral-50 p-1">
+      <button
+        type="button"
+        onClick={() => onChange('subscription')}
+        className={`px-4 py-2 rounded-lg text-xs font-bold transition-colors ${
+          value === 'subscription' ? 'bg-white text-slate-900 shadow-sm' : 'text-muted hover:text-slate-700'
+        }`}
+      >
+        Monthly (card)
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange('period')}
+        className={`px-4 py-2 rounded-lg text-xs font-bold transition-colors ${
+          value === 'period' ? 'bg-white text-slate-900 shadow-sm' : 'text-muted hover:text-slate-700'
+        }`}
+      >
+        One-time 30 days
+      </button>
+    </div>
+  )
+}
 
 export default function Billing() {
   const queryClient = useQueryClient()
   const [justPaid, setJustPaid] = useState(false)
+  const [billingMode, setBillingMode] = useState<BillingMode>('subscription')
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>(SUBSCRIPTION_METHODS)
 
   const { data: pricing } = useQuery({ queryKey: ['pricing'], queryFn: fetchPricing })
   const { data: workspace } = useQuery({ queryKey: ['workspace'], queryFn: fetchWorkspace })
+  const { data: history } = useQuery({ queryKey: ['billing-history'], queryFn: fetchBillingHistory })
 
   const checkoutMutation = useMutation({
-    mutationFn: startCheckout,
+    mutationFn: ({ planCode, billingMode, paymentMethods }: {
+      planCode: string
+      billingMode: BillingMode
+      paymentMethods: PaymentMethod[]
+    }) => startCheckout(planCode, billingMode, paymentMethods),
     onSuccess: (session) => {
       toast.success('Opening secure checkout…')
       window.location.href = session.checkoutUrl
@@ -33,6 +77,7 @@ export default function Billing() {
     if (params.get('billing') === 'success') {
       setJustPaid(true)
       queryClient.invalidateQueries({ queryKey: ['workspace'] })
+      queryClient.invalidateQueries({ queryKey: ['billing-history'] })
       window.history.replaceState({}, '', window.location.pathname)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -40,15 +85,36 @@ export default function Billing() {
 
   const current = workspace?.plan ?? null
   const plans = pricing?.plans ?? []
+  const sub = history?.subscription
 
   const isCurrent = (code: string) => current === code
+
+  const handleModeChange = (mode: BillingMode) => {
+    setBillingMode(mode)
+    setPaymentMethods(mode === 'subscription' ? SUBSCRIPTION_METHODS : [])
+  }
+
+  const toggleMethod = (method: PaymentMethod) => {
+    setPaymentMethods(prev =>
+      prev.includes(method) ? prev.filter(m => m !== method) : [...prev, method]
+    )
+  }
+
+  const beginCheckout = (planCode: string) => {
+    const methods = billingMode === 'subscription' ? SUBSCRIPTION_METHODS : paymentMethods
+    if (billingMode === 'period' && methods.length === 0) {
+      toast.error('Pick at least one payment method for a one-time payment.')
+      return
+    }
+    checkoutMutation.mutate({ planCode, billingMode, paymentMethods: methods })
+  }
 
   return (
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Billing &amp; Plan</h1>
         <p className="text-sm text-muted mt-1">
-          Your plan controls how many tracked domains your workspace can register.
+          Your plan controls how many tracked domains your workspace can register. Pay monthly by card, or buy a 30-day period with the payment method that suits you.
         </p>
       </div>
 
@@ -73,6 +139,30 @@ export default function Billing() {
           <div className="text-xl font-bold text-slate-900">
             {workspace?.planName ?? 'No plan'}
           </div>
+          {sub?.mode && (
+            <div className="text-xs text-muted mt-1">
+              {sub.mode === 'subscription' ? 'Monthly subscription' : '30-day period'}
+            </div>
+          )}
+        </div>
+        <div className="bg-white border border-neutral-200 rounded-2xl p-5">
+          <div className="text-xs font-bold text-muted uppercase tracking-wider mb-1">
+            {sub?.mode === 'period' ? 'Expires' : sub?.active ? 'Next renewal' : 'Status'}
+          </div>
+          <div className="text-xl font-bold text-slate-900">
+            {sub?.mode === 'period'
+              ? formatDate(sub.expiresAt)
+              : sub?.active && sub.nextRenewalAt
+                ? formatDate(sub.nextRenewalAt)
+                : sub?.active
+                  ? 'Active'
+                  : '—'}
+          </div>
+          {sub?.mode === 'period' && sub?.active && (
+            <div className="text-xs text-muted mt-1">
+              {sub.expiresAt ? `Renew by ${formatDate(sub.expiresAt)}` : ''}
+            </div>
+          )}
         </div>
         <div className="bg-white border border-neutral-200 rounded-2xl p-5">
           <div className="text-xs font-bold text-muted uppercase tracking-wider mb-1">Domains</div>
@@ -82,17 +172,44 @@ export default function Billing() {
               : `${workspace?.domainsUsed ?? 0} / unlimited`}
           </div>
         </div>
-        <div className="bg-white border border-neutral-200 rounded-2xl p-5">
-          <div className="text-xs font-bold text-muted uppercase tracking-wider mb-1">Status</div>
-          <div className="text-xl font-bold text-slate-900">
-            {workspace?.canAddDomain ? 'Active' : 'At limit'}
-          </div>
-        </div>
       </div>
 
       {/* Plans */}
       <div>
-        <h2 className="text-lg font-bold text-slate-900 mb-4">Choose your plan</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <h2 className="text-lg font-bold text-slate-900">Choose your plan</h2>
+          <ModeToggle value={billingMode} onChange={handleModeChange} />
+        </div>
+
+        {billingMode === 'period' && (
+          <div className="mb-5 rounded-2xl border border-neutral-200 bg-white p-5">
+            <h3 className="text-sm font-bold text-slate-900 mb-1 flex items-center gap-2">
+              <HugeiconsIcon icon={Invoice01Icon} className="w-4 h-4 text-muted" />
+              Payment methods
+            </h3>
+            <p className="text-xs text-muted leading-relaxed mb-3">
+              One-time payments are accepted from any of these channels. Pick the ones you want to offer for this purchase.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {(Object.keys(PAYMENT_METHOD_LABELS) as PaymentMethod[]).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => toggleMethod(m)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-colors ${
+                    paymentMethods.includes(m)
+                      ? 'bg-black text-white border-black'
+                      : 'bg-white text-slate-700 border-neutral-200 hover:border-neutral-300'
+                  }`}
+                >
+                  {paymentMethods.includes(m) && <HugeiconsIcon icon={CheckmarkCircle02Icon} className="w-3.5 h-3.5" />}
+                  {PAYMENT_METHOD_LABELS[m]}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {plans.map((plan: Plan) => {
             const isCurrentPlan = isCurrent(plan.code)
@@ -111,7 +228,9 @@ export default function Billing() {
                 <h3 className="text-lg font-bold text-slate-900 mb-2">{plan.name}</h3>
                 <div className="text-3xl font-bold text-slate-900 mb-1">
                   ${plan.monthlyPrice}
-                  <span className="text-sm text-muted font-normal">/month</span>
+                  <span className="text-sm text-muted font-normal">
+                    {billingMode === 'subscription' ? '/month' : '/30 days'}
+                  </span>
                 </div>
                 <div className="flex items-center gap-2 mb-5">
                   <HugeiconsIcon icon={Globe02Icon} className="w-4 h-4 text-muted" />
@@ -140,17 +259,64 @@ export default function Billing() {
                   </Link>
                 ) : (
                   <button
-                    onClick={() => checkoutMutation.mutate(plan.code)}
+                    onClick={() => beginCheckout(plan.code)}
                     disabled={checkoutMutation.isPending}
                     className="bg-black hover:bg-neutral-800 disabled:bg-neutral-300 text-white px-4 py-3 rounded-xl text-sm font-bold transition-all"
                   >
-                    {checkoutMutation.isPending ? 'Opening checkout…' : `Switch to ${plan.name}`}
+                    {checkoutMutation.isPending ? 'Opening checkout…' : `Choose ${plan.name}`}
                   </button>
                 )}
               </div>
             )
           })}
         </div>
+      </div>
+
+      {/* Payment history */}
+      <div>
+        <div className="flex items-center gap-2 mb-4">
+          <HugeiconsIcon icon={CreditCardIcon} className="w-4 h-4 text-muted" />
+          <h2 className="text-lg font-bold text-slate-900">Payment history</h2>
+          <button
+            onClick={() => queryClient.invalidateQueries({ queryKey: ['billing-history'] })}
+            className="ml-auto p-2 rounded-lg hover:bg-neutral-100 transition-colors"
+            title="Refresh payment history"
+          >
+            <HugeiconsIcon icon={RefreshIcon} className="w-4 h-4 text-muted" />
+          </button>
+        </div>
+        {history && history.events.length > 0 ? (
+          <div className="bg-white border border-neutral-200 rounded-2xl overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="min-w-[640px] w-full">
+                <thead>
+                  <tr className="border-b border-neutral-200 bg-neutral-50/50">
+                    <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Date</th>
+                    <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Event</th>
+                    <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Plan</th>
+                    <th className="text-right px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {history.events.map((event) => (
+                    <tr key={event.id} className="border-b border-neutral-100 hover:bg-neutral-50/50 transition-colors">
+                      <td className="px-6 py-4 text-sm text-slate-700 whitespace-nowrap">{formatDate(event.occurredAt)}</td>
+                      <td className="px-6 py-4 text-sm font-bold text-slate-900">{event.label}</td>
+                      <td className="px-6 py-4 text-sm text-slate-700">{event.planName ?? '—'}</td>
+                      <td className="px-6 py-4 text-sm text-right font-bold text-slate-900">
+                        {event.amount != null ? formatCurrency(event.amount, event.currency) : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-white border border-neutral-200 rounded-2xl p-6 text-sm text-muted">
+            No payments yet. Your free trial includes 1 domain and 1 link — pick a plan above when you're ready for more room.
+          </div>
+        )}
       </div>
     </div>
   )

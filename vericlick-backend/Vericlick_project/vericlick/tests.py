@@ -15,6 +15,45 @@ from .models import (
     Plan, DiscountCode, SiteConfig, CheckoutIntent,
 )
 from .utils import snake_to_camel, camel_to_snake, transform_keys
+from . import services as _services
+
+
+# Deterministic diagnosis report used to keep flow tests off the real network.
+# Tests that exercise the DNS diagnosis engine itself use their own mocks.
+FAKE_DIAGNOSIS = {
+    'generated_at': '2026-01-01T00:00:00Z',
+    'tracking_host': 't.example.com',
+    'expected_ips': ['1.2.3.4'],
+    'verified': False,
+    'points_to_us': False,
+    'apex_resolves': True,
+    'ready': False,
+    'findings': [],
+}
+
+
+_REAL_DIAGNOSE_DOMAIN = _services.diagnose_domain
+
+
+def _fake_diagnose(domain):
+    # No-network stand-in for diagnose_domain used by every flow test: health
+    # checks are a side effect of create/recheck/verify/scan, and the tests
+    # only care that a report gets persisted, not what DNS really says. The
+    # real engine is restored inside DomainDiagnosisTests.
+    is_obj = hasattr(domain, 'domain')
+    name = domain.domain if is_obj else str(domain)
+    report = dict(FAKE_DIAGNOSIS)
+    report.update({
+        'tracking_host': f't.{name}',
+        'verified': bool(getattr(domain, 'verified', False)),
+        'points_to_us': bool(getattr(domain, 'points_to_server', False)),
+        'apex_resolves': bool(getattr(domain, 'health_status', DomainRegistry.HealthStatus.HEALTHY) == DomainRegistry.HealthStatus.HEALTHY),
+        'ready': bool(getattr(domain, 'verified', False) and getattr(domain, 'points_to_server', False)),
+    })
+    return report
+
+
+_services.diagnose_domain = _fake_diagnose
 
 
 #Utils 
@@ -690,7 +729,8 @@ class DomainsEndpointTests(APITestCase):
 
     def test_create_domain(self):
         data = {'domain': 'tracking.example.com'}
-        res = self.client.post('/api/domains/', data, format='json')
+        with patch('vericlick.services.diagnose_domain', return_value=FAKE_DIAGNOSIS):
+            res = self.client.post('/api/domains/', data, format='json')
         self.assertEqual(res.status_code, status.HTTP_201_CREATED)
         body = res.json()
         self.assertEqual(body['domain'], 'tracking.example.com')
@@ -775,7 +815,8 @@ class DomainsEndpointTests(APITestCase):
             workspace=self.workspace, domain='recheck.example.com',
         )
         self.assertIsNone(domain.last_checked)
-        res = self.client.post(f'/api/domains/{domain.id}/recheck/')
+        with patch('vericlick.services.diagnose_domain', return_value=FAKE_DIAGNOSIS):
+            res = self.client.post(f'/api/domains/{domain.id}/recheck/')
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         body = res.json()
         self.assertEqual(body['status'], 'ok')
@@ -896,7 +937,8 @@ class DomainVerificationTests(APITestCase):
         )
 
     def test_health_check_does_not_mark_verified(self):
-        self.domain.run_health_check()
+        with patch('vericlick.services.diagnose_domain', return_value=FAKE_DIAGNOSIS):
+            self.domain.run_health_check()
         self.domain.refresh_from_db()
         self.assertFalse(self.domain.verified)
         self.assertIsNotNone(self.domain.last_checked)
@@ -912,7 +954,8 @@ class DomainVerificationTests(APITestCase):
 
     @patch('vericlick.views.verify_domain_ownership', return_value=(True, ''))
     def test_verify_success_marks_verified(self, mock_verify):
-        res = self.client.post(f'/api/domains/{self.domain.id}/verify/')
+        with patch('vericlick.services.diagnose_domain', return_value=FAKE_DIAGNOSIS):
+            res = self.client.post(f'/api/domains/{self.domain.id}/verify/')
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         body = res.json()
         self.assertTrue(body['verified'])
@@ -922,7 +965,8 @@ class DomainVerificationTests(APITestCase):
 
     @patch('vericlick.views.verify_domain_ownership', return_value=(False, 'Not found yet'))
     def test_verify_failure_returns_400(self, mock_verify):
-        res = self.client.post(f'/api/domains/{self.domain.id}/verify/')
+        with patch('vericlick.services.diagnose_domain', return_value=FAKE_DIAGNOSIS):
+            res = self.client.post(f'/api/domains/{self.domain.id}/verify/')
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
         self.domain.refresh_from_db()
         self.assertFalse(self.domain.verified)
@@ -942,6 +986,147 @@ class DomainVerificationTests(APITestCase):
         res = self.client.post(f'/api/domains/{self.domain.id}/verify/')
         self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
         mock_verify.assert_not_called()
+
+
+class DomainDiagnosisTests(APITestCase):
+    # Tests for the DNS diagnosis engine and the relaxed "ready" semantics:
+    # a domain counts as ready once ownership is proven AND its tracking host
+    # points at this server — the apex resolving is a warning, not a failure.
+
+    def setUp(self):
+        # Restore the real DNS diagnosis engine for this class (the module-level
+        # stand-in is only for flow tests). addCleanup puts the stand-in back so
+        # later test classes stay off the network.
+        _services.diagnose_domain = _REAL_DIAGNOSE_DOMAIN
+        self.addCleanup(setattr, _services, 'diagnose_domain', _fake_diagnose)
+        self.user = User.objects.create_user(username='diag_user')
+        self.client.force_authenticate(user=self.user)
+        self.workspace = Workspace.objects.get(owner=self.user)
+        self.domain = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='example.com',
+        )
+
+    @staticmethod
+    def _ns_answer():
+        class Target:
+            @staticmethod
+            def to_text():
+                return 'ns1.namecheap.com.'
+        class Ans:
+            target = Target()
+        return [Ans()]
+
+    @staticmethod
+    def _txt_answer(value):
+        class Rdata:
+            def __init__(self, v):
+                self._v = v
+            def to_text(self):
+                return f'"{self._v}"'
+        return [Rdata(value)]
+
+    @staticmethod
+    def _cname_answer():
+        class Target:
+            @staticmethod
+            def to_text():
+                return 'vendora.page.'
+        class Ans:
+            target = Target()
+        return [Ans()]
+
+    def _diagnose(self, apex_ips, tracking_ips, txt_ok, expected_ips):
+        import dns.resolver
+
+        def fake_resolve(qname, rtype, lifetime=None):
+            if rtype == 'NS':
+                return self._ns_answer()
+            if rtype == 'CNAME':
+                return self._cname_answer()
+            if rtype == 'TXT':
+                value = self.domain.verification_record if txt_ok else 'unrelated-value'
+                return self._txt_answer(value)
+            raise Exception(f'unexpected record type {rtype}')
+
+        with patch('vericlick.models._target_addresses', return_value=set(expected_ips)), \
+                patch('vericlick.models._resolve_addresses',
+                      side_effect=lambda host: set(tracking_ips) if host == 't.example.com' else set(apex_ips)), \
+                patch('dns.resolver.resolve', side_effect=fake_resolve):
+            from vericlick.services import diagnose_domain
+            return diagnose_domain(self.domain)
+
+    def test_apex_with_no_a_record_is_warning_not_failure(self):
+        # The customer scenario: root domain has no A record yet, but the TXT
+        # is verified and t.example.com points at us. Links work, so "ready".
+        report = self._diagnose(apex_ips=[], tracking_ips=['1.2.3.4'], txt_ok=True, expected_ips=['1.2.3.4'])
+        self.assertTrue(report['ready'])
+        self.assertTrue(report['points_to_us'])
+        self.assertFalse(report['apex_resolves'])
+        levels = {f['key']: f['level'] for f in report['findings']}
+        self.assertEqual(levels['apex'], 'warn')
+        self.assertEqual(levels['tracking_host'], 'ok')
+        self.assertEqual(levels['txt'], 'ok')
+
+    def test_pointing_elsewhere_reported_with_fix(self):
+        report = self._diagnose(apex_ips=['9.9.9.9'], tracking_ips=['9.9.9.9'], txt_ok=True, expected_ips=['1.2.3.4'])
+        self.assertFalse(report['ready'])
+        self.assertFalse(report['points_to_us'])
+        th = next(f for f in report['findings'] if f['key'] == 'tracking_host')
+        self.assertEqual(th['level'], 'error')
+        self.assertIn('CNAME', th['fix'])
+        self.assertIn('t', th['fix'])
+
+    def test_missing_txt_means_not_ready(self):
+        report = self._diagnose(apex_ips=['1.2.3.4'], tracking_ips=['1.2.3.4'], txt_ok=False, expected_ips=['1.2.3.4'])
+        self.assertFalse(report['ready'])
+        txt = next(f for f in report['findings'] if f['key'] == 'txt')
+        self.assertEqual(txt['level'], 'error')
+
+    def test_run_health_check_persists_report(self):
+        fake = {
+            'generated_at': '2026-01-01T00:00:00Z', 'tracking_host': 't.example.com',
+            'expected_ips': ['1.2.3.4'], 'verified': True, 'points_to_us': True,
+            'apex_resolves': False, 'ready': True, 'findings': [],
+        }
+        with patch('vericlick.services.diagnose_domain', return_value=fake):
+            self.domain.run_health_check()
+        self.domain.refresh_from_db()
+        self.assertEqual(self.domain.health_detail, fake)
+        self.assertTrue(self.domain.points_to_server)
+        self.assertEqual(self.domain.health_status, DomainRegistry.HealthStatus.DEGRADED)
+        self.assertIsNotNone(self.domain.last_checked)
+
+    def test_ready_true_when_pointing_even_if_apex_degraded(self):
+        domain = DomainRegistry.objects.create(
+            workspace=self.workspace,
+            domain='ready.example.com',
+            verified=True,
+            points_to_server=True,
+            health_status=DomainRegistry.HealthStatus.DEGRADED,
+        )
+        res = self.client.get(f'/api/domains/{domain.id}/')
+        body = res.json()
+        self.assertTrue(body['ready'])
+        self.assertIn('healthDetail', body)
+
+    def test_tracking_url_uses_custom_domain_when_apex_degraded_but_pointing(self):
+        domain = DomainRegistry.objects.create(
+            workspace=self.workspace,
+            domain='links.example.com',
+            verified=True,
+            points_to_server=True,
+            health_status=DomainRegistry.HealthStatus.DEGRADED,
+        )
+        link = TrackingLink.objects.create(
+            workspace=self.workspace, domain=domain,
+            slug='serves-on-brand', destination_url='https://example.com',
+        )
+        res = self.client.get(f'/api/links/{link.id}/')
+        self.assertEqual(
+            res.json()['trackingUrl'],
+            'https://links.example.com/r/serves-on-brand/',
+        )
+        self.assertTrue(res.json()['trackingDomainReady'])
 
 
 # On-demand TLS gate (Caddy ask endpoint)
@@ -1781,20 +1966,23 @@ class DomainScanCommandTests(APITestCase):
     def test_command_updates_last_scan_at(self):
         from django.core.management import call_command
         self.assertIsNone(self.workspace.last_domain_scan_at)
-        call_command('check_domains')
+        with patch('vericlick.services.diagnose_domain', return_value=FAKE_DIAGNOSIS):
+            call_command('check_domains')
         self.workspace.refresh_from_db()
         self.assertIsNotNone(self.workspace.last_domain_scan_at)
 
     def test_command_checks_domains(self):
         from django.core.management import call_command
-        call_command('check_domains')
+        with patch('vericlick.services.diagnose_domain', return_value=FAKE_DIAGNOSIS):
+            call_command('check_domains')
         self.domain.refresh_from_db()
         self.assertIsNotNone(self.domain.last_checked)
         self.assertIn(self.domain.health_status, ['healthy', 'degraded'])
 
     def test_command_runs_once_with_interval_zero(self):
         from django.core.management import call_command
-        call_command('check_domains', interval=0)
+        with patch('vericlick.services.diagnose_domain', return_value=FAKE_DIAGNOSIS):
+            call_command('check_domains', interval=0)
         self.workspace.refresh_from_db()
         self.assertIsNotNone(self.workspace.last_domain_scan_at)
 
@@ -1819,7 +2007,8 @@ class InAppDomainRefreshTests(APITestCase):
     def test_refresh_stale_domains_checks_never_checked(self):
         from .services import refresh_stale_domains
         self.assertIsNone(self.domain.last_checked)
-        checked = refresh_stale_domains(self.workspace)
+        with patch('vericlick.services.diagnose_domain', return_value=FAKE_DIAGNOSIS):
+            checked = refresh_stale_domains(self.workspace)
         self.assertIn(self.domain, checked)
         self.domain.refresh_from_db()
         self.assertIsNotNone(self.domain.last_checked)
@@ -1828,8 +2017,9 @@ class InAppDomainRefreshTests(APITestCase):
 
     def test_refresh_skips_recently_checked(self):
         from .services import refresh_stale_domains
-        self.domain.run_health_check()
-        checked = refresh_stale_domains(self.workspace)
+        with patch('vericlick.services.diagnose_domain', return_value=FAKE_DIAGNOSIS):
+            self.domain.run_health_check()
+            checked = refresh_stale_domains(self.workspace)
         self.assertNotIn(self.domain, checked)
 
     def test_list_endpoint_triggers_async_check(self):

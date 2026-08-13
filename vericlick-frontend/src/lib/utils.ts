@@ -22,6 +22,21 @@ export function formatRelativeTime(date: Date | string): string {
   return `${Math.floor(diff / 86400)}d ago`
 }
 
+export function formatDate(date: string | null | undefined): string {
+  if (!date) return '—'
+  const d = new Date(date)
+  if (Number.isNaN(d.getTime())) return '—'
+  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+}
+
+export function formatCurrency(amount: number | null | undefined, currency = 'usd'): string {
+  if (amount == null) return '—'
+  return new Intl.NumberFormat(undefined, {
+    style: 'currency',
+    currency: currency.toUpperCase(),
+  }).format(amount)
+}
+
 export function truncateUrl(url: string, maxLen = 40): string {
   if (url.length <= maxLen) return url
   return url.substring(0, maxLen) + '...'

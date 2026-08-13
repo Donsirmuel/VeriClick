@@ -140,15 +140,37 @@ def upgrade_workspace(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    billing_mode = (request.data.get('billing_mode') or 'subscription').strip()
+    if billing_mode not in CheckoutIntent.BillingMode.values:
+        return Response(
+            {'errors': [{'field': 'billing_mode', 'detail': 'Unknown billing mode.'}]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    payment_methods = request.data.get('payment_methods')
+    if payment_methods is not None:
+        from .payments import ALL_PAYMENT_METHODS
+        if not isinstance(payment_methods, list) or any(
+            m not in ALL_PAYMENT_METHODS for m in payment_methods
+        ):
+            return Response(
+                {'errors': [{'field': 'payment_methods', 'detail': 'One or more payment methods are not supported.'}]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
     from .payments import create_checkout_session, BachsError
 
     intent = CheckoutIntent.objects.create(
         workspace=workspace,
         plan=plan,
         user=request.user,
+        billing_mode=billing_mode,
     )
     try:
-        result = create_checkout_session(intent, plan, request.user.email, request.user.username)
+        result = create_checkout_session(
+            intent, plan, request.user.email, request.user.username,
+            payment_methods=payment_methods,
+        )
     except BachsError as exc:
         intent.status = CheckoutIntent.Status.FAILED
         intent.save(update_fields=['status', 'updated_at'])
@@ -164,6 +186,50 @@ def upgrade_workspace(request):
         'checkout_url': result.get('checkout_url'),
         'expires_at': result.get('expires_at'),
         'plan': plan.code,
+        'billing_mode': billing_mode,
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def billing_history(request):
+    # Payment / subscription history for the workspace. Money source of truth is
+    # Bachs; we mirror it in BillingEvent rows (recorded from checkout creation,
+    # fulfilment webhooks and renewal webhooks) for display and receipts.
+    from datetime import timedelta
+    from .models import BillingEvent
+    from .serializers import BillingEventSerializer
+
+    workspace = get_user_workspace(request.user)
+    if not workspace:
+        return Response({'error': 'No workspace found'}, status=status.HTTP_404_NOT_FOUND)
+
+    active = workspace.is_plan_active()
+    next_renewal = None
+    if active:
+        if workspace.plan_billing_mode == Workspace.BillingMode.PERIOD:
+            next_renewal = workspace.plan_expires_at
+        else:
+            last_charge = workspace.billing_events.filter(
+                kind__in=[BillingEvent.Kind.PLAN_PURCHASED, BillingEvent.Kind.PLAN_RENEWED]
+            ).first()
+            if last_charge is not None:
+                next_renewal = last_charge.occurred_at + timedelta(days=30)
+
+    events = workspace.billing_events.all()[:50]
+    return Response({
+        'subscription': {
+            'active': active,
+            'plan': workspace.active_plan.code if active else None,
+            'planName': workspace.active_plan.name if active else None,
+            'mode': workspace.plan_billing_mode if active else None,
+            'startedAt': workspace.plan_started_at,
+            'expiresAt': workspace.plan_expires_at if active else None,
+            'nextRenewalAt': next_renewal,
+            'trialActive': workspace.trial_active,
+            'trialExpiresAt': workspace.trial_expires_at,
+        },
+        'events': BillingEventSerializer(events, many=True).data,
     })
 
 
@@ -199,7 +265,16 @@ def bachs_webhook(request):
     event_type = payload.get('type')
     data = payload.get('data') or {}
     if event_type == 'collection.succeeded':
-        fulfil_paid_checkout(data.get('checkout_id'), data.get('charge_id') or '')
+        # First-time purchases carry a checkout_id; recurring renewals don't.
+        if data.get('checkout_id'):
+            fulfil_paid_checkout(data.get('checkout_id'), data.get('charge_id') or '')
+        else:
+            from .payments import record_recurring_collection
+            record_recurring_collection(data)
+    elif event_type in ('collection.failed', 'collection.abandoned', 'collection.underpaid'):
+        from .models import BillingEvent
+        from .payments import record_failed_collection
+        record_failed_collection(data, event_type)
     return Response({'status': 'ok'})
 
 
@@ -693,7 +768,7 @@ class TrackingLinkViewSet(viewsets.ModelViewSet):
             raise PermissionError('No workspace found')
         workspace.ensure_trial_started()
         if not workspace.can_add_link:
-            if workspace.plan:
+            if workspace.is_plan_active():
                 raise ValidationError({
                     'detail': 'You have reached the link limit for your plan. Remove a link or upgrade to add more.'
                 })
@@ -737,7 +812,7 @@ class DomainRegistryViewSet(viewsets.ModelViewSet):
             raise ValidationError({'detail': 'No workspace found for this account.'})
         workspace.ensure_trial_started()
         if not workspace.can_add_domain:
-            if workspace.plan:
+            if workspace.is_plan_active():
                 limit = workspace.effective_domain_limit
                 raise ValidationError({
                     'detail': (
@@ -780,6 +855,7 @@ class DomainRegistryViewSet(viewsets.ModelViewSet):
             'status': 'ok',
             'health_status': domain.health_status,
             'points_to_server': domain.points_to_server,
+            'health_detail': domain.health_detail,
             'last_checked': domain.last_checked,
         })
 
@@ -881,7 +957,7 @@ class IPRuleViewSet(viewsets.ModelViewSet):
         if not workspace:
             raise PermissionError('No workspace found')
         workspace.ensure_trial_started()
-        if not (workspace.plan or workspace.trial_active):
+        if not (workspace.is_plan_active() or workspace.trial_active):
             raise ValidationError({
                 'detail': (
                     'IP rules are a paid feature. Your free trial ended — '

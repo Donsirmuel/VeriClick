@@ -1,6 +1,28 @@
 export type HealthStatus = 'healthy' | 'degraded' | 'blacklisted'
 export type LinkStatus = 'active' | 'paused' | 'disabled'
 export type TimeRange = '7d' | '30d' | '90d'
+export type DiagnosisLevel = 'ok' | 'warn' | 'error'
+export type BillingMode = 'subscription' | 'period'
+export type PaymentMethod = 'card' | 'crypto' | 'bank_transfer' | 'mobile_money'
+
+export interface DomainDiagnosisFinding {
+  key: string
+  level: DiagnosisLevel
+  title: string
+  message: string
+  fix?: string
+}
+
+export interface DomainDiagnosis {
+  generatedAt: string
+  trackingHost: string
+  expectedIps: string[]
+  verified: boolean
+  pointsToUs: boolean
+  apexResolves: boolean
+  ready: boolean
+  findings: DomainDiagnosisFinding[]
+}
 
 export interface DashboardStats {
   totalClicks24h: number
@@ -70,6 +92,7 @@ export interface Domain {
   lastChecked: string | null
   linksCount: number
   ready: boolean
+  healthDetail?: DomainDiagnosis | null
   dnsSetup: {
     label: string
     host: string
@@ -89,6 +112,8 @@ export interface Workspace {
   lastDomainScanAt: string | null
   plan: string | null
   planName: string | null
+  planBillingMode: BillingMode | null
+  planExpiresAt: string | null
   domainLimit: number | null
   domainsUsed: number
   canAddDomain: boolean
@@ -117,6 +142,35 @@ export interface CheckoutSession {
   checkoutUrl: string
   expiresAt?: string | null
   plan: string
+}
+
+export interface BillingEvent {
+  id: string
+  kind: string
+  label: string
+  planName: string | null
+  amount: number | null
+  currency: string
+  occurredAt: string
+  chargeId: string | null
+  checkoutId: string | null
+  note: string | null
+  data: Record<string, unknown>
+}
+
+export interface BillingHistory {
+  subscription: {
+    active: boolean
+    plan: string | null
+    planName: string | null
+    mode: BillingMode | null
+    startedAt: string | null
+    expiresAt: string | null
+    nextRenewalAt: string | null
+    trialActive: boolean
+    trialExpiresAt: string | null
+  }
+  events: BillingEvent[]
 }
 
 export interface SiteConfig {
