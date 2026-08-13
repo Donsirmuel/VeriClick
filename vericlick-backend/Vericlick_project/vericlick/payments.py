@@ -66,6 +66,12 @@ def create_checkout_session(intent, plan, user_email, user_name, payment_methods
     subscription checkouts default to ``['card']``; one-time "period"
     payments can use any channel.
 
+    Which product is sold depends on the billing mode, because Bachs decides
+    recurring-vs-one-time from the product itself: subscriptions use
+    ``plan.bachs_product_id`` (a recurring product); periods use
+    ``plan.bachs_ot_product_id`` (a one-time product — the only type that can
+    show multiple payment methods), falling back to ``bachs_product_id``.
+
     Returns the checkout dict from Bachs (`checkout_id`, `checkout_url`, ...).
     Raises BachsError when the request fails."""
     config = get_bachs_config()
@@ -76,16 +82,18 @@ def create_checkout_session(intent, plan, user_email, user_name, payment_methods
     cancel_url = f'{settings.SITE_URL}/app/billing?billing=cancelled'
 
     if intent.billing_mode == intent.BillingMode.PERIOD:
+        product_id = plan.bachs_ot_product_id or plan.bachs_product_id
         methods = payment_methods or ALL_PAYMENT_METHODS
         invalid = [m for m in methods if m not in ALL_PAYMENT_METHODS]
         if invalid:
             raise BachsError(f'Unsupported payment method: {invalid[0]}')
     else:
+        product_id = plan.bachs_product_id
         methods = ['card']
 
     payload = {
         'product_cart': [
-            {'product_id': plan.bachs_product_id, 'quantity': 1},
+            {'product_id': product_id, 'quantity': 1},
         ],
         'customer': {'email': user_email or '', 'name': user_name or ''},
         'success_url': success_url,
@@ -331,3 +339,82 @@ def record_failed_collection(data, event_type):
         note=f'{event_type.replace("collection.", "").replace("_", " ")} payment',
     )
     return True
+
+
+_BILLING_CHECKS = {}
+_BILLING_CHECK_INTERVAL_SECONDS = 30 * 60
+
+
+def maybe_run_billing_checks(workspace, force=False):
+    """Keep one-time "period" workspaces' billing lifecycle current.
+
+    Emits the expiring-warning, expired, and suspended ledger events plus their
+    owner emails at the right moments. The lifecycle itself is derived from
+    ``plan_expires_at`` (so visitor-facing links behave correctly without any
+    scheduler); this pass only publishes the notifications and ledger rows, and
+    each is DB-guarded so it fires exactly once.
+
+    Runs at most once every 30 minutes per workspace per process. A
+    ``check_billing`` management command drives it on a timer so emails go out
+    even when an owner never logs in; ``force=True`` bypasses the throttle.
+
+    ``workspace`` must be a saved instance."""
+    from datetime import timedelta
+    from django.utils import timezone
+    from .emails import (
+        send_period_expiring_email,
+        send_period_expired_email,
+        send_plan_suspended_email,
+    )
+    from .models import BillingEvent, PLAN_GRACE_DAYS
+
+    now = timezone.now()
+    key = workspace.pk
+    last = _BILLING_CHECKS.get(key)
+    if not force and last is not None and (now - last).total_seconds() < _BILLING_CHECK_INTERVAL_SECONDS:
+        return
+    _BILLING_CHECKS[key] = now
+
+    # Card subscriptions renew by card with no expiry and are handled by the
+    # webhook path, not this lifecycle. Nothing to do for plan-less workspaces.
+    if workspace.plan is None or workspace.plan_expires_at is None:
+        return
+
+    expires = workspace.plan_expires_at
+    grace = expires + timedelta(days=PLAN_GRACE_DAYS)
+    plan = workspace.plan
+    owner = workspace.owner
+
+    def _publish(kind, occurred_at, note, email):
+        if BillingEvent.objects.filter(workspace=workspace, kind=kind).exists():
+            return
+        BillingEvent.objects.create(
+            workspace=workspace, kind=kind,
+            plan=plan, plan_name=plan.name, amount=None, currency='USD',
+            occurred_at=occurred_at, note=note,
+        )
+        try:
+            email()
+        except Exception:
+            logger.exception('Billing lifecycle email failed for workspace %s', workspace.pk)
+
+    if now < expires:
+        if expires - timedelta(days=3) <= now:
+            _publish(
+                BillingEvent.Kind.PLAN_EXPIRING, now,
+                f'Billing period expires {expires:%d %b %Y}',
+                lambda: send_period_expiring_email(owner, workspace, plan, expires),
+            )
+        return
+
+    _publish(
+        BillingEvent.Kind.PLAN_EXPIRED, expires,
+        'Billing period ended',
+        lambda: send_period_expired_email(owner, workspace, plan, expires),
+    )
+    if now >= grace:
+        _publish(
+            BillingEvent.Kind.PLAN_SUSPENDED, grace,
+            'Access suspended after the grace period',
+            lambda: send_plan_suspended_email(owner, workspace, plan, grace),
+        )

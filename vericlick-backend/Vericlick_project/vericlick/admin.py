@@ -27,18 +27,22 @@ class TrackingLinkInline(admin.TabularInline):
 
 @admin.register(Workspace)
 class WorkspaceAdmin(admin.ModelAdmin):
-    list_display = ('name', 'owner', 'plan', 'plan_billing_mode', 'plan_expires_at', 'domain_count', 'tracker_secret', 'created_at')
+    list_display = ('name', 'owner', 'plan', 'plan_status', 'plan_billing_mode', 'plan_expires_at', 'domain_count', 'tracker_secret', 'created_at')
     # `plan` is editable inline from the list page so an admin can upgrade a
     # workspace (e.g. hand testers a higher tier) without going through checkout.
     list_editable = ('plan',)
     list_select_related = ('owner', 'plan')
     list_filter = ('plan', 'plan_billing_mode', 'created_at')
     search_fields = ('name', 'owner__username', 'owner__email')
-    readonly_fields = ('id', 'tracker_secret', 'created_at', 'last_domain_scan_at', 'plan_started_at', 'plan_billing_mode', 'plan_expires_at')
+    readonly_fields = ('id', 'tracker_secret', 'created_at', 'last_domain_scan_at', 'plan_started_at', 'plan_billing_mode', 'plan_expires_at', 'plan_status', 'grace_expires_at')
     inlines = [DomainRegistryInline, TrackingLinkInline]
     autocomplete_fields = ['owner']
     date_hierarchy = 'created_at'
     actions = ['record_manual_payment']
+
+    @admin.display(description='Status')
+    def plan_status(self, obj):
+        return obj.plan_status
 
     @admin.display(description='Domains (verified)')
     def domain_count(self, obj):
@@ -220,10 +224,10 @@ class TrackerEventAdmin(admin.ModelAdmin):
 
 @admin.register(Plan)
 class PlanAdmin(admin.ModelAdmin):
-    list_display = ('code', 'name', 'monthly_price', 'domain_limit', 'bachs_product_id', 'features_preview', 'is_active', 'sort_order')
+    list_display = ('code', 'name', 'monthly_price', 'domain_limit', 'bachs_product_id', 'bachs_ot_product_id', 'features_preview', 'is_active', 'sort_order')
     list_filter = ('is_active',)
-    search_fields = ('code', 'name', 'bachs_product_id', 'bachs_payment_link')
-    list_editable = ('monthly_price', 'domain_limit', 'bachs_product_id', 'is_active', 'sort_order')
+    search_fields = ('code', 'name', 'bachs_product_id', 'bachs_ot_product_id', 'bachs_payment_link')
+    list_editable = ('monthly_price', 'domain_limit', 'bachs_product_id', 'bachs_ot_product_id', 'is_active', 'sort_order')
 
     @admin.display(description='Features')
     def features_preview(self, obj):

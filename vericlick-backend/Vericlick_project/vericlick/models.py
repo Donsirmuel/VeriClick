@@ -169,16 +169,56 @@ class Workspace(models.Model):
         return True
 
     @property
+    def grace_expires_at(self):
+        # One-time "period" workspaces get PLAN_GRACE_DAYS of full access after
+        # the paid period lapses. Card subscriptions (no expiry) never enter grace.
+        if self.plan_expires_at is None:
+            return None
+        return self.plan_expires_at + timedelta(days=PLAN_GRACE_DAYS)
+
+    @property
+    def plan_status(self):
+        # Lifecycle for one-time "period" payments:
+        #   active     — paid period in force (full access)
+        #   grace      — period lapsed, PLAN_GRACE_DAYS of full access remain
+        #   suspended  — grace passed; links pass through with no filtering or
+        #                analytics until the plan is renewed
+        # Workspaces with no paid plan report 'none'; card subscriptions stay
+        # 'active' indefinitely.
+        if not self.plan:
+            return 'none'
+        if self.is_plan_active():
+            return 'active'
+        grace = self.grace_expires_at
+        if grace is not None and now() < grace:
+            return 'grace'
+        return 'suspended'
+
+    @property
+    def in_grace(self):
+        return self.plan_status == 'grace'
+
+    @property
+    def suspended(self):
+        return self.plan_status == 'suspended'
+
+    def has_plan_access(self):
+        # Whether the workspace may use its paid plan today: paid in force, or
+        # within the grace window. Suspended workspaces have no plan access.
+        return self.is_plan_active() or self.in_grace
+
+    @property
     def active_plan(self):
-        # The plan that is currently in force (None once a period has lapsed).
-        return self.plan if self.is_plan_active() else None
+        # The plan that is currently in force (None once a grace period lapses).
+        return self.plan if self.has_plan_access() else None
 
     @property
     def effective_domain_limit(self):
         # The number of domains a workspace may register. Paid workspaces get
-        # their plan's limit; free workspaces get exactly 1 domain for the
-        # trial week (unlimited is never returned now that beta is gone).
-        if not self.is_plan_active():
+        # their plan's limit (including during grace); free workspaces get
+        # exactly 1 domain for the trial week (unlimited is never returned now
+        # that beta is gone).
+        if not self.has_plan_access():
             return 1
         return self.plan.domain_limit
 
@@ -186,7 +226,7 @@ class Workspace(models.Model):
     def effective_link_limit(self):
         # Free workspaces get 1 link during their trial week. Paid workspaces
         # have no link limit.
-        if not self.is_plan_active():
+        if not self.has_plan_access():
             return 1
         return None
 
@@ -196,7 +236,7 @@ class Workspace(models.Model):
         # 30-day period (lazily, from when the plan was assigned); free
         # workspaces use the 7-day trial window. Soft-deleted domains/links stop
         # counting once their removal predates this boundary.
-        if self.is_plan_active():
+        if self.has_plan_access():
             base = self.plan_started_at or now()
             period = base
             while period + timedelta(days=PLAN_PERIOD_DAYS) <= now():
@@ -230,7 +270,7 @@ class Workspace(models.Model):
     def ensure_trial_started(self):
         # The 7-day free trial begins the first time a free workspace is
         # touched. Upgrading makes the trial permanently irrelevant.
-        if self.trial_started_at is None and not self.is_plan_active():
+        if self.trial_started_at is None and not self.has_plan_access():
             self.trial_started_at = now()
             self.save(update_fields=['trial_started_at'])
             # Money-event ledger entry so the billing history shows the trial.
@@ -248,7 +288,7 @@ class Workspace(models.Model):
 
     @property
     def trial_expires_at(self):
-        if self.is_plan_active() or not self.trial_started_at:
+        if self.has_plan_access() or not self.trial_started_at:
             return None
         return self.trial_started_at + timedelta(days=FREE_TRIAL_DAYS)
 
@@ -259,7 +299,7 @@ class Workspace(models.Model):
 
     @property
     def can_add_domain(self):
-        if self.is_plan_active():
+        if self.has_plan_access():
             return self.domains_in_use() < self.effective_domain_limit
         if not self.trial_active:
             return False
@@ -267,7 +307,7 @@ class Workspace(models.Model):
 
     @property
     def can_add_link(self):
-        if self.is_plan_active():
+        if self.has_plan_access():
             return True
         if not self.trial_active:
             return False
@@ -513,6 +553,7 @@ class TrackerEvent(models.Model):
 
 FREE_TRIAL_DAYS = 7
 PLAN_PERIOD_DAYS = 30
+PLAN_GRACE_DAYS = 7
 
 
 class SiteConfig(models.Model):
@@ -580,6 +621,15 @@ class Plan(models.Model):
             'for this product, for reference / manual invoicing. Not used by '
             'the API — checkouts are created per customer so attributions and '
             'auto-granting work.'
+        ),
+    )
+    bachs_ot_product_id = models.CharField(
+        max_length=64, blank=True, default='',
+        help_text=(
+            'The Bachs ONE-TIME product ID (prod_...) used when a customer buys '
+            'a 30-day "period" of this plan. One-time checkouts are the only '
+            'ones that can show card / crypto / bank transfer / mobile money. '
+            'Leave blank to fall back to bachs_product_id.'
         ),
     )
     is_active = models.BooleanField(default=True, help_text='Inactive plans are hidden from the pricing endpoint.')
@@ -701,6 +751,7 @@ class BillingEvent(models.Model):
         PLAN_PERIOD_PAID = 'plan_period_paid', 'One-time period paid'
         PLAN_EXPIRING = 'plan_expiring', 'Period expiring soon'
         PLAN_EXPIRED = 'plan_expired', 'Billing period ended'
+        PLAN_SUSPENDED = 'plan_suspended', 'Access suspended'
         PAYMENT_FAILED = 'payment_failed', 'Payment failed'
         REFUNDED = 'refunded', 'Refunded'
 

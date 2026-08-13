@@ -183,17 +183,22 @@ def send_payment_receipt_email(user, workspace, plan, charge_id='', occurred_at=
 
 def send_period_expiring_email(user, workspace, plan, expires_at):
     # Heads-up a few days before a one-time (bank/crypto/mobile) period ends so
-    # the customer can renew before the plan lapses.
+    # the customer can renew before the grace window starts.
     from django.utils import timezone
     when = expires_at.strftime('%d %b %Y')
     subject = f'Your {plan.name} plan renews soon'
     body = f"""
 <p style="color:#a3a3a3;font-size:15px;">Hi {user.first_name or user.username},</p>
 <p style="color:#d4d4d4;font-size:15px;line-height:1.6;">
-  Your current billing period for the <strong style="color:#ffffff;">{plan.name}</strong>
-  plan ends on <strong style="color:#ffffff;">{when}</strong>. After that, your
-  workspace returns to the free tier — domains you already have stay put, but
-  creating new ones needs an active plan.
+  Your billing period for the <strong style="color:#ffffff;">{plan.name}</strong>
+  plan ends on <strong style="color:#ffffff;">{when}</strong>. Renew before then to keep
+  your protection and analytics running without interruption.
+</p>
+<p style="color:#a3a3a3;font-size:15px;line-height:1.6;">
+  If it lapses, you get a <strong style="color:#ffffff;">7-day grace period</strong> where
+  everything keeps working while you renew. After that your tracked links will still
+  redirect your visitors straight to their destination — so your audience is
+  unaffected — but VeriClick will stop recording and filtering traffic until you renew.
 </p>
 <div style="text-align:center;margin:32px 0;">
   <a href="{settings.SITE_URL}/app/billing"
@@ -207,15 +212,54 @@ def send_period_expiring_email(user, workspace, plan, expires_at):
 
 
 def send_period_expired_email(user, workspace, plan, expires_at):
-    # Sent once when a one-time period lapses without renewal.
+    # Sent once when a one-time period lapses without renewal — the grace
+    # window is now running.
+    grace = workspace.grace_expires_at
+    grace_when = grace.strftime('%d %b %Y') if grace else 'within the next 7 days'
     subject = f'Your {plan.name} plan period has ended'
     body = f"""
 <p style="color:#a3a3a3;font-size:15px;">Hi {user.first_name or user.username},</p>
 <p style="color:#d4d4d4;font-size:15px;line-height:1.6;">
   Your billing period for the <strong style="color:#ffffff;">{plan.name}</strong>
   plan ended on <strong style="color:#ffffff;">{expires_at.strftime('%d %b %Y')}</strong>
-  and wasn't renewed, so your workspace is back on the free tier. Your existing
-  tracked links keep working at no cost.
+  and wasn't renewed. You're now in a <strong style="color:#ffffff;">7-day grace
+  period</strong> — everything keeps working and you can renew anytime to keep full
+  protection.
+</p>
+<p style="color:#a3a3a3;font-size:15px;line-height:1.6;">
+  If you don't renew by <strong style="color:#ffffff;">{grace_when}</strong>, your
+  tracked links will still redirect your visitors straight to their destination (so
+  your audience is unaffected), but VeriClick will stop recording and filtering
+  traffic until you renew.
+</p>
+<div style="text-align:center;margin:32px 0;">
+  <a href="{settings.SITE_URL}/app/billing"
+     style="background-color:#ffffff;color:#0a0a0a;padding:14px 28px;border-radius:10px;text-decoration:none;font-weight:bold;font-size:14px;">
+    Renew your plan
+  </a>
+</div>
+<p style="color:#525252;font-size:13px;margin-bottom:0;">Questions? Reply to this email and we'll help.</p>
+"""
+    return send_email(user.email, subject, _layout(body))
+
+
+def send_plan_suspended_email(user, workspace, plan, grace_ended_at):
+    # Sent once when the grace window passes without renewal. Links keep
+    # passing visitors through, but nothing is recorded or filtered.
+    subject = f'Your {plan.name} plan was suspended'
+    body = f"""
+<p style="color:#a3a3a3;font-size:15px;">Hi {user.first_name or user.username},</p>
+<p style="color:#d4d4d4;font-size:15px;line-height:1.6;">
+  Your <strong style="color:#ffffff;">{plan.name}</strong> plan was suspended on
+  <strong style="color:#ffffff;">{grace_ended_at.strftime('%d %b %Y')}</strong> because it
+  wasn't renewed during the 7-day grace period.
+</p>
+<p style="color:#a3a3a3;font-size:15px;line-height:1.6;">
+  Your tracked links still redirect visitors straight to their destination — so your
+  audience is unaffected — but VeriClick is no longer recording click traffic or
+  applying any filtering, bot blocking, or protection. Renew to restore full
+  analytics and protection immediately; your domains, links, and data are all
+  intact.
 </p>
 <div style="text-align:center;margin:32px 0;">
   <a href="{settings.SITE_URL}/app/billing"

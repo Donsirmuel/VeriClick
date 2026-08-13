@@ -114,6 +114,8 @@ export interface Workspace {
   planName: string | null
   planBillingMode: BillingMode | null
   planExpiresAt: string | null
+  planStatus: 'active' | 'grace' | 'suspended' | 'none' | null
+  graceExpiresAt: string | null
   domainLimit: number | null
   domainsUsed: number
   canAddDomain: boolean
@@ -160,12 +162,14 @@ export interface BillingEvent {
 
 export interface BillingHistory {
   subscription: {
+    status: 'active' | 'grace' | 'suspended' | 'none'
     active: boolean
     plan: string | null
     planName: string | null
     mode: BillingMode | null
     startedAt: string | null
     expiresAt: string | null
+    graceExpiresAt: string | null
     nextRenewalAt: string | null
     trialActive: boolean
     trialExpiresAt: string | null

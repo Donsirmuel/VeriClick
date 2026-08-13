@@ -65,6 +65,8 @@ class WorkspaceSerializer(serializers.ModelSerializer):
     plan_name = serializers.SerializerMethodField()
     plan_billing_mode = serializers.CharField(read_only=True)
     plan_expires_at = serializers.DateTimeField(read_only=True)
+    plan_status = serializers.CharField(read_only=True)
+    grace_expires_at = serializers.DateTimeField(read_only=True)
     domain_limit = serializers.SerializerMethodField()
     domains_used = serializers.SerializerMethodField()
     can_add_domain = serializers.SerializerMethodField()
@@ -79,7 +81,7 @@ class WorkspaceSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'tracker_secret', 'safe_destination',
             'created_at', 'last_domain_scan_at', 'plan', 'plan_name',
-            'plan_billing_mode', 'plan_expires_at',
+            'plan_billing_mode', 'plan_expires_at', 'plan_status', 'grace_expires_at',
             'domain_limit', 'domains_used', 'can_add_domain',
             'link_limit', 'links_used', 'can_add_link',
             'trial_expires_at', 'trial_active',
@@ -87,6 +89,7 @@ class WorkspaceSerializer(serializers.ModelSerializer):
         read_only_fields = [
             'id', 'tracker_secret', 'created_at', 'last_domain_scan_at',
             'plan', 'plan_name', 'plan_billing_mode', 'plan_expires_at',
+            'plan_status', 'grace_expires_at',
             'domain_limit', 'domains_used', 'can_add_domain',
             'link_limit', 'links_used', 'can_add_link',
             'trial_expires_at', 'trial_active',

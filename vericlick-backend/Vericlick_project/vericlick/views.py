@@ -47,7 +47,18 @@ from .services import (
 
 
 def get_user_workspace(user):
-    return Workspace.objects.filter(owner=user).first()
+    # Lazy billing lifecycle: every authenticated owner request keeps the
+    # period-expiry / grace / suspension ledger and emails current. Status
+    # itself is derived from plan_expires_at, so visitor-facing links behave
+    # correctly without this hook.
+    from .payments import maybe_run_billing_checks
+    workspace = Workspace.objects.filter(owner=user).first()
+    if workspace is not None:
+        try:
+            maybe_run_billing_checks(workspace)
+        except Exception:
+            pass  # Billing housekeeping must never break the request.
+    return workspace
 
 
 def _merge_query_params(destination, incoming_query):
@@ -134,16 +145,20 @@ def upgrade_workspace(request):
             {'errors': [{'field': 'plan_code', 'detail': 'That plan is not available.'}]},
             status=status.HTTP_400_BAD_REQUEST,
         )
-    if not plan.bachs_product_id:
-        return Response(
-            {'errors': [{'field': 'plan_code', 'detail': f'The {plan.name} plan isn\'t ready to buy yet. Try another plan or contact support.'}]},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
     billing_mode = (request.data.get('billing_mode') or 'subscription').strip()
     if billing_mode not in CheckoutIntent.BillingMode.values:
         return Response(
             {'errors': [{'field': 'billing_mode', 'detail': 'Unknown billing mode.'}]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # The right Bachs product depends on the mode: subscriptions sell the
+    # recurring product (card-only); one-time "period" purchases sell the
+    # one-time product so the customer can choose any payment method.
+    product_id = plan.bachs_ot_product_id or plan.bachs_product_id if billing_mode == 'period' else plan.bachs_product_id
+    if not product_id:
+        return Response(
+            {'errors': [{'field': 'plan_code', 'detail': f'The {plan.name} plan isn\'t ready to buy yet. Try another plan or contact support.'}]},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
@@ -205,6 +220,8 @@ def billing_history(request):
         return Response({'error': 'No workspace found'}, status=status.HTTP_404_NOT_FOUND)
 
     active = workspace.is_plan_active()
+    status = workspace.plan_status
+    has_access = active or workspace.in_grace
     next_renewal = None
     if active:
         if workspace.plan_billing_mode == Workspace.BillingMode.PERIOD:
@@ -219,12 +236,14 @@ def billing_history(request):
     events = workspace.billing_events.all()[:50]
     return Response({
         'subscription': {
+            'status': status,
             'active': active,
-            'plan': workspace.active_plan.code if active else None,
-            'planName': workspace.active_plan.name if active else None,
-            'mode': workspace.plan_billing_mode if active else None,
+            'plan': workspace.active_plan.code if has_access else None,
+            'planName': workspace.active_plan.name if has_access else None,
+            'mode': workspace.plan_billing_mode if has_access else None,
             'startedAt': workspace.plan_started_at,
-            'expiresAt': workspace.plan_expires_at if active else None,
+            'expiresAt': workspace.plan_expires_at if has_access else None,
+            'graceExpiresAt': workspace.grace_expires_at,
             'nextRenewalAt': next_renewal,
             'trialActive': workspace.trial_active,
             'trialExpiresAt': workspace.trial_expires_at,
@@ -386,6 +405,11 @@ def receive_tracker_event(request):
             {'errors': [{'field': 'token', 'detail': 'Invalid tracker token'}]},
             status=status.HTTP_400_BAD_REQUEST,
         )
+
+    if workspace.plan_status == 'suspended':
+        # Suspended workspaces get no analytics: the beacon is accepted so the
+        # visitor's page loads cleanly, but nothing is recorded or filtered.
+        return Response({'status': 'ok'})
 
     ip = request.META.get('REMOTE_ADDR', '127.0.0.1')
     forwarded = request.META.get('HTTP_X_FORWARDED_FOR')
@@ -767,6 +791,13 @@ class TrackingLinkViewSet(viewsets.ModelViewSet):
         if not workspace:
             raise PermissionError('No workspace found')
         workspace.ensure_trial_started()
+        if workspace.suspended:
+            raise ValidationError({
+                'detail': (
+                    'Your plan was suspended. Renew it to restore access and '
+                    'keep creating links.'
+                )
+            })
         if not workspace.can_add_link:
             if workspace.is_plan_active():
                 raise ValidationError({
@@ -811,6 +842,13 @@ class DomainRegistryViewSet(viewsets.ModelViewSet):
         if not workspace:
             raise ValidationError({'detail': 'No workspace found for this account.'})
         workspace.ensure_trial_started()
+        if workspace.suspended:
+            raise ValidationError({
+                'detail': (
+                    'Your plan was suspended. Renew it to restore access and '
+                    'keep adding domains.'
+                )
+            })
         if not workspace.can_add_domain:
             if workspace.is_plan_active():
                 limit = workspace.effective_domain_limit
@@ -903,6 +941,13 @@ def redirect_click(request, slug):
     user_agent = request.META.get('HTTP_USER_AGENT', '')
     workspace = link.workspace
 
+    if workspace.plan_status == 'suspended':
+        # Suspended workspaces get a pure pass-through: visitors are redirected
+        # straight to the destination with zero filtering, bot detection, or
+        # logging. This is what keeps a lapsed customer's deployed links safe
+        # for their audience while giving them no unpaid service.
+        return HttpResponseRedirect(redirect_to=_merge_query_params(link.destination_url, request.query_params))
+
     result = classify_request(link, ip, user_agent, workspace)
     location = lookup_location(ip)
 
@@ -957,7 +1002,14 @@ class IPRuleViewSet(viewsets.ModelViewSet):
         if not workspace:
             raise PermissionError('No workspace found')
         workspace.ensure_trial_started()
-        if not (workspace.is_plan_active() or workspace.trial_active):
+        if workspace.suspended:
+            raise ValidationError({
+                'detail': (
+                    'Your plan was suspended. Renew it to restore access and '
+                    'keep using IP rules.'
+                )
+            })
+        if not (workspace.has_plan_access() or workspace.trial_active):
             raise ValidationError({
                 'detail': (
                     'IP rules are a paid feature. Your free trial ended — '

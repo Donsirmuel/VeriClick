@@ -156,14 +156,18 @@ export default function SettingsPage() {
             <div>
               <h3 className="text-lg font-bold text-slate-900 mb-1">Plan &amp; billing</h3>
               <p className="text-sm text-muted leading-relaxed">
-                {workspace?.planName ?? (workspace?.trialActive ? 'Free trial' : 'Free')} —{' '}
-                {workspace?.planBillingMode === 'subscription' ? 'monthly subscription' :
-                 workspace?.planBillingMode === 'period' ? '30-day period' :
-                 workspace?.trialActive ? `trial ends ${formatDate(workspace.trialExpiresAt)}` : 'no active plan'}
-                {workspace?.planBillingMode === 'period' && workspace?.planExpiresAt
-                  ? `, renews by ${formatDate(workspace.planExpiresAt)}`
-                  : ''}
-                .
+                {workspace?.planStatus === 'suspended'
+                  ? 'Your plan is suspended. Your links still redirect visitors, but traffic is no longer recorded or filtered — renew to restore full analytics and protection.'
+                  : workspace?.planStatus === 'grace'
+                    ? `Grace period — your ${workspace?.planName ?? 'plan'} period ended, but everything keeps working until ${formatDate(workspace.graceExpiresAt)}. Renew to keep full access.`
+                    : `${workspace?.planName ?? (workspace?.trialActive ? 'Free trial' : 'Free')} — ${
+                         workspace?.planBillingMode === 'subscription' ? 'monthly subscription' :
+                         workspace?.planBillingMode === 'period' ? '30-day period' :
+                         workspace?.trialActive ? `trial ends ${formatDate(workspace.trialExpiresAt)}` : 'no active plan'
+                       }${workspace?.planBillingMode === 'period' && workspace?.planExpiresAt
+                         ? `, renews by ${formatDate(workspace.planExpiresAt)}`
+                         : ''}.`
+                }
               </p>
             </div>
           </div>

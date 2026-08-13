@@ -132,32 +132,78 @@ export default function Billing() {
         </div>
       )}
 
+      {sub?.status === 'grace' && (
+        <div className="flex items-start gap-3 bg-amber-50 border border-amber-300 rounded-2xl p-5">
+          <div>
+            <h3 className="text-sm font-bold text-amber-900 mb-1">Your plan ended — grace period active</h3>
+            <p className="text-sm text-amber-800 leading-relaxed">
+              Your <strong>{sub.planName}</strong> period ended on {formatDate(sub.expiresAt)}. Everything
+              keeps working during your 7-day grace period. Renew by {formatDate(sub.graceExpiresAt)} to keep
+              full analytics and protection — after that your links still redirect visitors to their
+              destination, but no traffic is recorded or filtered until you renew.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {sub?.status === 'suspended' && (
+        <div className="flex items-start gap-3 bg-red-50 border border-red-300 rounded-2xl p-5">
+          <div>
+            <h3 className="text-sm font-bold text-red-900 mb-1">Your plan is suspended</h3>
+            <p className="text-sm text-red-800 leading-relaxed">
+              Your tracked links still redirect visitors straight to their destination — your audience is
+              unaffected — but VeriClick is no longer recording click traffic or applying any filtering or
+              protection. Renew below to restore full analytics and protection. Your domains, links, and data
+              are all intact.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Current status */}
       <div className="grid sm:grid-cols-3 gap-4">
         <div className="bg-white border border-neutral-200 rounded-2xl p-5">
           <div className="text-xs font-bold text-muted uppercase tracking-wider mb-1">Current plan</div>
           <div className="text-xl font-bold text-slate-900">
-            {workspace?.planName ?? 'No plan'}
+            {sub?.status === 'suspended' ? 'Suspended' : (workspace?.planName ?? 'No plan')}
           </div>
           {sub?.mode && (
             <div className="text-xs text-muted mt-1">
               {sub.mode === 'subscription' ? 'Monthly subscription' : '30-day period'}
             </div>
           )}
+          {sub?.status === 'grace' && (
+            <div className="text-xs font-bold text-amber-700 mt-1">
+              Grace period — renew by {formatDate(sub.graceExpiresAt)}
+            </div>
+          )}
         </div>
         <div className="bg-white border border-neutral-200 rounded-2xl p-5">
           <div className="text-xs font-bold text-muted uppercase tracking-wider mb-1">
-            {sub?.mode === 'period' ? 'Expires' : sub?.active ? 'Next renewal' : 'Status'}
+            {sub?.status === 'suspended'
+              ? 'Status'
+              : sub?.mode === 'period'
+                ? 'Expires'
+                : sub?.active
+                  ? 'Next renewal'
+                  : 'Status'}
           </div>
           <div className="text-xl font-bold text-slate-900">
-            {sub?.mode === 'period'
-              ? formatDate(sub.expiresAt)
-              : sub?.active && sub.nextRenewalAt
-                ? formatDate(sub.nextRenewalAt)
-                : sub?.active
-                  ? 'Active'
-                  : '—'}
+            {sub?.status === 'suspended'
+              ? 'Suspended'
+              : sub?.mode === 'period'
+                ? formatDate(sub.expiresAt)
+                : sub?.active && sub.nextRenewalAt
+                  ? formatDate(sub.nextRenewalAt)
+                  : sub?.active
+                    ? 'Active'
+                    : '—'}
           </div>
+          {sub?.status === 'grace' && (
+            <div className="text-xs text-muted mt-1">
+              Grace until {formatDate(sub.graceExpiresAt)}
+            </div>
+          )}
           {sub?.mode === 'period' && sub?.active && (
             <div className="text-xs text-muted mt-1">
               {sub.expiresAt ? `Renew by ${formatDate(sub.expiresAt)}` : ''}

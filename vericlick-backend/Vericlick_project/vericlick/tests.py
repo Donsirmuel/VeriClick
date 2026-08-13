@@ -2868,3 +2868,209 @@ class AdminManualPaymentActionTests(TestCase):
         res = self._post_action(amount='abc')
         self.assertRedirects(res, self.changelist)
         self.assertEqual(BillingEvent.objects.count(), 0)
+
+
+class BillingGraceSuspensionTests(APITestCase):
+    """One-time 'period' workspaces: active -> grace (7 days, full access) ->
+    suspended (links pass through with no filtering/analytics until renewed)."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='payperiod', email='period@example.com', password='pw')
+        self.workspace = Workspace.objects.get(owner=self.user)
+        self.plan = Plan.objects.get(code='plus')
+        self.plan.bachs_product_id = 'prod_recurring'
+        self.plan.bachs_ot_product_id = 'prod_one_time'
+        self.plan.save()
+        self.workspace.plan = self.plan
+        self.workspace.plan_billing_mode = Workspace.BillingMode.PERIOD
+        self.workspace.plan_expires_at = timezone.now() + timedelta(days=5)
+        self.workspace.save()
+        self.link = TrackingLink.objects.create(
+            workspace=self.workspace, slug='grace-link', destination_url='https://example.com/landing',
+        )
+
+    def _expire(self):
+        self.workspace.plan_expires_at = timezone.now() - timedelta(days=1)
+        self.workspace.save()
+
+    def _end_grace(self):
+        self.workspace.plan_expires_at = timezone.now() - timedelta(days=8)
+        self.workspace.save()
+
+    def test_status_transitions(self):
+        self.assertEqual(self.workspace.plan_status, 'active')
+        self.assertTrue(self.workspace.has_plan_access())
+        self._expire()
+        self.assertEqual(self.workspace.plan_status, 'grace')
+        self.assertTrue(self.workspace.has_plan_access())
+        self._end_grace()
+        self.assertEqual(self.workspace.plan_status, 'suspended')
+        self.assertFalse(self.workspace.has_plan_access())
+
+    def test_grace_keeps_full_access_and_plan_limits(self):
+        self._expire()
+        self.assertEqual(self.workspace.plan_status, 'grace')
+        self.assertEqual(self.workspace.effective_domain_limit, self.plan.domain_limit)
+        self.assertTrue(self.workspace.can_add_domain)
+        self.assertTrue(self.workspace.can_add_link)
+
+    def test_suspended_drops_to_free_limits_and_cannot_add(self):
+        self._end_grace()
+        self.assertEqual(self.workspace.effective_domain_limit, 1)
+        self.assertEqual(self.workspace.effective_link_limit, 1)
+        self.assertFalse(self.workspace.can_add_domain)
+        self.assertFalse(self.workspace.can_add_link)
+
+    def test_suspended_link_passes_through_without_tracking(self):
+        # A suspended workspace's links must behave like dumb redirects: even
+        # bot user-agents, deny rules, and a safe_destination are bypassed, and
+        # nothing is logged.
+        self._end_grace()
+        self.workspace.safe_destination = 'https://safety.example.com/honeypot'
+        self.workspace.save()
+        IPRule.objects.create(
+            workspace=self.workspace, ip_or_cidr='203.0.113.5', action='deny', reason='Test block',
+        )
+        res = self.client.get(
+            f'/r/{self.link.slug}/', HTTP_USER_AGENT='Googlebot/2.1', REMOTE_ADDR='203.0.113.5',
+        )
+        self.assertEqual(res.status_code, status.HTTP_302_FOUND)
+        self.assertEqual(res.url, 'https://example.com/landing')
+        self.assertFalse(ClickLog.objects.filter(link=self.link).exists())
+        self.link.refresh_from_db()
+        self.assertEqual(self.link.total_clicks, 0)
+
+    def test_grace_link_still_tracked_normally(self):
+        self._expire()
+        res = self.client.get(f'/r/{self.link.slug}/', HTTP_USER_AGENT='Mozilla/5.0')
+        self.assertEqual(res.status_code, status.HTTP_302_FOUND)
+        self.assertEqual(res.url, 'https://example.com/landing')
+        self.assertEqual(ClickLog.objects.filter(link=self.link).count(), 1)
+
+    def test_suspended_tracker_event_not_recorded(self):
+        self._end_grace()
+        res = self.client.post(
+            '/api/tracker/event/',
+            {
+                'site_id': str(self.workspace.id),
+                'token': str(self.workspace.tracker_secret),
+                'page_url': 'https://example.com/',
+            },
+            format='json',
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(TrackerEvent.objects.filter(workspace=self.workspace).count(), 0)
+
+    @patch('vericlick.emails.send_period_expiring_email')
+    def test_expiring_check_emits_event_and_email_once(self, mock_email):
+        self.workspace.plan_expires_at = timezone.now() + timedelta(days=2)
+        self.workspace.save()
+        from vericlick.payments import maybe_run_billing_checks
+        maybe_run_billing_checks(self.workspace, force=True)
+        maybe_run_billing_checks(self.workspace, force=True)
+        self.assertEqual(
+            BillingEvent.objects.filter(workspace=self.workspace, kind=BillingEvent.Kind.PLAN_EXPIRING).count(), 1
+        )
+        self.assertEqual(mock_email.call_count, 1)
+
+    @patch('vericlick.emails.send_period_expired_email')
+    @patch('vericlick.emails.send_plan_suspended_email')
+    def test_expired_then_suspended_emits_each_once(self, mock_suspended, mock_expired):
+        self._end_grace()
+        from vericlick.payments import maybe_run_billing_checks
+        maybe_run_billing_checks(self.workspace, force=True)
+        maybe_run_billing_checks(self.workspace, force=True)
+        self.assertEqual(
+            BillingEvent.objects.filter(workspace=self.workspace, kind=BillingEvent.Kind.PLAN_EXPIRED).count(), 1
+        )
+        self.assertEqual(
+            BillingEvent.objects.filter(workspace=self.workspace, kind=BillingEvent.Kind.PLAN_SUSPENDED).count(), 1
+        )
+        self.assertEqual(mock_expired.call_count, 1)
+        self.assertEqual(mock_suspended.call_count, 1)
+
+    def test_billing_history_reflects_grace(self):
+        self.client.force_authenticate(user=self.user)
+        self._expire()
+        res = self.client.get('/api/workspace/billing-history/')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        sub = res.json()['subscription']
+        self.assertEqual(sub['status'], 'grace')
+        self.assertIsNotNone(sub['graceExpiresAt'])
+        self.assertEqual(sub['planName'], 'Plus')
+
+
+@override_settings(BACHS_API_KEY='test_api_key')
+class CheckoutProductSelectionTests(APITestCase):
+    """Option 1: subscriptions sell the recurring product (card-only); one-time
+    period purchases sell bachs_ot_product_id so every payment method is shown."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='prodsel', email='prod@example.com', password='pw')
+        self.workspace = Workspace.objects.get(owner=self.user)
+        self.plan = Plan.objects.get(code='plus')
+        self.plan.bachs_product_id = 'prod_recurring'
+        self.plan.bachs_ot_product_id = 'prod_one_time'
+        self.plan.save()
+
+    @patch('vericlick.payments._request')
+    def test_period_uses_one_time_product_and_methods(self, mock_request):
+        mock_request.return_value = {
+            'checkout_id': 'chk_1', 'checkout_url': 'https://checkout.bachs.io/c/tok', 'expires_at': 'x',
+        }
+        from vericlick.payments import create_checkout_session
+        from vericlick.models import CheckoutIntent
+        intent = CheckoutIntent.objects.create(
+            workspace=self.workspace, plan=self.plan, user=self.user,
+            billing_mode=CheckoutIntent.BillingMode.PERIOD,
+        )
+        create_checkout_session(intent, self.plan, 'a@b.com', 'a', payment_methods=['crypto'])
+        payload = mock_request.call_args.kwargs['payload']
+        self.assertEqual(payload['product_cart'][0]['product_id'], 'prod_one_time')
+        self.assertEqual(payload['allowed_payment_method_types'], ['crypto'])
+
+    @patch('vericlick.payments._request')
+    def test_subscription_uses_recurring_product_card_only(self, mock_request):
+        mock_request.return_value = {
+            'checkout_id': 'chk_2', 'checkout_url': 'https://checkout.bachs.io/c/tok2', 'expires_at': 'x',
+        }
+        from vericlick.payments import create_checkout_session
+        from vericlick.models import CheckoutIntent
+        intent = CheckoutIntent.objects.create(
+            workspace=self.workspace, plan=self.plan, user=self.user,
+            billing_mode=CheckoutIntent.BillingMode.SUBSCRIPTION,
+        )
+        create_checkout_session(intent, self.plan, 'a@b.com', 'a')
+        payload = mock_request.call_args.kwargs['payload']
+        self.assertEqual(payload['product_cart'][0]['product_id'], 'prod_recurring')
+        self.assertEqual(payload['allowed_payment_method_types'], ['card'])
+
+    @patch('vericlick.payments._request')
+    def test_period_falls_back_to_recurring_product_when_no_one_time_set(self, mock_request):
+        mock_request.return_value = {
+            'checkout_id': 'chk_3', 'checkout_url': 'https://checkout.bachs.io/c/tok3', 'expires_at': 'x',
+        }
+        self.plan.bachs_ot_product_id = ''
+        self.plan.save()
+        from vericlick.payments import create_checkout_session
+        from vericlick.models import CheckoutIntent
+        intent = CheckoutIntent.objects.create(
+            workspace=self.workspace, plan=self.plan, user=self.user,
+            billing_mode=CheckoutIntent.BillingMode.PERIOD,
+        )
+        create_checkout_session(intent, self.plan, 'a@b.com', 'a')
+        payload = mock_request.call_args.kwargs['payload']
+        self.assertEqual(payload['product_cart'][0]['product_id'], 'prod_recurring')
+
+    @patch('vericlick.payments.create_checkout_session')
+    def test_period_upgrade_allowed_with_only_one_time_product(self, mock_create):
+        mock_create.return_value = {
+            'checkout_id': 'chk_4', 'checkout_url': 'https://checkout.bachs.io/c/tok4', 'expires_at': 'x',
+        }
+        self.client.force_authenticate(user=self.user)
+        Plan.objects.filter(code='plus').update(bachs_product_id='', bachs_ot_product_id='prod_one_time')
+        res = self.client.post(
+            '/api/upgrade/', {'plan_code': 'plus', 'billing_mode': 'period'}, format='json'
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.json()['checkoutUrl'], 'https://checkout.bachs.io/c/tok4')
