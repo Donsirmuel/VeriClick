@@ -9,8 +9,14 @@
 #   ./deploy.sh logs      tail logs (optionally: ./deploy.sh logs backend)
 #   ./deploy.sh status    show container status
 #   ./deploy.sh backup    dump Postgres + Caddy certs into backups/
-#   ./deploy.sh update    git pull, rebuild, restart
+#   ./deploy.sh update    safe update: backup, pull, check, migrate, swap, health-check
+#   ./deploy.sh rollback  swap back to the previously-running images (from ./deploy.sh update)
 #   ./deploy.sh admin     create a Django superuser
+#
+# update order matters: the DB is dumped before anything changes, the NEW
+# backend image is built and its migrations are applied while the OLD stack
+# keeps serving, and only then are containers swapped. If the new stack fails
+# its health check, `./deploy.sh rollback` puts the previous images back.
 #
 set -euo pipefail
 
@@ -109,9 +115,55 @@ cmd_backup() {
 cmd_update() {
   require_env
   require_docker
+
+  echo "==> Pulling latest code..."
   git pull --ff-only
-  docker compose up -d --build
+
+  echo "==> Backing up the database + Caddy certs before any change..."
+  cmd_backup
+
+  echo "==> Building the new images (the running stack keeps serving)..."
+  docker compose build backend frontend
+
+  echo "==> System checks with the NEW backend against the live DB..."
+  if ! docker compose run --rm --no-deps backend python manage.py check 2>&1; then
+    echo
+    echo "ERROR: Django system check failed — nothing was changed. Fix the code and retry."
+    return 1
+  fi
+
+  echo "==> Migration plan (what will be applied):"
+  docker compose run --rm --no-deps backend python manage.py migrate --plan || true
+
+  echo "==> Applying migrations with the NEW code while the OLD app still serves..."
+  docker compose run --rm --no-deps backend python manage.py migrate --noinput
+
+  echo "==> Tagging the current images so 'deploy.sh rollback' can restore them..."
+  docker tag vericlick-backend vericlick-backend:previous || true
+  docker tag vericlick-frontend vericlick-frontend:previous || true
+
+  echo "==> Swapping the stack to the new images..."
+  docker compose up -d --no-build
   wait_healthy || true
+  echo
+  echo "Update complete. If something is wrong: ./deploy.sh rollback"
+  echo "DB backup (if you need to restore data): latest file in backups/"
+}
+
+cmd_rollback() {
+  require_docker
+  if docker image inspect vericlick-backend:previous >/dev/null 2>&1; then
+    docker tag vericlick-backend:previous vericlick-backend:latest
+  fi
+  if docker image inspect vericlick-frontend:previous >/dev/null 2>&1; then
+    docker tag vericlick-frontend:previous vericlick-frontend:latest
+  fi
+  echo "==> Restarting the stack from the previous images..."
+  docker compose up -d --no-build
+  wait_healthy || true
+  echo
+  echo "Rollback done. If the DB schema itself needs reverting, restore the"
+  echo "latest dump in backups/ with pg_restore (ask before doing this)."
 }
 
 cmd_admin() {
@@ -127,6 +179,7 @@ case "${1:-up}" in
   status|ps)    cmd_status ;;
   backup)       cmd_backup ;;
   update)       cmd_update ;;
+  rollback)     cmd_rollback ;;
   admin)        cmd_admin ;;
   *)            echo "Unknown command: $1"; grep -E '^#   \./' "$0" | head -20 ;;
 esac

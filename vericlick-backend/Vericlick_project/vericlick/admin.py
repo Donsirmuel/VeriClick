@@ -1,10 +1,13 @@
 from django.contrib import admin
+from django.http import HttpResponseRedirect
+from django.shortcuts import render
+from django.urls import reverse
 from django.utils import timezone
 
 from .models import (
     Workspace, DomainRegistry, TrackingLink, ClickLog, IPRule,
     TrackerEvent, Plan, DiscountCode, SiteConfig, CheckoutIntent,
-    BillingEvent,
+    BillingEvent, PLAN_PERIOD_DAYS,
 )
 
 
@@ -24,21 +27,106 @@ class TrackingLinkInline(admin.TabularInline):
 
 @admin.register(Workspace)
 class WorkspaceAdmin(admin.ModelAdmin):
-    list_display = ('name', 'owner', 'plan', 'domain_count', 'tracker_secret', 'created_at')
+    list_display = ('name', 'owner', 'plan', 'plan_billing_mode', 'plan_expires_at', 'domain_count', 'tracker_secret', 'created_at')
     # `plan` is editable inline from the list page so an admin can upgrade a
     # workspace (e.g. hand testers a higher tier) without going through checkout.
     list_editable = ('plan',)
     list_select_related = ('owner', 'plan')
-    list_filter = ('plan', 'created_at')
+    list_filter = ('plan', 'plan_billing_mode', 'created_at')
     search_fields = ('name', 'owner__username', 'owner__email')
-    readonly_fields = ('id', 'tracker_secret', 'created_at', 'last_domain_scan_at', 'plan_started_at')
+    readonly_fields = ('id', 'tracker_secret', 'created_at', 'last_domain_scan_at', 'plan_started_at', 'plan_billing_mode', 'plan_expires_at')
     inlines = [DomainRegistryInline, TrackingLinkInline]
     autocomplete_fields = ['owner']
     date_hierarchy = 'created_at'
+    actions = ['record_manual_payment']
 
     @admin.display(description='Domains (verified)')
     def domain_count(self, obj):
         return obj.domains_in_use()
+
+    @admin.action(description='Record a manual payment…')
+    def record_manual_payment(self, request, queryset):
+        # Logs a payment that came in outside the normal API checkout (e.g. a
+        # Bachs payment link or an offline transfer) as a BillingEvent so it
+        # shows up in the customer's payment history and in this admin. The
+        # workspace's plan is only touched when the "activate plan" checkbox is
+        # ticked; otherwise this is purely a ledger entry.
+        from decimal import Decimal, InvalidOperation
+        from datetime import timedelta
+
+        changelist = reverse('admin:vericlick_workspace_changelist')
+        if 'apply' in request.POST:
+            kind = request.POST.get('kind') or BillingEvent.Kind.PLAN_PERIOD_PAID
+            if kind not in BillingEvent.Kind.values:
+                self.message_user(request, 'Invalid payment kind.', level='error')
+                return HttpResponseRedirect(changelist)
+
+            plan = None
+            plan_id = request.POST.get('plan') or ''
+            if plan_id:
+                plan = Plan.objects.filter(pk=plan_id, is_active=True).first()
+
+            amount = None
+            raw_amount = request.POST.get('amount') or ''
+            if raw_amount:
+                try:
+                    amount = Decimal(raw_amount)
+                except InvalidOperation:
+                    self.message_user(request, 'Amount must be a number.', level='error')
+                    return HttpResponseRedirect(changelist)
+
+            currency = (request.POST.get('currency') or 'USD').strip().upper() or 'USD'
+            charge_id = (request.POST.get('charge_id') or '').strip()
+            note = (request.POST.get('note') or '').strip()
+            activate = request.POST.get('activate') == 'on'
+            now = timezone.now()
+
+            recorded = 0
+            for ws in queryset:
+                ws_plan = plan or ws.plan
+                if ws_plan is None:
+                    continue
+                BillingEvent.objects.create(
+                    workspace=ws,
+                    kind=kind,
+                    plan=ws_plan,
+                    plan_name=ws_plan.name,
+                    amount=amount if amount is not None else ws_plan.monthly_price,
+                    currency=currency,
+                    charge_id=charge_id,
+                    checkout_id='',
+                    note=note or 'Recorded manually in the admin',
+                    occurred_at=now,
+                )
+                if activate:
+                    ws.plan = ws_plan
+                    if kind == BillingEvent.Kind.PLAN_PERIOD_PAID:
+                        ws.plan_billing_mode = Workspace.BillingMode.PERIOD
+                        base = ws.plan_expires_at or now
+                        ws.plan_expires_at = base + timedelta(days=PLAN_PERIOD_DAYS)
+                    else:
+                        ws.plan_billing_mode = Workspace.BillingMode.SUBSCRIPTION
+                        ws.plan_expires_at = None
+                    ws.save()
+                recorded += 1
+
+            self.message_user(
+                request,
+                f'Recorded {recorded} manual payment(s).'
+                + (' Plan activated for the workspace(s).' if activate
+                   else ' Workspace plan unchanged — set it via the "plan" column if needed.'),
+            )
+            return HttpResponseRedirect(changelist)
+
+        context = {
+            'queryset': queryset,
+            'plans': Plan.objects.filter(is_active=True),
+            'kinds': BillingEvent.Kind.choices,
+            'default_kind': BillingEvent.Kind.PLAN_PERIOD_PAID,
+            'opts': self.model._meta,
+            'action_checkbox_name': admin.helpers.ACTION_CHECKBOX_NAME,
+        }
+        return render(request, 'admin/record_manual_payment.html', context)
 
 
 @admin.register(DomainRegistry)
@@ -154,12 +242,30 @@ class CheckoutIntentAdmin(admin.ModelAdmin):
 
 @admin.register(BillingEvent)
 class BillingEventAdmin(admin.ModelAdmin):
-    list_display = ('workspace', 'kind', 'plan_name', 'amount', 'currency', 'charge_id', 'occurred_at')
+    # The money ledger mirroring Bachs. Read-mostly, but events can be added
+    # for payments that arrive outside the API checkout (payment links, offline
+    # transfers) so every payment the business takes is visible here and in the
+    # customer's history.
+    list_display = ('workspace', 'kind', 'plan_name', 'amount', 'currency', 'charge_id', 'note', 'occurred_at')
     list_filter = ('kind', 'currency', 'occurred_at')
-    search_fields = ('workspace__name', 'charge_id', 'checkout_id')
-    readonly_fields = ('id', 'occurred_at')
+    search_fields = ('workspace__name', 'charge_id', 'checkout_id', 'plan_name')
+    readonly_fields = ('id',)
     autocomplete_fields = ['workspace', 'plan']
     date_hierarchy = 'occurred_at'
+    fields = ('workspace', 'kind', 'plan', 'plan_name', 'amount', 'currency', 'charge_id', 'checkout_id', 'note', 'occurred_at')
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        if obj is None:
+            form.base_fields['occurred_at'].initial = timezone.now()
+        return form
+
+    def save_model(self, request, obj, form, change):
+        if obj.plan and not obj.plan_name:
+            obj.plan_name = obj.plan.name
+        if not obj.occurred_at:
+            obj.occurred_at = timezone.now()
+        super().save_model(request, obj, form, change)
 
 
 @admin.register(SiteConfig)

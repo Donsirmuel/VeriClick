@@ -1,0 +1,75 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<form method="post">
+  {% csrf_token %}
+  <input type="hidden" name="action" value="record_manual_payment">
+  {% for ws in queryset %}
+    <input type="hidden" name="{{ action_checkbox_name }}" value="{{ ws.pk }}">
+  {% endfor %}
+
+  <h2>Record a manual payment</h2>
+  <p>Logs a payment that came in outside the normal checkout (a Bachs payment link or an offline transfer) into the payment history of:</p>
+  <ul style="margin: 0 0 1em 1.5em;">
+    {% for ws in queryset %}
+      <li><strong>{{ ws.name }}</strong> — current plan: {{ ws.plan.name|default:"none" }}</li>
+    {% endfor %}
+  </ul>
+
+  <table style="max-width: 640px;">
+    <tr>
+      <th><label for="id-kind">Kind</label></th>
+      <td>
+        <select name="kind" id="id-kind">
+          {% for value, label in kinds %}
+            <option value="{{ value }}" {% if value == default_kind %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </td>
+    </tr>
+    <tr>
+      <th><label for="id-plan">Plan</label></th>
+      <td>
+        <select name="plan" id="id-plan">
+          <option value="">Workspace's current plan</option>
+          {% for plan in plans %}
+            <option value="{{ plan.pk }}">{{ plan.name }} (${{ plan.monthly_price }})</option>
+          {% endfor %}
+        </select>
+      </td>
+    </tr>
+    <tr>
+      <th><label for="id-amount">Amount</label></th>
+      <td>
+        <input type="text" name="amount" id="id-amount" placeholder="e.g. 25.00 (blank = plan price)">
+      </td>
+    </tr>
+    <tr>
+      <th><label for="id-currency">Currency</label></th>
+      <td><input type="text" name="currency" id="id-currency" value="USD" size="6"></td>
+    </tr>
+    <tr>
+      <th><label for="id-charge_id">Charge / reference ID</label></th>
+      <td><input type="text" name="charge_id" id="id-charge_id" size="40" placeholder="optional — e.g. chr_... or pl_..."></td>
+    </tr>
+    <tr>
+      <th><label for="id-note">Note</label></th>
+      <td><input type="text" name="note" id="id-note" size="40" placeholder="optional — e.g. paid via payment link"></td>
+    </tr>
+    <tr>
+      <th></th>
+      <td>
+        <label>
+          <input type="checkbox" name="activate">
+          <strong>Activate the plan for this payment</strong>
+          (grants the plan; period payments extend by 30 days)
+        </label>
+      </td>
+    </tr>
+  </table>
+
+  <div style="margin-top: 1em;">
+    <input type="submit" name="apply" value="Record payment" class="default">
+    <a href="{% url 'admin:vericlick_workspace_changelist' %}" class="button cancel-link">Cancel</a>
+  </div>
+</form>
+{% endblock %}

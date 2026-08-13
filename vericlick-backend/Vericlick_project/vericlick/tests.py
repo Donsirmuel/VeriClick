@@ -7,12 +7,15 @@ from datetime import timedelta
 from unittest.mock import patch
 from django.test import TestCase, override_settings
 from django.contrib.auth.models import User
+from django.contrib import admin
+from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APITestCase, APIClient
 from rest_framework import status
+from decimal import Decimal
 from .models import (
     Workspace, DomainRegistry, TrackingLink, ClickLog, IPRule, TrackerEvent,
-    Plan, DiscountCode, SiteConfig, CheckoutIntent,
+    Plan, DiscountCode, SiteConfig, CheckoutIntent, BillingEvent,
 )
 from .utils import snake_to_camel, camel_to_snake, transform_keys
 from . import services as _services
@@ -2803,3 +2806,65 @@ class PasswordResetEndpointTests(APITestCase):
         User.objects.create_user(username='resetuser2', email=self.shared_email, password='testpass123')
         res = self.client.post('/api/auth/password-reset/', {'email': self.shared_email}, format='json')
         self.assertEqual(res.status_code, status.HTTP_200_OK)
+
+
+class AdminManualPaymentActionTests(TestCase):
+    """The 'Record a manual payment…' admin action must log a BillingEvent for
+    payments received outside the API checkout (payment links, offline
+    transfers) and optionally activate the plan."""
+
+    def setUp(self):
+        self.plan = Plan.objects.create(
+            code='manual-test-pro', name='Pro', monthly_price='25.00', domain_limit=20, is_active=True,
+        )
+        self.owner = User.objects.create_user(username='owner', email='owner@example.com', password='pw')
+        self.ws = Workspace.objects.create(name='Acme', owner=self.owner)
+        self.staff = User.objects.create_superuser(username='admin', email='admin@example.com', password='pw')
+        self.client.force_login(self.staff)
+        self.changelist = reverse('admin:vericlick_workspace_changelist')
+
+    def _post_action(self, **overrides):
+        data = {
+            'action': 'record_manual_payment',
+            'apply': 'Record payment',
+            admin.helpers.ACTION_CHECKBOX_NAME: str(self.ws.pk),
+            'kind': 'plan_period_paid',
+            'plan': str(self.plan.pk),
+            'amount': '25.00',
+            'currency': 'USD',
+            'charge_id': 'chr_manual_1',
+            'note': 'paid via payment link',
+            'activate': 'on',
+        }
+        data.update(overrides)
+        return self.client.post(self.changelist, data)
+
+    def test_records_event_and_activates_period_plan(self):
+        res = self._post_action()
+        self.assertRedirects(res, self.changelist)
+        evt = BillingEvent.objects.get(workspace=self.ws)
+        self.assertEqual(evt.kind, BillingEvent.Kind.PLAN_PERIOD_PAID)
+        self.assertEqual(evt.plan_name, 'Pro')
+        self.assertEqual(evt.amount, Decimal('25.00'))
+        self.assertEqual(evt.charge_id, 'chr_manual_1')
+        self.ws.refresh_from_db()
+        self.assertEqual(self.ws.plan, self.plan)
+        self.assertEqual(self.ws.plan_billing_mode, Workspace.BillingMode.PERIOD)
+        self.assertIsNotNone(self.ws.plan_expires_at)
+
+    def test_without_activate_only_logs_event(self):
+        res = self._post_action(activate='')
+        self.assertRedirects(res, self.changelist)
+        self.assertEqual(BillingEvent.objects.count(), 1)
+        self.ws.refresh_from_db()
+        self.assertIsNone(self.ws.plan)
+
+    def test_invalid_kind_rejected(self):
+        res = self._post_action(kind='not_a_kind')
+        self.assertRedirects(res, self.changelist)
+        self.assertEqual(BillingEvent.objects.count(), 0)
+
+    def test_invalid_amount_rejected(self):
+        res = self._post_action(amount='abc')
+        self.assertRedirects(res, self.changelist)
+        self.assertEqual(BillingEvent.objects.count(), 0)
