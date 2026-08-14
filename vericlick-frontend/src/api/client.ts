@@ -84,19 +84,30 @@ apiClient.interceptors.response.use(
           )
           localStorage.setItem('token', data.access)
           isRefreshing = false
-          pendingRequests.forEach(cb => cb(data.access))
+          const queued = pendingRequests
           pendingRequests = []
+          queued.forEach(cb => cb(data.access))
           config.headers.Authorization = `Bearer ${data.access}`
           return apiClient(config)
         } catch {
+          // The session is gone for everyone queued behind this refresh: reject
+          // each in-flight request so no screen hangs on a forever spinner. The
+          // request that hit the 401 falls through to the sign-out redirect
+          // below.
           isRefreshing = false
+          const queued = pendingRequests
           pendingRequests = []
+          queued.forEach(cb => cb(null))
         }
       } else if (refresh && isRefreshing) {
-        return new Promise((resolve) => {
-          pendingRequests.push((token: string) => {
-            config.headers.Authorization = `Bearer ${token}`
-            resolve(apiClient(config))
+        return new Promise((resolve, reject) => {
+          pendingRequests.push((token: string | null) => {
+            if (token) {
+              config.headers.Authorization = `Bearer ${token}`
+              resolve(apiClient(config))
+            } else {
+              reject(error)
+            }
           })
         })
       }
@@ -112,4 +123,4 @@ apiClient.interceptors.response.use(
 )
 
 let isRefreshing = false
-let pendingRequests: Array<(token: string) => void> = []
+let pendingRequests: Array<(token: string | null) => void> = []
