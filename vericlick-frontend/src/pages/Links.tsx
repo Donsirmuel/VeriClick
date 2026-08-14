@@ -16,6 +16,7 @@ import { fetchWorkspace } from '@/api/workspace'
 import { FreeTierBanner } from '@/components/FreeTierBanner'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { ReadMore } from '@/components/ui/ReadMore'
 import { TableSkeleton } from '@/components/ui/TableSkeleton'
 import type { TrackingLink, LinkCreateInput } from '@/types'
 
@@ -113,9 +114,9 @@ export default function LinksPage() {
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Tracking Links</h1>
-          <p className="text-sm text-muted mt-1">
+          <ReadMore className="max-w-3xl mt-1" lines={2}>
             A <strong>tracked link</strong> is the URL you share — VeriClick checks every visitor before sending them to the <strong>destination</strong> (the real page behind it). Each link has a short slug like <code className="text-xs bg-neutral-100 px-1.5 py-0.5 rounded">abc123</code>.
-          </p>
+          </ReadMore>
         </div>
         <button
           onClick={() => setShowCreateModal(true)}

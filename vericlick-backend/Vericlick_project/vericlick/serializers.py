@@ -186,6 +186,14 @@ class DomainRegistrySerializer(serializers.ModelSerializer):
             'verification_token', 'verification_record', 'last_checked',
             'health_detail', 'links_count', 'ready', 'dns_setup', 'created_at',
         ]
+        extra_kwargs = {
+            # Drop the auto UniqueValidator: the domain column is globally
+            # unique at the DB level, but the view must decide whether a match
+            # is an error (active domain) or a resurrection (previously-removed
+            # domain of the same workspace). Doing that inside perform_create
+            # requires the request to get here in the first place.
+            'domain': {'validators': []},
+        }
 
     def get_dns_setup(self, obj):
         from django.conf import settings as django_settings

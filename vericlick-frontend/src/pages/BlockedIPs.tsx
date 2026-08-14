@@ -9,6 +9,7 @@ import toast from 'react-hot-toast'
 import { fetchBlockedIps, whitelistIp } from '@/api/ip_rules'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { ReadMore } from '@/components/ui/ReadMore'
 import { TableSkeleton } from '@/components/ui/TableSkeleton'
 import type { BlockedIPEntry } from '@/types'
 
@@ -51,11 +52,11 @@ export default function BlockedIPsPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Blocked IPs</h1>
-          <p className="text-sm text-muted mt-1 max-w-2xl">
+          <ReadMore className="max-w-2xl mt-1" lines={2}>
             Recently blocked traffic for your links. These requests were sent to your safe
             destination instead of your real page. If any are actually humans, whitelist the IP to
             let it through every time.
-          </p>
+          </ReadMore>
         </div>
       </div>
 

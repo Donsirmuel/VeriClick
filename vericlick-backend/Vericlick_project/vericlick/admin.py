@@ -135,12 +135,37 @@ class WorkspaceAdmin(admin.ModelAdmin):
 
 @admin.register(DomainRegistry)
 class DomainRegistryAdmin(admin.ModelAdmin):
-    list_display = ('domain', 'workspace', 'health_status', 'points_to_server', 'verified', 'removed_at', 'last_checked', 'created_at')
+    list_display = ('domain', 'workspace', 'health_status', 'points_to_server', 'verified', 'status_badge', 'last_checked', 'created_at')
     list_filter = ('health_status', 'points_to_server', 'verified', 'removed_at', 'last_checked')
     search_fields = ('domain', 'workspace__name', 'workspace__owner__username')
     readonly_fields = ('id', 'verification_token', 'verification_record', 'health_detail_preview', 'created_at', 'last_checked', 'removed_at')
-    actions = ['recheck_domains']
+    actions = ['recheck_domains', 'restore_domains']
     date_hierarchy = 'created_at'
+
+    @admin.display(description='Status')
+    def status_badge(self, obj):
+        if obj.removed_at is not None:
+            return 'REMOVED'
+        if obj.verified and obj.points_to_server:
+            return 'READY'
+        if obj.verified:
+            return 'Authorized'
+        return 'Not verified'
+
+    @admin.action(description='Restore selected removed domains (visible to the owner again)')
+    def restore_domains(self, request, queryset):
+        restored = 0
+        for domain in queryset.filter(removed_at__isnull=False):
+            domain.links.filter(removed_at__isnull=False).update(removed_at=None)
+            domain.removed_at = None
+            domain.verified = True
+            domain.save(update_fields=['removed_at', 'verified'])
+            restored += 1
+        self.message_user(
+            request,
+            f'Restored {restored} domain(s). They are visible in the owner\'s app again '
+            f'and authorized. Run "Re-check health" to refresh DNS status.',
+        )
 
     @admin.action(description='Re-check health (full DNS diagnosis) for selected domains')
     def recheck_domains(self, request, queryset):

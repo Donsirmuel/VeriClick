@@ -10,6 +10,7 @@ import { FreeTierBanner } from '@/components/FreeTierBanner'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { HelpTooltip } from '@/components/ui/HelpTooltip'
+import { ReadMore } from '@/components/ui/ReadMore'
 import { TableSkeleton } from '@/components/ui/TableSkeleton'
 import { CountryFlag, countryName, COMMON_COUNTRIES } from '@/components/shared/CountryFlag'
 import type { IPRule, IPRuleAction, CountryRule, CountryRuleAction, DeviceClass, DevicePolicy } from '@/types'
@@ -62,12 +63,12 @@ export default function TrafficRulesPage() {
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Traffic Rules</h1>
-          <p className="text-sm text-muted mt-1 max-w-3xl">
+          <ReadMore className="max-w-3xl mt-1" lines={2}>
             Set the audience rules VeriClick applies to every tracked link: which IPs,
             countries, and devices can get through — and which get diverted to your safe
             destination. Rules are checked in this order: IP allow → IP deny → country →
             device/OS. An allow rule for an IP or country always wins.
-          </p>
+          </ReadMore>
         </div>
       </div>
 

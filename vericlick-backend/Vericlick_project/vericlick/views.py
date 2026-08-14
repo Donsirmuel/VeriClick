@@ -1046,6 +1046,31 @@ class DomainRegistryViewSet(viewsets.ModelViewSet):
             links_count=Count('links', filter=Q(links__removed_at__isnull=True))
         ).order_by('-created_at')
 
+    def update(self, request, *args, **kwargs):
+        # Renaming a domain onto a name that exists anywhere (another workspace
+        # or our own removed row) would hit the global unique constraint and
+        # surface as a 500. Fail with a friendly message instead. Resurrection
+        # on rename is intentionally NOT offered: the add flow covers that.
+        instance = self.get_object()
+        new_name = str(request.data.get('domain') or '').strip()
+        if new_name:
+            dup = (
+                DomainRegistry.objects.exclude(pk=instance.pk)
+                .filter(domain__iexact=new_name)
+                .first()
+            )
+            if dup is not None:
+                raise ValidationError({
+                    'detail': 'That domain is already registered by this or another account.'
+                })
+        partial = kwargs.pop('partial', False)
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        if getattr(instance, '_prefetched_objects_cache', None):
+            instance._prefetched_objects_cache = {}
+        return Response(serializer.data)
+
     def perform_create(self, serializer):
         workspace = get_user_workspace(self.request.user)
         if not workspace:
@@ -1058,29 +1083,66 @@ class DomainRegistryViewSet(viewsets.ModelViewSet):
                     'keep adding domains.'
                 )
             })
-        if not workspace.can_add_domain:
-            if workspace.is_plan_active():
-                limit = workspace.effective_domain_limit
+
+        domain_name = (serializer.validated_data.get('domain') or '').strip()
+        existing = (
+            DomainRegistry.objects.select_related('workspace')
+            .filter(domain__iexact=domain_name)
+            .first()
+        )
+        if existing is not None:
+            if existing.workspace_id != workspace.id:
                 raise ValidationError({
                     'detail': (
-                        f'You have reached the {limit}-domain limit for your plan. '
-                        'Remove a domain or upgrade to a higher plan to add more.'
+                        'This domain is already registered by another account. '
+                        'Register a different domain.'
                     )
                 })
-            raise ValidationError({
-                'detail': (
-                    'Your free trial ended. Upgrade to any plan to keep adding domains.'
-                    if not workspace.trial_active
-                    else 'Your free trial includes 1 domain. Upgrade to add more.'
-                )
-            })
-        domain = serializer.save(workspace=workspace)
-        # Instant authorization (v2.0.0): registering the domain from the
-        # account is proof enough of ownership — no TXT record needed. The
-        # domain is authorized the moment it exists, so links can go live as
-        # soon as DNS points at us.
-        domain.verified = True
-        domain.save(update_fields=['verified'])
+            if existing.removed_at is None:
+                raise ValidationError({
+                    'detail': (
+                        f'"{existing.domain}" is already in your Domain Registry. '
+                        'Open the Domains page to manage it.'
+                    )
+                })
+            # Resurrect a previously-removed domain: clear the soft-delete, bring
+            # its links back, and authorize it instantly (v2.0.0). This keeps the
+            # "remove and re-add freely" promise that the unique domain column
+            # would otherwise block. Re-adding a removed domain does not consume
+            # a new plan slot — the row already existed — so the limit checks
+            # below do not apply to it.
+            existing.links.filter(removed_at__isnull=False).update(removed_at=None)
+            existing.removed_at = None
+            existing.verified = True
+            existing.save(update_fields=['removed_at', 'verified'])
+            domain = existing
+            # Point the serializer at the restored row so the 201 response
+            # reflects real state (health status, links count, ...).
+            serializer.instance = domain
+        else:
+            if not workspace.can_add_domain:
+                if workspace.is_plan_active():
+                    limit = workspace.effective_domain_limit
+                    raise ValidationError({
+                        'detail': (
+                            f'You have reached the {limit}-domain limit for your plan. '
+                            'Remove a domain or upgrade to a higher plan to add more.'
+                        )
+                    })
+                raise ValidationError({
+                    'detail': (
+                        'Your free trial ended. Upgrade to any plan to keep adding domains.'
+                        if not workspace.trial_active
+                        else 'Your free trial includes 1 domain. Upgrade to add more.'
+                    )
+                })
+            domain = serializer.save(workspace=workspace)
+            # Instant authorization (v2.0.0): registering the domain from the
+            # account is proof enough of ownership — no TXT record needed. The
+            # domain is authorized the moment it exists, so links can go live as
+            # soon as DNS points at us.
+            domain.verified = True
+            domain.save(update_fields=['verified'])
         try:
             domain.run_health_check()
         except Exception:

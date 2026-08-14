@@ -148,8 +148,8 @@ export function DnsSetupDialog({ domain, onClose, onRechecked }: DnsSetupDialogP
                 </div>
                 {!pointed && record && (
                   <div className="p-4 space-y-3">
-                    <div className="rounded-xl border border-neutral-200">
-                      <table className="w-full text-sm table-fixed">
+                    <div className="rounded-xl border border-neutral-200 overflow-x-auto">
+                      <table className="w-full text-sm table-fixed min-w-[420px]">
                         <tbody>
                           <tr className="border-b border-neutral-200">
                             <th className="text-left text-xs font-bold text-muted uppercase tracking-wider bg-neutral-50 px-4 py-2.5 w-24">Type</th>

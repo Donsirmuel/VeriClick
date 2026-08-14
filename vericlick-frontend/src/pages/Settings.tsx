@@ -13,6 +13,13 @@ import { formatDate } from '@/lib/utils'
 
 const API_BASE = (apiClient.defaults.baseURL ?? 'http://localhost:8000/api').replace(/\/$/, '')
 
+const SETTINGS_SECTIONS = [
+  { id: 'workspace', label: 'Workspace', icon: Globe02Icon },
+  { id: 'billing', label: 'Plan & billing', icon: CreditCardIcon },
+  { id: 'site-script', label: 'Site script', icon: CodeIcon },
+  { id: 'account', label: 'Account', icon: UserIcon },
+]
+
 export default function SettingsPage() {
   const queryClient = useQueryClient()
 
@@ -91,15 +98,34 @@ export default function SettingsPage() {
 
   return (
     <div>
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Settings</h1>
           <p className="text-sm text-muted mt-1">Manage your workspace preferences and account.</p>
         </div>
       </div>
 
+      <div className="sticky top-0 z-20 -mx-4 sm:-mx-8 px-4 sm:px-8 py-3 bg-background/95 backdrop-blur mb-6 overflow-x-auto">
+        <nav className="flex items-center gap-2 min-w-max">
+          {SETTINGS_SECTIONS.map(({ id, label, icon }) => (
+            <a
+              key={id}
+              href={`#${id}`}
+              onClick={(e) => {
+                e.preventDefault()
+                document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+              }}
+              className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-full bg-white border border-neutral-200 text-slate-700 hover:border-neutral-400 transition-colors"
+            >
+              <HugeiconsIcon icon={icon} className="w-3.5 h-3.5" />
+              {label}
+            </a>
+          ))}
+        </nav>
+      </div>
+
       <div className="grid gap-6 max-w-3xl">
-        <section className="bg-white rounded-2xl border border-border p-6 sm:p-8 shadow-sm space-y-6">
+        <section id="workspace" className="scroll-mt-32 bg-white rounded-2xl border border-border p-6 sm:p-8 shadow-sm space-y-6">
           <div className="flex items-start gap-3">
             <div className="w-10 h-10 rounded-xl bg-neutral-100 flex items-center justify-center shrink-0">
               <HugeiconsIcon icon={Globe02Icon} className="w-5 h-5 text-slate-700" />
@@ -148,7 +174,7 @@ export default function SettingsPage() {
           </div>
         </section>
 
-        <section className="bg-white rounded-2xl border border-border p-6 sm:p-8 shadow-sm space-y-6">
+        <section id="billing" className="scroll-mt-32 bg-white rounded-2xl border border-border p-6 sm:p-8 shadow-sm space-y-6">
           <div className="flex items-start gap-3">
             <div className="w-10 h-10 rounded-xl bg-neutral-100 flex items-center justify-center shrink-0">
               <HugeiconsIcon icon={CreditCardIcon} className="w-5 h-5 text-slate-700" />
@@ -181,7 +207,7 @@ export default function SettingsPage() {
           </div>
         </section>
 
-        <section className="bg-white rounded-2xl border border-border p-6 sm:p-8 shadow-sm space-y-6">
+        <section id="site-script" className="scroll-mt-32 bg-white rounded-2xl border border-border p-6 sm:p-8 shadow-sm space-y-6">
           <div className="flex items-start gap-3">
             <div className="w-10 h-10 rounded-xl bg-neutral-100 flex items-center justify-center shrink-0">
               <HugeiconsIcon icon={CodeIcon} className="w-5 h-5 text-slate-700" />
@@ -245,7 +271,7 @@ export default function SettingsPage() {
           </div>
         </section>
 
-        <section className="bg-white rounded-2xl border border-border p-6 sm:p-8 shadow-sm space-y-6">
+        <section id="account" className="scroll-mt-32 bg-white rounded-2xl border border-border p-6 sm:p-8 shadow-sm space-y-6">
           <div className="flex items-start gap-3">
             <div className="w-10 h-10 rounded-xl bg-neutral-100 flex items-center justify-center shrink-0">
               <HugeiconsIcon icon={UserIcon} className="w-5 h-5 text-slate-700" />

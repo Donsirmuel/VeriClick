@@ -1,7 +1,7 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useQuery } from '@tanstack/react-query'
-import { DashboardSquare01Icon, LinkSquare02Icon, Globe02Icon, Settings01Icon, Logout01Icon, HelpCircleIcon, ChevronRightIcon, ShieldIcon, BlockedIcon, Wallet01Icon } from '@hugeicons/core-free-icons'
+import { DashboardSquare01Icon, LinkSquare02Icon, Globe02Icon, Settings01Icon, Logout01Icon, HelpCircleIcon, ChevronRightIcon, ShieldIcon, BlockedIcon, Wallet01Icon, Cancel01Icon } from '@hugeicons/core-free-icons'
 import { cn } from '@/lib/utils'
 import { Logo } from '@/components/Logo'
 import { fetchWorkspace } from '@/api/workspace'
@@ -60,6 +60,13 @@ export function Sidebar({ onClose }: { onClose: () => void }) {
             <p className="text-[10px] text-neutral-400 font-bold uppercase tracking-widest">{workspace?.name ?? 'Workspace'}</p>
           </div>
         </Link>
+        <button
+          onClick={onClose}
+          aria-label="Close menu"
+          className="lg:hidden ml-auto p-2 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors"
+        >
+          <HugeiconsIcon icon={Cancel01Icon} className="w-5 h-5" />
+        </button>
       </div>
 
       <nav className="flex-1 space-y-2">
@@ -140,7 +147,7 @@ export function Sidebar({ onClose }: { onClose: () => void }) {
           </p>
         </Link>
 
-        <div className="text-[10px] text-neutral-600 font-mono px-4 py-1">v1.0.0</div>
+        <div className="text-[10px] text-neutral-600 font-mono px-4 py-1">v2.0.0</div>
         <Link to="/app/help" onClick={onClose} className="flex items-center gap-3 px-4 py-3 w-full text-neutral-400 hover:text-white transition-colors group">
           <HugeiconsIcon icon={HelpCircleIcon} className="w-5 h-5" />
           <span className="font-semibold text-sm">Help & Docs</span>

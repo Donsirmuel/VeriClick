@@ -13,6 +13,7 @@ import { formatRelativeTime } from '@/lib/utils'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { HelpTooltip } from '@/components/ui/HelpTooltip'
+import { ReadMore } from '@/components/ui/ReadMore'
 import { TableSkeleton } from '@/components/ui/TableSkeleton'
 import type { Domain } from '@/types'
 
@@ -53,12 +54,6 @@ export default function DomainsPage() {
     queryFn: fetchWorkspace,
   })
 
-  const planLabel = workspace?.planName ?? (workspace?.trialActive ? 'Free trial' : 'Free')
-  const domainUsage = workspace
-    ? workspace.domainLimit
-      ? `${workspace.domainsUsed} / ${workspace.domainLimit}`
-      : `${workspace.domainsUsed} / unlimited`
-    : null
   const atLimit = Boolean(workspace && !workspace.canAddDomain)
 
   const createMutation = useMutation({
@@ -128,20 +123,11 @@ export default function DomainsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Domain Registry</h1>
-          <p className="text-sm text-muted mt-1 max-w-3xl">A domain is the web address your links live on, like <code className="text-xs bg-neutral-100 px-1.5 py-0.5 rounded">your.domain/r/summer23</code>. Registering a domain authorizes it instantly — no DNS proof needed. One quick step remains: <strong>Point</strong> it at VeriClick (add one short record the app shows you) so your links use your own brand. Registered domains are also covered by Site Shield, so pages you deploy the tracker on get bot filtering automatically.</p>
+          <ReadMore className="max-w-3xl" lines={2}>
+            A domain is the web address your links live on, like <code className="text-xs bg-neutral-100 px-1.5 py-0.5 rounded">your.domain/r/summer23</code>. Registering a domain authorizes it instantly — no DNS proof needed. One quick step remains: <strong>Point</strong> it at VeriClick (add one short record the app shows you) so your links use your own brand. Registered domains are also covered by Site Shield, so pages you deploy the tracker on get bot filtering automatically.
+          </ReadMore>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          {domainUsage && (
-            <span className={`inline-flex items-center gap-2 text-xs font-bold px-3 py-2 rounded-xl border ${
-              atLimit
-                ? 'text-warning bg-warning/10 border-warning/20'
-                : 'text-slate-700 bg-neutral-100 border-neutral-200'
-            }`}>
-              <HugeiconsIcon icon={Globe02Icon} className="w-4 h-4" />
-              {planLabel}: {domainUsage}{' '}
-              {workspace?.domainLimit ? 'domains used' : 'domains'}
-            </span>
-          )}
           {atLimit && (
             <Link
               to="/pricing"

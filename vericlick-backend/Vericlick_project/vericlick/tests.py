@@ -268,7 +268,7 @@ class HealthEndpointTests(APITestCase):
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         body = res.json()
         self.assertEqual(body['status'], 'ok')
-        self.assertEqual(body['version'], '1.0.0')
+        self.assertEqual(body['version'], '2.0.0')
 
     def test_health_allows_unauthenticated(self):
         res = self.client.get('/api/health/')
@@ -2385,6 +2385,74 @@ class DomainLimitTests(APITestCase):
         self.assertEqual(body['domainLimit'], 10)
         self.assertEqual(body['domainsUsed'], 1)
         self.assertTrue(body['canAddDomain'])
+
+
+class DomainReaddTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='readduser', password='testpass123')
+        self.client.force_authenticate(user=self.user)
+        self.workspace = Workspace.objects.get(owner=self.user)
+
+    def _create_domain(self, name='readd.example.com', **kw):
+        return DomainRegistry.objects.create(
+            workspace=self.workspace, domain=name, **kw,
+        )
+
+    def test_readding_removed_domain_resurrects_same_row(self):
+        domain = self._create_domain(verified=True)
+        domain.removed_at = timezone.now()
+        domain.save(update_fields=['removed_at'])
+        with patch('vericlick.services.diagnose_domain', return_value=FAKE_DIAGNOSIS):
+            res = self.client.post('/api/domains/', {'domain': 'readd.example.com'}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        domain.refresh_from_db()
+        self.assertIsNone(domain.removed_at)
+        self.assertTrue(domain.verified)
+        # The response reflects the restored row.
+        self.assertEqual(res.json()['id'], str(domain.id))
+        # It is visible again in the user's list.
+        listing = self.client.get('/api/domains/').json()['results']
+        self.assertEqual(len(listing), 1)
+        self.assertEqual(listing[0]['id'], str(domain.id))
+
+    def test_readding_restores_removed_links(self):
+        domain = self._create_domain(verified=True)
+        link = TrackingLink.objects.create(
+            workspace=self.workspace, domain=domain,
+            slug='readd-link', destination_url='https://example.com',
+        )
+        stamp = timezone.now()
+        domain.removed_at = stamp
+        domain.save(update_fields=['removed_at'])
+        link.removed_at = stamp
+        link.save(update_fields=['removed_at'])
+        with patch('vericlick.services.diagnose_domain', return_value=FAKE_DIAGNOSIS):
+            res = self.client.post('/api/domains/', {'domain': 'readd.example.com'}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        link.refresh_from_db()
+        domain.refresh_from_db()
+        self.assertIsNone(domain.removed_at)
+        self.assertIsNone(link.removed_at)
+        self.assertTrue(
+            TrackingLink.objects.filter(id=link.id, removed_at__isnull=True).exists()
+        )
+
+    def test_registering_active_same_workspace_domain_is_friendly_400(self):
+        self._create_domain(verified=True)
+        res = self.client.post('/api/domains/', {'domain': 'readd.example.com'}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        errors = ' '.join(e['detail'] for e in res.json()['errors'])
+        self.assertIn('already', errors.lower())
+
+    def test_registering_other_workspace_domain_rejected(self):
+        self._create_domain(verified=True)
+        other_user = User.objects.create_user(username='readdother', password='testpass123')
+        other_client = APIClient()
+        other_client.force_authenticate(user=other_user)
+        res = other_client.post('/api/domains/', {'domain': 'readd.example.com'}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        errors = ' '.join(e['detail'] for e in res.json()['errors'])
+        self.assertIn('another account', errors.lower())
 
 
 class FreeTierTests(APITestCase):
