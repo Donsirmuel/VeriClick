@@ -20,8 +20,8 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from decouple import config
 
 from .models import (
-    Workspace, DomainRegistry, TrackingLink, ClickLog, IPRule, TrackerEvent,
-    Plan, DiscountCode, SiteConfig, CheckoutIntent,
+    Workspace, DomainRegistry, TrackingLink, ClickLog, IPRule, CountryRule,
+    DevicePolicy, TrackerEvent, Plan, DiscountCode, SiteConfig, CheckoutIntent,
 )
 from .serializers import (
     UserSerializer,
@@ -31,6 +31,8 @@ from .serializers import (
     TrackingLinkSerializer,
     ClickLogSerializer,
     IPRuleSerializer,
+    CountryRuleSerializer,
+    DevicePolicySerializer,
     TrackerEventSerializer,
     BlockedIPSerializer,
     PlanSerializer,
@@ -43,6 +45,7 @@ from .services import (
     get_safe_destination,
     verify_domain_ownership,
     refresh_stale_domains_async,
+    reason_label,
 )
 
 
@@ -424,6 +427,11 @@ def receive_tracker_event(request):
         'engagement': request.data.get('engagement') or {},
         'ip': ip,
         'user_agent': request.META.get('HTTP_USER_AGENT', ''),
+        # Shield verdict carried on the beacon (set when the page uses the
+        # data-shield tracker). Ordinary installs leave these blank.
+        'verdict': request.data.get('verdict', ''),
+        'is_bot': bool(request.data.get('is_bot', False)),
+        'reason': request.data.get('reason', ''),
     }
 
     serializer = TrackerEventSerializer(data=data)
@@ -434,6 +442,100 @@ def receive_tracker_event(request):
         )
     serializer.save(workspace=workspace)
     return Response({'status': 'ok'})
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+@throttle_classes([TrackerEventThrottle])
+def shield_evaluate(request):
+    # Site Shield evaluation. The data-shield tracker script calls this with
+    # the workspace id + tracker token before deciding how to handle the
+    # pageview. The endpoint is deliberately fail-open: any uncertainty
+    # (suspended workspace, page host that isn't one of the workspace's own
+    # authorized domains, missing data) returns "allowed" so real visitors are
+    # never caught in the crossfire.
+    site_id = request.data.get('site_id')
+    token = request.data.get('token')
+    page_url = request.data.get('page_url') or ''
+    if not site_id or not token or not page_url:
+        return Response(
+            {'errors': [{'field': 'site_id', 'detail': 'site_id, token and page_url are required'}]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        workspace = Workspace.objects.get(id=site_id)
+    except (Workspace.DoesNotExist, ValueError):
+        return Response(
+            {'errors': [{'field': 'site_id', 'detail': 'Invalid workspace'}]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if token != str(workspace.tracker_secret):
+        return Response(
+            {'errors': [{'field': 'token', 'detail': 'Invalid tracker token'}]},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    def _allow(reason=''):
+        return Response({
+            'verdict': 'allowed',
+            'is_bot': False,
+            'reason': reason,
+            'reason_label': '',
+        })
+
+    if workspace.plan_status == 'suspended':
+        # Suspended workspaces get no filtering: fail open so their deployed
+        # shield never harms the audience.
+        return _allow('suspended')
+
+    # Host authorization, fail-open: the shield only judges pageviews on the
+    # workspace's own registered domains (any registered domain is authorized —
+    # instant authorization) or on the shared VeriClick host. A page on some
+    # other site can't be evaluated for this workspace.
+    from .models import tracking_host
+
+    host = (urlparse(page_url).hostname or '').lower().rstrip('.')
+    authorized_hosts = set()
+    for domain in DomainRegistry.objects.filter(workspace=workspace, removed_at__isnull=True):
+        authorized_hosts.add(domain.domain.lower().rstrip('.'))
+        authorized_hosts.add(tracking_host(domain.domain).lower().rstrip('.'))
+    shared_base = getattr(settings, 'PUBLIC_TRACKING_BASE_URL', '').strip()
+    shared_host = (urlparse(shared_base).hostname or '').lower().rstrip('.') if shared_base else ''
+    if host and shared_host and host != shared_host and host not in authorized_hosts:
+        return _allow('not-authorized')
+
+    ip = request.META.get('REMOTE_ADDR', '127.0.0.1')
+    forwarded = request.META.get('HTTP_X_FORWARDED_FOR')
+    if forwarded:
+        ip = forwarded.split(',')[0].strip()
+    user_agent = request.META.get('HTTP_USER_AGENT', '')
+
+    result = classify_request(None, ip, user_agent, workspace)
+    blocked = result['decision'] != 'allowed'
+    if blocked:
+        # A blocked pageview is recorded here (the script shows the block page
+        # instead of sending the normal beacon, so this is its only chance to
+        # be counted).
+        TrackerEvent.objects.create(
+            workspace=workspace,
+            page_url=page_url,
+            referrer=request.data.get('referrer', ''),
+            signals=request.data.get('signals') or {},
+            ip=ip,
+            user_agent=user_agent,
+            verdict='blocked',
+            is_bot=result['is_bot'],
+            reason=result['reason'],
+        )
+
+    return Response({
+        'verdict': 'blocked' if blocked else 'allowed',
+        'is_bot': result['is_bot'],
+        'reason': result['reason'],
+        'reason_label': reason_label(result['decision'], result['reason'], result['matched_rule']),
+    })
 
 
 @api_view(['POST'])
@@ -717,6 +819,76 @@ def dashboard_traffic(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+def dashboard_breakdown(request):
+    # Top traffic sources by country or device for the dashboard widgets. Each
+    # row carries total clicks and blocked clicks so the widget can show
+    # "N blocked" and offer a one-click block button.
+    workspace = get_user_workspace(request.user)
+    if not workspace:
+        return Response({'error': 'No workspace found'}, status=status.HTTP_404_NOT_FOUND)
+
+    dimension = request.query_params.get('dimension', 'country')
+    range_param = request.query_params.get('range', '7d')
+    days_map = {'7d': 7, '30d': 30, '90d': 90}
+    days = days_map.get(range_param, 7)
+    since = timezone.now() - timedelta(days=days)
+
+    qs = ClickLog.objects.filter(
+        link__workspace=workspace, created_at__gte=since,
+    )
+
+    if dimension == 'device':
+        rows = (
+            qs.exclude(device_class='')
+            .values('device_class')
+            .annotate(
+                total=Count('id'),
+                blocked=Count('id', filter=Q(decision='blocked')),
+            )
+            .order_by('-total')[:8]
+        )
+        return Response([
+            {
+                'key': row['device_class'],
+                'label': row['device_class'].capitalize(),
+                'total': row['total'],
+                'blocked': row['blocked'],
+            }
+            for row in rows
+        ])
+
+    rows = (
+        qs.exclude(country_code='')
+        .values('country_code')
+        .annotate(
+            total=Count('id'),
+            blocked=Count('id', filter=Q(decision='blocked')),
+        )
+        .order_by('-total')[:8]
+    )
+    # The full country name lives on the (recent) click logs; pull the latest
+    # non-empty name per code without an extra join.
+    labels = {}
+    for code, name in (
+        qs.exclude(country_code='').exclude(country='')
+        .order_by('-created_at')
+        .values_list('country_code', 'country')[:2000]
+    ):
+        if code not in labels:
+            labels[code] = name
+    return Response([
+        {
+            'key': row['country_code'],
+            'label': labels.get(row['country_code'], row['country_code']),
+            'total': row['total'],
+            'blocked': row['blocked'],
+        }
+        for row in rows
+    ])
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def blocked_ips(request):
     workspace = get_user_workspace(request.user)
     if not workspace:
@@ -741,6 +913,43 @@ def blocked_ips(request):
 
     serializer = BlockedIPSerializer(page, many=True)
     return paginator.get_paginated_response(serializer.data)
+
+
+@api_view(['GET', 'PATCH'])
+@permission_classes([IsAuthenticated])
+def device_policy(request):
+    # Workspace-level device/OS policy (Traffic Rules > Devices tab). Read via
+    # GET, update via PATCH. The row is created lazily so a workspace that
+    # never touches the Devices tab has no policy and no behaviour change.
+    workspace = get_user_workspace(request.user)
+    if not workspace:
+        return Response({'error': 'No workspace found'}, status=status.HTTP_404_NOT_FOUND)
+
+    policy, _ = DevicePolicy.objects.get_or_create(workspace=workspace)
+
+    if request.method == 'GET':
+        return Response(DevicePolicySerializer(policy).data)
+
+    workspace.ensure_trial_started()
+    if workspace.suspended:
+        raise ValidationError({
+            'detail': (
+                'Your plan was suspended. Renew it to restore access and '
+                'keep using device rules.'
+            )
+        })
+    if not (workspace.has_plan_access() or workspace.trial_active):
+        raise ValidationError({
+            'detail': (
+                'Device rules are a paid feature. Your free trial ended — '
+                'upgrade to any plan to keep using them.'
+            )
+        })
+
+    serializer = DevicePolicySerializer(policy, data=request.data, partial=True)
+    serializer.is_valid(raise_exception=True)
+    serializer.save()
+    return Response(serializer.data)
 
 
 @api_view(['GET'])
@@ -866,6 +1075,12 @@ class DomainRegistryViewSet(viewsets.ModelViewSet):
                 )
             })
         domain = serializer.save(workspace=workspace)
+        # Instant authorization (v2.0.0): registering the domain from the
+        # account is proof enough of ownership — no TXT record needed. The
+        # domain is authorized the moment it exists, so links can go live as
+        # soon as DNS points at us.
+        domain.verified = True
+        domain.save(update_fields=['verified'])
         try:
             domain.run_health_check()
         except Exception:
@@ -899,31 +1114,19 @@ class DomainRegistryViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def verify(self, request, pk=None):
-        # DNS TXT ownership verification. The owner publishes the domain's
-        # verification_record as a TXT record, then calls this to confirm they
-        # control the domain. A domain can resolve (healthy) but only become
-        # 'verified' once ownership is proven.
+        # Legacy ownership-verification endpoint, kept for compatibility. With
+        # instant authorization a domain is already verified (authorized) from
+        # the moment it's registered, so this is a no-op that always reports
+        # success.
         domain = self.get_object()
-        # Refresh the DNS-pointing status so the response always reflects the
-        # current A/CNAME state (not a stale health-check result).
-        try:
-            domain.run_health_check()
-        except Exception:
-            pass
-        verified, detail = verify_domain_ownership(domain)
-        if verified:
-            domain.verified = True
-            domain.save(update_fields=['verified'])
-            return Response({
-                'status': 'ok',
-                'verified': True,
-                'points_to_server': domain.points_to_server,
-                'verificationRecord': domain.verification_record,
-            })
-        return Response(
-            {'errors': [{'field': 'domain', 'detail': detail}]},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+        domain.verified = True
+        domain.save(update_fields=['verified'])
+        return Response({
+            'status': 'ok',
+            'verified': True,
+            'points_to_server': domain.points_to_server,
+            'verificationRecord': domain.verification_record,
+        })
 
 
 @api_view(['GET'])
@@ -949,14 +1152,19 @@ def redirect_click(request, slug):
         return HttpResponseRedirect(redirect_to=_merge_query_params(link.destination_url, request.query_params))
 
     result = classify_request(link, ip, user_agent, workspace)
-    location = lookup_location(ip)
+    device = result['device']
+    location = result['location']
 
     ClickLog.objects.create(
         link=link,
         ip=ip,
         country=location['country'],
+        country_code=location['country_code'],
         region=location['region'],
         city=location['city'],
+        device_class=device['device_class'],
+        os_family=device['os_family'],
+        browser=device['browser'],
         user_agent=user_agent,
         is_bot=result['is_bot'],
         reason=result['reason'],
@@ -969,10 +1177,19 @@ def redirect_click(request, slug):
     TrackingLink.objects.filter(id=link.id).update(total_clicks=F('total_clicks') + 1)
 
     if result['decision'] in ('blocked', 'challenged'):
-        # Divert suspicious traffic to the configured safe destination, falling
-        # back to a neutral VeriClick page. Humans always reach the real URL.
-        safe = _merge_query_params(get_safe_destination(workspace, request), request.query_params)
-        return HttpResponseRedirect(redirect_to=safe)
+        # Suspicious traffic is handled per this link's bot policy, but the
+        # hard stops (403 / 404) are reserved for traffic that is demonstrably
+        # automated: a UA parsed as a bot, or caught by the UA heuristics. A
+        # person blocked by a geo/device/IP-rule block is still a person — their
+        # browser should land somewhere neutral (the safe page), never on a
+        # hard error page.
+        is_ua_bot = result['device']['is_bot'] or result['reason'] == 'Suspicious UA'
+        if is_ua_bot and link.bot_action == TrackingLink.BotAction.BLOCK:
+            return HttpResponse(status=403)
+        if is_ua_bot and link.bot_action == TrackingLink.BotAction.NOT_FOUND:
+            return HttpResponse(status=404)
+        safe = link.safe_url or get_safe_destination(workspace, request)
+        return HttpResponseRedirect(redirect_to=_merge_query_params(safe, request.query_params))
 
     return HttpResponseRedirect(redirect_to=_merge_query_params(link.destination_url, request.query_params))
 
@@ -1046,3 +1263,60 @@ class IPRuleViewSet(viewsets.ModelViewSet):
             rule.save(update_fields=['is_active'])
 
         return Response(IPRuleSerializer(rule).data)
+
+
+class CountryRuleViewSet(viewsets.ModelViewSet):
+    queryset = CountryRule.objects.all()
+    serializer_class = CountryRuleSerializer
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        workspace = get_user_workspace(self.request.user)
+        if workspace:
+            qs = qs.filter(workspace=workspace)
+        return qs
+
+    def create(self, request, *args, **kwargs):
+        workspace = get_user_workspace(self.request.user)
+        if not workspace:
+            raise PermissionError('No workspace found')
+        workspace.ensure_trial_started()
+        if workspace.suspended:
+            raise ValidationError({
+                'detail': (
+                    'Your plan was suspended. Renew it to restore access and '
+                    'keep using country rules.'
+                )
+            })
+        if not (workspace.has_plan_access() or workspace.trial_active):
+            raise ValidationError({
+                'detail': (
+                    'Country rules are a paid feature. Your free trial ended — '
+                    'upgrade to any plan to keep using them.'
+                )
+            })
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        code = (serializer.validated_data.get('country_code') or '').upper()
+        action = serializer.validated_data.get('action')
+        # Upsert: one rule per (country, action). Re-creating the same rule
+        # (e.g. from the dashboard one-click block button) reactivates it
+        # instead of stacking duplicates.
+        existing = CountryRule.objects.filter(
+            workspace=workspace, country_code=code, action=action,
+        ).first()
+        if existing is not None:
+            existing.is_active = True
+            if serializer.validated_data.get('reason'):
+                existing.reason = serializer.validated_data['reason']
+            existing.save(update_fields=['is_active', 'reason'])
+            data = self.get_serializer(existing).data
+            headers = self.get_success_headers(data)
+            return Response(data, status=status.HTTP_200_OK, headers=headers)
+        rule = serializer.save(
+            workspace=workspace,
+            country_code=code,
+            created_by=self.request.user,
+        )
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)

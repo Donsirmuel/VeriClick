@@ -85,10 +85,10 @@ export function Sidebar({ onClose }: { onClose: () => void }) {
           onClick={onClose}
         />
         <NavItem 
-          to="/app/ip-rules" 
+          to="/app/traffic-rules" 
           icon={ShieldIcon} 
-          label="IP Rules" 
-          active={location.pathname === '/app/ip-rules'} 
+          label="Traffic Rules" 
+          active={location.pathname === '/app/traffic-rules'} 
           onClick={onClose}
         />
         <NavItem 

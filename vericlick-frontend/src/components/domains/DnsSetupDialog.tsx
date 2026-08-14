@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
-  Cancel01Icon, Copy01Icon, Globe02Icon, ShieldKeyIcon, CheckmarkCircle02Icon,
+  Cancel01Icon, Copy01Icon, Globe02Icon, CheckmarkCircle02Icon,
   RefreshIcon, Clock01Icon,
 } from '@hugeicons/core-free-icons'
 import toast from 'react-hot-toast'
-import { fetchDomain, recheckDomain, verifyDomain } from '@/api/domains'
-import { parseApiError } from '@/lib/errors'
+import { fetchDomain, recheckDomain } from '@/api/domains'
 import { formatRelativeTime } from '@/lib/utils'
 import type { Domain } from '@/types'
 
@@ -63,7 +62,7 @@ export function DnsSetupDialog({ domain, onClose, onRechecked }: DnsSetupDialogP
 
   const record = current.dnsSetup
   const trackingHost = record?.trackingHost || current.domain
-  const verified = current.verified
+  // Ownership is instant (authorized at registration); the only step is DNS pointing.
   const pointed = current.pointsToServer
   const fullyReady = current.ready
 
@@ -71,16 +70,6 @@ export function DnsSetupDialog({ domain, onClose, onRechecked }: DnsSetupDialogP
     setChecking(true)
     setError(null)
     try {
-      // TXT ownership first, then DNS pointing. One "Check setup" press covers
-      // both records the user was told to add.
-      let verifyError: string | null = null
-      if (!verified) {
-        try {
-          await verifyDomain(current.id)
-        } catch (err) {
-          verifyError = parseApiError(err)
-        }
-      }
       try {
         await recheckDomain(current.id)
       } catch {
@@ -90,17 +79,12 @@ export function DnsSetupDialog({ domain, onClose, onRechecked }: DnsSetupDialogP
       setCurrent(fresh)
       onRechecked?.()
 
-      if (fresh.verified && fresh.ready) {
-        toast.success('Your domain is verified and pointing at VeriClick')
+      if (fresh.ready) {
+        toast.success('Your domain is pointing at VeriClick — links are live on your brand')
         // Auto-close once everything is confirmed.
         setTimeout(onClose, 1200)
-      } else if (fresh.verified) {
-        toast.success('Ownership verified — still waiting on the DNS record to spread')
       } else {
-        setError(
-          verifyError ||
-          'The TXT record was not found yet. Add it to your DNS provider, wait for it to propagate (usually 5–30 minutes), then check again.'
-        )
+        toast.success('Still waiting on the DNS record to spread')
       }
     } catch {
       toast.error('Could not reach the check. Try again in a moment.')
@@ -114,7 +98,7 @@ export function DnsSetupDialog({ domain, onClose, onRechecked }: DnsSetupDialogP
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl border border-neutral-200 overflow-y-auto max-h-[calc(100vh-2rem)]">
         <div className="flex items-center justify-between p-6 border-b border-neutral-200">
-          <h2 className="text-lg font-bold text-slate-900">Set up your domain</h2>
+          <h2 className="text-lg font-bold text-slate-900">Point your domain at VeriClick</h2>
           <button onClick={onClose} className="p-2 rounded-lg hover:bg-neutral-100 transition-colors">
             <HugeiconsIcon icon={Cancel01Icon} className="w-5 h-5 text-muted" />
           </button>
@@ -129,7 +113,7 @@ export function DnsSetupDialog({ domain, onClose, onRechecked }: DnsSetupDialogP
               <h3 className="text-lg font-bold text-slate-900 mb-1">All set — you're live</h3>
               <p className="text-sm text-muted max-w-sm mx-auto">
                 <span className="font-mono text-xs bg-neutral-100 px-1.5 py-0.5 rounded">{trackingHost}</span>{' '}
-                is verified and pointed at VeriClick. Your tracking links now run on your own domain.
+                is authorized and pointing at VeriClick. Your tracking links now run on your own domain.
               </p>
             </div>
           ) : (
@@ -139,62 +123,16 @@ export function DnsSetupDialog({ domain, onClose, onRechecked }: DnsSetupDialogP
                   <HugeiconsIcon icon={Globe02Icon} className="w-5 h-5 text-black" />
                 </div>
                 <p className="text-xs text-slate-700 leading-relaxed">
-                  Add <strong>both</strong> records at your DNS provider in one go, then press
-                  {' '}<strong>Check setup</strong> once. Your tracked links will live on{' '}
+                  Ownership is already authorized — no TXT record needed. Just add{' '}
+                  <strong>one</strong> record at your DNS provider, then press{' '}
+                  <strong>Check setup</strong>. Your tracked links will live on{' '}
                   <span className="font-mono text-xs bg-white border border-neutral-200 px-1 rounded">{trackingHost}</span>
                   {' '}— for example{' '}
                   <span className="font-mono text-xs bg-white border border-neutral-200 px-1 rounded">{trackingHost}/r/&lt;slug&gt;</span>.
                 </p>
               </div>
 
-              {/* Step 1 — TXT ownership */}
-              <div className={`rounded-xl border ${verified ? 'border-success/30 bg-success/5' : 'border-neutral-200'}`}>
-                <div className="flex items-center justify-between px-4 py-3 border-b border-neutral-100">
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 bg-neutral-100 rounded-lg flex items-center justify-center">
-                      <HugeiconsIcon icon={ShieldKeyIcon} className="w-4 h-4 text-slate-700" />
-                    </div>
-                    <div>
-                      <h4 className="text-sm font-bold text-slate-900">1. Prove you own it (TXT)</h4>
-                      <p className="text-[11px] text-muted">A text record that confirms control of {current.domain}.</p>
-                    </div>
-                  </div>
-                  <StepBadge done={verified} />
-                </div>
-                {!verified && (
-                  <div className="p-4 space-y-3">
-                    <div className="rounded-xl border border-neutral-200">
-                      <table className="w-full text-sm table-fixed">
-                        <tbody>
-                          <tr className="border-b border-neutral-200">
-                            <th className="text-left text-xs font-bold text-muted uppercase tracking-wider bg-neutral-50 px-4 py-2.5 w-24">Type</th>
-                            <td className="px-4 py-2.5 font-mono text-xs truncate">TXT</td>
-                          </tr>
-                          <tr className="border-b border-neutral-200">
-                            <th className="text-left text-xs font-bold text-muted uppercase tracking-wider bg-neutral-50 px-4 py-2.5 w-24">Name</th>
-                            <td className="px-4 py-2.5 font-mono text-xs whitespace-nowrap overflow-x-auto min-w-0">{'@'}</td>
-                          </tr>
-                          <tr className="border-b border-neutral-200">
-                            <th className="text-left text-xs font-bold text-muted uppercase tracking-wider bg-neutral-50 px-4 py-2.5 w-24">TTL</th>
-                            <td className="px-4 py-2.5 font-mono text-xs truncate">{'300'}</td>
-                          </tr>
-                          <tr>
-                            <th className="text-left text-xs font-bold text-muted uppercase tracking-wider bg-neutral-50 px-4 py-2.5 w-24 align-top">Value</th>
-                            <td className="px-4 py-2.5">
-                              <div className="flex items-center gap-2">
-                                <div className="flex-1 min-w-0 bg-neutral-900 text-neutral-100 text-xs font-mono px-3 py-2.5 rounded-lg break-all">{current.verificationRecord}</div>
-                                <CopyButton text={current.verificationRecord} label="TXT record" />
-                              </div>
-                            </td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Step 2 — CNAME pointing */}
+              {/* The only step — CNAME pointing */}
               <div className={`rounded-xl border ${pointed ? 'border-success/30 bg-success/5' : 'border-neutral-200'}`}>
                 <div className="flex items-center justify-between px-4 py-3 border-b border-neutral-100">
                   <div className="flex items-center gap-2">
@@ -202,7 +140,7 @@ export function DnsSetupDialog({ domain, onClose, onRechecked }: DnsSetupDialogP
                       <HugeiconsIcon icon={Globe02Icon} className="w-4 h-4 text-slate-700" />
                     </div>
                     <div>
-                      <h4 className="text-sm font-bold text-slate-900">2. Point it at VeriClick (CNAME)</h4>
+                      <h4 className="text-sm font-bold text-slate-900">1. Point it at VeriClick (CNAME)</h4>
                       <p className="text-[11px] text-muted">Routes {trackingHost} to VeriClick so links use your brand.</p>
                     </div>
                   </div>

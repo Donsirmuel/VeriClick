@@ -4,6 +4,9 @@ export type TimeRange = '7d' | '30d' | '90d'
 export type DiagnosisLevel = 'ok' | 'warn' | 'error'
 export type BillingMode = 'subscription' | 'period'
 export type PaymentMethod = 'card' | 'crypto' | 'bank_transfer' | 'mobile_money'
+export type CountryRuleAction = 'allow' | 'deny'
+export type BotAction = 'safe' | 'not_found' | 'block'
+export type DeviceClass = 'mobile' | 'tablet' | 'desktop' | 'bot' | 'other'
 
 export interface DomainDiagnosisFinding {
   key: string
@@ -49,11 +52,16 @@ export interface ActivityEntry {
   id: string
   ip: string
   country: string
+  countryCode: string
   region: string
   city: string
   device: string
+  deviceClass: string
+  osFamily: string
+  browser: string
   reason: string | null
   reasonLabel: string
+  decision: 'allowed' | 'blocked' | 'challenged'
   time: string
   slug: string
   isBot: boolean
@@ -71,6 +79,10 @@ export interface TrackingLink {
   botClicks: number
   humanClicks: number
   status: LinkStatus
+  allowedDevices: DeviceClass[]
+  allowedCountries: string[]
+  botAction: BotAction
+  safeUrl: string
   createdAt: string
 }
 
@@ -79,6 +91,10 @@ export interface LinkCreateInput {
   destinationUrl: string
   domain?: string | null
   status?: LinkStatus
+  allowedDevices?: DeviceClass[]
+  allowedCountries?: string[]
+  botAction?: BotAction
+  safeUrl?: string
 }
 
 export interface Domain {
@@ -234,9 +250,58 @@ export interface BlockedIPEntry {
   matchedRule: string
   slug: string
   country: string
+  countryCode: string
   region: string
   city: string
+  deviceClass: string
+  osFamily: string
+  browser: string
   createdAt: string
+}
+
+export interface CountryRule {
+  id: string
+  countryCode: string
+  action: CountryRuleAction
+  reason: string
+  isActive: boolean
+  source: 'manual' | 'auto'
+  createdBy: number | null
+  createdByUsername: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CountryRuleCreateInput {
+  countryCode: string
+  action: CountryRuleAction
+  reason?: string
+  isActive?: boolean
+}
+
+export interface DevicePolicy {
+  allowedDeviceClasses: DeviceClass[]
+  blockedOsFamilies: string[]
+  updatedAt: string
+}
+
+export interface DevicePolicyUpdateInput {
+  allowedDeviceClasses?: DeviceClass[]
+  blockedOsFamilies?: string[]
+}
+
+export interface BreakdownRow {
+  key: string
+  label: string
+  total: number
+  blocked: number
+}
+
+export interface ShieldEvaluateResponse {
+  verdict: 'allowed' | 'blocked'
+  isBot: boolean
+  reason: string
+  reasonLabel: string
 }
 
 export interface TrackerEventSignals {
@@ -264,5 +329,8 @@ export interface TrackerEvent {
   }
   ip: string
   userAgent: string
+  verdict: string
+  isBot: boolean
+  reason: string
   createdAt: string
 }

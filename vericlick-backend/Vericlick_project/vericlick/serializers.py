@@ -5,8 +5,8 @@ from rest_framework import serializers
 from django.contrib.auth.models import User
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from .models import (
-    Workspace, DomainRegistry, TrackingLink, ClickLog, IPRule, TrackerEvent,
-    Plan, DiscountCode, SiteConfig, BillingEvent,
+    Workspace, DomainRegistry, TrackingLink, ClickLog, IPRule, CountryRule,
+    DevicePolicy, TrackerEvent, Plan, DiscountCode, SiteConfig, BillingEvent,
 )
 
 
@@ -238,9 +238,13 @@ class DomainRegistrySerializer(serializers.ModelSerializer):
         return obj.links.filter(removed_at__isnull=True).count()
 
     def get_ready(self, obj):
+        # Instant authorization: registering a domain from the account proves
+        # ownership, so a domain is "ready for branded links" the moment its
+        # tracking host points at VeriClick. No separate verified flag gates
+        # serving anymore.
         return bool(
-            obj.verified
-            and obj.points_to_server
+            obj.points_to_server
+            and obj.removed_at is None
         )
 
     def validate_domain(self, value):
@@ -259,9 +263,9 @@ class TrackingLinkSerializer(serializers.ModelSerializer):
         source='domain.health_status', read_only=True, default=None
     )
     # Explains why a tracked link is (or isn't) running on its custom domain.
-    # tracking_domain_ready = True when the link's domain is verified and
-    # points at this server so the branded URL is live. The apex resolving is
-    # not required — only the tracking host reaching us matters.
+    # tracking_domain_ready = True when the link's domain points at this server
+    # so the branded URL is live. Ownership is implied by registration (instant
+    # authorization), so only the tracking host reaching us matters.
     tracking_domain_ready = serializers.SerializerMethodField()
     domain = serializers.SlugRelatedField(
         slug_field='domain', queryset=DomainRegistry.objects.all(), allow_null=True, required=False,
@@ -275,7 +279,8 @@ class TrackingLinkSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'slug', 'destination_url', 'domain', 'domain_health',
             'tracking_domain_ready', 'tracking_url', 'total_clicks', 'bot_clicks',
-            'human_clicks', 'status', 'created_at', 'updated_at',
+            'human_clicks', 'status', 'allowed_devices', 'allowed_countries',
+            'bot_action', 'safe_url', 'created_at', 'updated_at',
         ]
         read_only_fields = [
             'id', 'tracking_url', 'total_clicks', 'bot_clicks', 'human_clicks',
@@ -287,8 +292,7 @@ class TrackingLinkSerializer(serializers.ModelSerializer):
         if not domain:
             return None
         return bool(
-            domain.verified
-            and domain.removed_at is None
+            domain.removed_at is None
             and domain.points_to_server
         )
 
@@ -313,7 +317,8 @@ class ClickLogSerializer(serializers.ModelSerializer):
     class Meta:
         model = ClickLog
         fields = [
-            'id', 'ip', 'country', 'region', 'city', 'device', 'reason',
+            'id', 'ip', 'country', 'country_code', 'region', 'city', 'device',
+            'device_class', 'os_family', 'browser', 'reason',
             'reason_label', 'is_bot', 'decision', 'matched_rule', 'slug', 'time', 'created_at',
         ]
 
@@ -335,12 +340,55 @@ class IPRuleSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_by', 'created_by_username', 'created_at', 'updated_at']
 
 
+class CountryRuleSerializer(serializers.ModelSerializer):
+    created_by_username = serializers.CharField(source='created_by.username', read_only=True, default=None)
+
+    class Meta:
+        model = CountryRule
+        fields = [
+            'id', 'country_code', 'action', 'reason', 'is_active',
+            'source', 'created_by', 'created_by_username',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'created_by', 'created_by_username', 'created_at', 'updated_at']
+
+    def validate_country_code(self, value):
+        value = (value or '').strip().upper()
+        if not value:
+            raise serializers.ValidationError('Enter a two-letter country code.')
+        if len(value) != 2 or not value.isalpha():
+            raise serializers.ValidationError('Country code must be exactly two letters (e.g. US, NG, CN).')
+        return value
+
+
+class DevicePolicySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DevicePolicy
+        fields = [
+            'allowed_device_classes', 'blocked_os_families', 'updated_at',
+        ]
+        read_only_fields = ['updated_at']
+
+    def validate_allowed_device_classes(self, value):
+        known = {'mobile', 'tablet', 'desktop'}
+        value = list(value or [])
+        for item in value:
+            if item not in known:
+                raise serializers.ValidationError(f'Unknown device class "{item}".')
+        return value
+
+    def validate_blocked_os_families(self, value):
+        value = list(value or [])
+        return [str(item) for item in value]
+
+
 class TrackerEventSerializer(serializers.ModelSerializer):
     class Meta:
         model = TrackerEvent
         fields = [
             'id', 'workspace', 'page_url', 'referrer', 'signals',
-            'engagement', 'ip', 'user_agent', 'created_at',
+            'engagement', 'ip', 'user_agent', 'verdict', 'is_bot', 'reason',
+            'created_at',
         ]
         read_only_fields = ['id', 'created_at']
 
@@ -353,7 +401,8 @@ class BlockedIPSerializer(serializers.ModelSerializer):
         model = ClickLog
         fields = [
             'id', 'ip', 'reason', 'reason_label', 'decision', 'is_bot',
-            'matched_rule', 'slug', 'country', 'region', 'city', 'created_at',
+            'matched_rule', 'slug', 'country', 'country_code', 'region', 'city',
+            'device_class', 'os_family', 'browser', 'created_at',
         ]
 
     def get_reason_label(self, obj):

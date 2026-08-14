@@ -418,6 +418,37 @@ class TrackingLink(models.Model):
     )
     slug = models.CharField(max_length=100, unique=True)
     destination_url = models.URLField(max_length=2048)
+
+    class BotAction(models.TextChoices):
+        SAFE = 'safe', 'Send to safe page'
+        NOT_FOUND = '404', 'Serve a 404'
+        BLOCK = 'block', 'Block the request'
+
+    # Per-link traffic restrictions. Empty lists mean "no restriction" so a new
+    # link behaves exactly like today until the owner adds rules. These layer on
+    # top of the workspace-level country / device rules in the Traffic Rules
+    # page: a request must pass BOTH the workspace rule and the link rule.
+    allowed_devices = models.JSONField(
+        default=list, blank=True,
+        help_text='Device classes allowed to open this link (mobile, tablet, desktop). Empty = all.',
+    )
+    allowed_countries = models.JSONField(
+        default=list, blank=True,
+        help_text='ISO 3166-1 alpha-2 country codes allowed to open this link. Empty = all.',
+    )
+    # What to do with bots on this link specifically. Defaults to the classic
+    # behaviour: route bot traffic to the workspace safe destination. Per-link
+    # safe_url can override where bots are sent; otherwise the workspace-level
+    # safe destination is used.
+    bot_action = models.CharField(
+        max_length=10, choices=BotAction.choices, default=BotAction.SAFE,
+        help_text='How this link handles detected bots: divert to the safe page, serve a 404, or hard-block.',
+    )
+    safe_url = models.URLField(
+        max_length=2048, blank=True, default='',
+        help_text='Optional per-link destination for bot/suspicious traffic. Empty = use the workspace safe destination.',
+    )
+
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.ACTIVE)
     total_clicks = models.PositiveIntegerField(default=0)
     bot_clicks = models.PositiveIntegerField(default=0)
@@ -448,9 +479,25 @@ class ClickLog(models.Model):
     link = models.ForeignKey(TrackingLink, on_delete=models.CASCADE, related_name='clicks')
     ip = models.GenericIPAddressField()
     country = models.CharField(max_length=100, blank=True, default='')
+    country_code = models.CharField(
+        max_length=2, blank=True, default='',
+        help_text='ISO 3166-1 alpha-2 country code, so country rules and country breakdowns can match precisely.',
+    )
     region = models.CharField(max_length=100, blank=True, default='')
     city = models.CharField(max_length=100, blank=True, default='')
     device = models.CharField(max_length=200, blank=True, default='')
+    device_class = models.CharField(
+        max_length=20, blank=True, default='',
+        help_text='Normalized device class from the user agent: mobile, tablet, desktop, bot or other.',
+    )
+    os_family = models.CharField(
+        max_length=64, blank=True, default='',
+        help_text='Normalized OS family from the user agent (Windows, macOS, Android, iOS, ...).',
+    )
+    browser = models.CharField(
+        max_length=64, blank=True, default='',
+        help_text='Browser family from the user agent (Chrome, Safari, ...).',
+    )
     user_agent = models.TextField(blank=True, default='')
     is_bot = models.BooleanField(default=False)
     reason = models.CharField(max_length=100, blank=True, default='')
@@ -512,6 +559,74 @@ class IPRule(models.Model):
         return f'{self.ip_or_cidr} ({self.action})'
 
 
+class CountryRule(models.Model):
+    # Workspace-level country allow/deny rules. Mirrors IPRule so the Traffic
+    # Rules UI can treat both the same way (allow always wins, deny intercepts).
+    class Action(models.TextChoices):
+        ALLOW = 'allow', 'Allow'
+        DENY = 'deny', 'Deny'
+
+    class Source(models.TextChoices):
+        MANUAL = 'manual', 'Manual'
+        AUTO = 'auto', 'Auto'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace = models.ForeignKey(
+        Workspace, on_delete=models.CASCADE, related_name='country_rules',
+    )
+    country_code = models.CharField(
+        max_length=2, help_text='ISO 3166-1 alpha-2 country code (e.g. US, NG, CN).',
+    )
+    action = models.CharField(max_length=10, choices=Action.choices)
+    reason = models.CharField(max_length=255, blank=True, default='')
+    is_active = models.BooleanField(default=True)
+    source = models.CharField(
+        max_length=10, choices=Source.choices, default=Source.MANUAL,
+        help_text=(
+            'How the rule was created. Auto rules are generated from the '
+            'dashboard one-click block buttons; they can be deleted like '
+            'manual rules.'
+        ),
+    )
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='created_country_rules',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.country_code} ({self.action})'
+
+
+class DevicePolicy(models.Model):
+    # Workspace-level device/OS policy: which device classes are allowed to open
+    # links, and which OS families are blocked. Empty lists mean "everything
+    # allowed" so a fresh workspace behaves exactly like today. Created lazily
+    # next to the workspace when a user first opens the Traffic Rules page.
+    workspace = models.OneToOneField(
+        Workspace, on_delete=models.CASCADE, related_name='device_policy',
+    )
+    allowed_device_classes = models.JSONField(
+        default=list, blank=True,
+        help_text='Device classes allowed to open links (mobile, tablet, desktop). Empty = all.',
+    )
+    blocked_os_families = models.JSONField(
+        default=list, blank=True,
+        help_text='OS families blocked from opening links (Windows, Android, ...). Empty = none.',
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name_plural = 'Device policies'
+
+    def __str__(self):
+        return f'Device policy for {self.workspace_id}'
+
+
 class IpAsnRange(models.Model):
     """IP ranges belonging to hosting/datacenter/VPN networks, loaded from a
     free IP->ASN dataset (iptoasn.com). Only networks that look like
@@ -542,6 +657,18 @@ class TrackerEvent(models.Model):
     engagement = models.JSONField(default=dict, blank=True)
     ip = models.GenericIPAddressField()
     user_agent = models.TextField(blank=True, default='')
+    verdict = models.CharField(
+        max_length=20, blank=True, default='',
+        help_text='Shield verdict for this pageview: "allowed" or "blocked". Empty = not evaluated.',
+    )
+    is_bot = models.BooleanField(
+        default=False,
+        help_text='Whether the shield judged this pageview as bot/automated traffic.',
+    )
+    reason = models.CharField(
+        max_length=100, blank=True, default='',
+        help_text='Short reason code behind the verdict (e.g. suspicious UA, country deny).',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

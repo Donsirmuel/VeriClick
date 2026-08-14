@@ -45,17 +45,17 @@ const TOPICS: ChatTopic[] = [
   {
     id: 'domains',
     keywords: ['domain', 'domain health', 'register domain', 'add domain', 'tracking domain', 'resolves', 'healthy', 'degraded'],
-    answer: `A domain is the web address your tracked links live on. Register it under Domains. To make it fully work with VeriClick you do two quick things: 1) Verify you own it (add a small text/TXT record at your domain provider), and 2) Point it at VeriClick (add one short record, an A or CNAME, that the app shows you). The Domains page walks you through both step by step with copy buttons. Until step 2 is done your links still work — they just use the VeriClick URL instead of your own brand.`,
+    answer: `A domain is the web address your tracked links live on. Register it under Domains and it's authorized instantly — no DNS proof needed. One quick step remains before your links use your own brand: point the domain at VeriClick (add one short CNAME record that the app shows you). The Domains page walks you through it with copy buttons. Until that step is done your links still work — they just use the VeriClick URL instead of your own brand.`,
   },
   {
     id: 'verify-domain',
-    keywords: ['verify', 'verification', 'ownership', 'txt', 'dns', 'verification record', 'prove', 'verified badge', 'point'],
-    answer: `Verification proves you own the domain, which is separate from pointing it at VeriClick. 1) Verify: VeriClick gives you a small text record (vericlick-verify=<token>). Add it at your domain provider, then press "Verify ownership". 2) Point: add one short record (an A or CNAME record) so your domain uses your brand. The Domains page shows the exact record with copy buttons for each value. Your links work either way — before the second step they just use the VeriClick URL.`,
+    keywords: ['verify', 'verification', 'ownership', 'txt', 'dns', 'verification record', 'prove', 'verified badge', 'point', 'instant'],
+    answer: `Ownership is instant with VeriClick: the moment you register a domain from your account it's authorized — there's no TXT record to add anymore. The only remaining step is to point the domain at VeriClick so your links use your own brand: add one short CNAME record shown on the Domains page, then press "Check again". Your links work either way — before pointing they just use the VeriClick URL.`,
   },
   {
     id: 'ip-rules',
-    keywords: ['ip rule', 'ip rules', 'allow', 'deny', 'whitelist', 'blacklist', 'cidr', 'address', 'block ip', 'allowlist', 'denylist', 'rule'],
-    answer: `IP rules let you control which addresses can reach your links. An Allow rule always wins — those IPs are never flagged. A Deny rule blocks matching IPs/CIDR blocks. Rules can be set to expire, and you can whitelist an IP straight from the blocked-IPs review queue.`,
+    keywords: ['ip rule', 'ip rules', 'allow', 'deny', 'whitelist', 'blacklist', 'cidr', 'address', 'block ip', 'allowlist', 'denylist', 'rule', 'traffic rules', 'country', 'device'],
+    answer: `Traffic Rules is where you control which audiences reach your links, in three tabs. IP Addresses: Allow rules always win — those IPs are never flagged; Deny rules block matching IPs/CIDR blocks, and can be set to expire. Countries: deny or allow entire countries. Devices: allow only certain device types (mobile/tablet/desktop) or block certain operating systems. Rules are checked IP allow → IP deny → country → device/OS, and you can whitelist an IP straight from the blocked-IPs review queue.`,
   },
   {
     id: 'point-domain',

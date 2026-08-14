@@ -5,8 +5,8 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .models import (
-    Workspace, DomainRegistry, TrackingLink, ClickLog, IPRule,
-    TrackerEvent, Plan, DiscountCode, SiteConfig, CheckoutIntent,
+    Workspace, DomainRegistry, TrackingLink, ClickLog, IPRule, CountryRule,
+    DevicePolicy, TrackerEvent, Plan, DiscountCode, SiteConfig, CheckoutIntent,
     BillingEvent, PLAN_PERIOD_DAYS,
 )
 
@@ -210,6 +210,31 @@ class IPRuleAdmin(admin.ModelAdmin):
     search_fields = ('ip_or_cidr', 'workspace__name', 'reason')
     autocomplete_fields = ['workspace', 'created_by']
     date_hierarchy = 'created_at'
+
+
+@admin.register(CountryRule)
+class CountryRuleAdmin(admin.ModelAdmin):
+    list_display = ('country_code', 'workspace', 'action', 'is_active', 'source', 'created_at')
+    list_filter = ('action', 'is_active', 'source', 'created_at')
+    search_fields = ('country_code', 'workspace__name', 'reason')
+    autocomplete_fields = ['workspace', 'created_by']
+    date_hierarchy = 'created_at'
+
+
+@admin.register(DevicePolicy)
+class DevicePolicyAdmin(admin.ModelAdmin):
+    list_display = ('workspace', 'allowed_preview', 'blocked_os_preview', 'updated_at')
+    search_fields = ('workspace__name',)
+    autocomplete_fields = ['workspace']
+    readonly_fields = ('updated_at',)
+
+    @admin.display(description='Allowed devices')
+    def allowed_preview(self, obj):
+        return ', '.join(obj.allowed_device_classes or []) or 'All'
+
+    @admin.display(description='Blocked OS')
+    def blocked_os_preview(self, obj):
+        return ', '.join(obj.blocked_os_families or []) or 'None'
 
 
 @admin.register(TrackerEvent)

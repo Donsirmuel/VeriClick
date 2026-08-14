@@ -8,6 +8,7 @@ router = DefaultRouter()
 router.register(r'links', views.TrackingLinkViewSet, basename='link')
 router.register(r'domains', views.DomainRegistryViewSet, basename='domain')
 router.register(r'ip-rules', views.IPRuleViewSet, basename='ip-rule')
+router.register(r'country-rules', views.CountryRuleViewSet, basename='country-rule')
 
 urlpatterns = [
     # Health
@@ -34,14 +35,18 @@ urlpatterns = [
     path('dashboard/stats/', views.dashboard_stats, name='dashboard-stats'),
     path('dashboard/traffic/', views.dashboard_traffic, name='dashboard-traffic'),
     path('dashboard/activity/', views.dashboard_activity, name='dashboard-activity'),
+    path('dashboard/breakdown/', views.dashboard_breakdown, name='dashboard-breakdown'),
     # Workspace
     path('workspace/', views.workspace_detail, name='workspace-detail'),
     path('workspace/billing-history/', views.billing_history, name='billing-history'),
+    # Traffic rules
+    path('device-policy/', views.device_policy, name='device-policy'),
     # Public redirect
     path('r/<slug:slug>/', views.redirect_click, name='redirect-click'),
     # Tracker
     path('tracker.js', views.serve_tracker_script, name='tracker-script'),
     path('tracker/event/', views.receive_tracker_event, name='tracker-event'),
+    path('tracker/shield-evaluate/', views.shield_evaluate, name='shield-evaluate'),
     # Blocked IPs
     path('ip-rules/blocked/', views.blocked_ips, name='blocked-ips'),
     # CRUD

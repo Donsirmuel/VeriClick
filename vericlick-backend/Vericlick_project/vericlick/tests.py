@@ -681,7 +681,11 @@ class LinksEndpointTests(APITestCase):
         res = self.client.get(f'/api/links/{link.id}/')
         self.assertEqual(res.json()['trackingUrl'], 'https://link.example.com/r/dom-url/')
 
-    def test_tracking_url_uses_custom_domain_only_when_verified(self):
+    def test_tracking_url_uses_custom_domain_when_pointing_at_server(self):
+        # Instant authorization: the verified flag no longer gates serving. A
+        # registered domain that points at us serves branded URLs even if the
+        # flag is False (direct-created row); the API marks every registered
+        # domain verified on create anyway.
         domain = DomainRegistry.objects.create(
             workspace=self.workspace, domain='link.example.com',
             verified=False, points_to_server=True,
@@ -691,7 +695,7 @@ class LinksEndpointTests(APITestCase):
             slug='unverified-url', destination_url='https://example.com',
         )
         res = self.client.get(f'/api/links/{link.id}/')
-        self.assertEqual(res.json()['trackingUrl'], 'http://testserver/r/unverified-url/')
+        self.assertEqual(res.json()['trackingUrl'], 'https://link.example.com/r/unverified-url/')
 
     def test_tracking_url_uses_custom_domain_only_when_pointing_at_server(self):
         domain = DomainRegistry.objects.create(
@@ -828,11 +832,12 @@ class DomainsEndpointTests(APITestCase):
         domain.refresh_from_db()
         self.assertIsNotNone(domain.last_checked)
 
-    def test_ready_is_true_only_when_verified_and_pointing_at_server(self):
+    def test_ready_is_true_when_pointing_at_server(self):
+        # Instant authorization: a domain is ready for branded links the moment
+        # its tracking host points at this server — no separate verified gate.
         domain = DomainRegistry.objects.create(
             workspace=self.workspace,
             domain='ready.example.com',
-            verified=True,
             points_to_server=True,
             health_status=DomainRegistry.HealthStatus.HEALTHY,
         )
@@ -842,7 +847,6 @@ class DomainsEndpointTests(APITestCase):
         domain2 = DomainRegistry.objects.create(
             workspace=self.workspace,
             domain='unready.example.com',
-            verified=True,
             points_to_server=False,
             health_status=DomainRegistry.HealthStatus.HEALTHY,
         )
@@ -930,8 +934,23 @@ class DomainVerificationTests(APITestCase):
         )
 
     def test_domain_starts_unverified(self):
+        # A directly-created row defaults to unverified (no TXT step anymore);
+        # the API viewset marks every registered domain verified on create —
+        # instant authorization.
         self.assertFalse(self.domain.verified)
         self.assertIsNotNone(self.domain.verification_token)
+
+    def test_registration_authorizes_instantly(self):
+        with patch('vericlick.services.diagnose_domain', return_value=FAKE_DIAGNOSIS):
+            res = self.client.post(
+                '/api/domains/',
+                {'domain': 'instant.example.com'},
+                format='json',
+            )
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        created = DomainRegistry.objects.get(domain='instant.example.com')
+        self.assertTrue(created.verified)
+        self.assertTrue(res.json()['verified'])
 
     def test_verification_record_value(self):
         self.assertEqual(
@@ -955,24 +974,16 @@ class DomainVerificationTests(APITestCase):
         )
         self.assertIn('verificationToken', body)
 
-    @patch('vericlick.views.verify_domain_ownership', return_value=(True, ''))
-    def test_verify_success_marks_verified(self, mock_verify):
-        with patch('vericlick.services.diagnose_domain', return_value=FAKE_DIAGNOSIS):
-            res = self.client.post(f'/api/domains/{self.domain.id}/verify/')
+    def test_verify_endpoint_is_instant_noop(self):
+        # Legacy endpoint kept for compatibility: with instant authorization the
+        # domain is already authorized, so verify always reports success without
+        # touching DNS.
+        res = self.client.post(f'/api/domains/{self.domain.id}/verify/')
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         body = res.json()
         self.assertTrue(body['verified'])
         self.domain.refresh_from_db()
         self.assertTrue(self.domain.verified)
-        mock_verify.assert_called_once_with(self.domain)
-
-    @patch('vericlick.views.verify_domain_ownership', return_value=(False, 'Not found yet'))
-    def test_verify_failure_returns_400(self, mock_verify):
-        with patch('vericlick.services.diagnose_domain', return_value=FAKE_DIAGNOSIS):
-            res = self.client.post(f'/api/domains/{self.domain.id}/verify/')
-        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
-        self.domain.refresh_from_db()
-        self.assertFalse(self.domain.verified)
 
     def test_verify_cross_workspace_rejected(self):
         other_user = User.objects.create_user(username='other_verify', password='testpass123')
@@ -983,12 +994,12 @@ class DomainVerificationTests(APITestCase):
         res = self.client.post(f'/api/domains/{other_domain.id}/verify/')
         self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
 
-    @patch('vericlick.views.verify_domain_ownership', return_value=(True, ''))
-    def test_verify_requires_auth(self, mock_verify):
+    def test_verify_requires_auth(self):
         self.client.force_authenticate(user=None)
         res = self.client.post(f'/api/domains/{self.domain.id}/verify/')
         self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
-        mock_verify.assert_not_called()
+        self.domain.refresh_from_db()
+        self.assertFalse(self.domain.verified)
 
 
 class DomainDiagnosisTests(APITestCase):
@@ -1612,7 +1623,7 @@ class ServicesTests(TestCase):
     def test_lookup_location_invalid(self):
         from .services import lookup_location
         loc = lookup_location('not-an-ip')
-        self.assertEqual(loc, {'country': '', 'region': '', 'city': ''})
+        self.assertEqual(loc, {'country': '', 'country_code': '', 'region': '', 'city': ''})
 
     def test_get_safe_destination_prefers_workspace(self):
         from .services import get_safe_destination
@@ -2405,9 +2416,8 @@ class FreeTierTests(APITestCase):
     def test_free_workspace_can_add_one_domain_only(self):
         res = self.client.post('/api/domains/', {'domain': 'one.example.com'}, format='json')
         self.assertEqual(res.status_code, status.HTTP_201_CREATED)
-        # The slot is only consumed once the domain is verified (a typo you can
-        # never verify never counts, so you can re-add it).
-        DomainRegistry.objects.filter(workspace=self.workspace, domain='one.example.com').update(verified=True)
+        # Instant authorization consumes the slot at registration time, so the
+        # free tier is capped at one registered domain.
         res = self.client.post('/api/domains/', {'domain': 'two.example.com'}, format='json')
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('free trial', res.json()['errors'][0]['detail'].lower())
@@ -2415,16 +2425,22 @@ class FreeTierTests(APITestCase):
             DomainRegistry.objects.filter(workspace=self.workspace, domain='two.example.com').exists()
         )
 
-    def test_free_unverified_typo_domain_does_not_consume_slot(self):
-        # A domain you can't verify (e.g. a typo) never counts toward the limit,
-        # so removing it costs nothing and you can register again.
+    def test_removed_instant_authorized_domain_keeps_slot_until_period_end(self):
+        # v2.0.0 instant authorization: a registered domain is authorized (and
+        # slot-counted) the moment it exists. Deleting it keeps the slot until
+        # the current period ends, so users can't churn domains to dodge their
+        # limit.
         res = self.client.post('/api/domains/', {'domain': 'goglee.com'}, format='json')
         self.assertEqual(res.status_code, status.HTTP_201_CREATED)
-        typo = DomainRegistry.objects.get(workspace=self.workspace, domain='goglee.com')
-        res = self.client.delete(f'/api/domains/{typo.id}/')
+        domain = DomainRegistry.objects.get(workspace=self.workspace, domain='goglee.com')
+        self.assertTrue(domain.verified)
+        res = self.client.delete(f'/api/domains/{domain.id}/')
         self.assertEqual(res.status_code, status.HTTP_204_NO_CONTENT)
         res = self.client.post('/api/domains/', {'domain': 'google.com'}, format='json')
-        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(
+            DomainRegistry.objects.filter(workspace=self.workspace, domain='google.com').exists()
+        )
 
     def test_free_workspace_can_add_one_link_only(self):
         DomainRegistry.objects.create(
@@ -3074,3 +3090,506 @@ class CheckoutProductSelectionTests(APITestCase):
         )
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         self.assertEqual(res.json()['checkoutUrl'], 'https://checkout.bachs.io/c/tok4')
+
+
+# ---- v2.0.0 Traffic Rules + Instant Authorize + Site Shield ----
+
+DESKTOP_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36'
+MOBILE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1'
+BOT_UA = 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)'
+
+US_LOCATION = {
+    'country': 'United States', 'country_code': 'US', 'region': 'CA', 'city': 'Mountain View',
+}
+
+
+def _make_workspace(username):
+    user = User.objects.create_user(username=username)
+    return Workspace.objects.get(owner=user)
+
+
+def _make_link(workspace, slug='rl-rule', **kwargs):
+    return TrackingLink.objects.create(
+        workspace=workspace, slug=slug, destination_url='https://example.com/landing', **kwargs
+    )
+
+
+class DeviceParsingTests(TestCase):
+    def test_desktop(self):
+        from .services import parse_device
+        d = parse_device(DESKTOP_UA)
+        self.assertEqual(d['device_class'], 'desktop')
+        self.assertEqual(d['os_family'], 'Windows')
+        self.assertEqual(d['browser'], 'Chrome')
+        self.assertFalse(d['is_bot'])
+
+    def test_mobile_and_tablet(self):
+        from .services import parse_device
+        self.assertEqual(parse_device(MOBILE_UA)['device_class'], 'mobile')
+        self.assertEqual(parse_device(MOBILE_UA)['os_family'], 'iOS')
+        ipad = 'Mozilla/5.0 (iPad; CPU OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1'
+        self.assertEqual(parse_device(ipad)['device_class'], 'tablet')
+
+    def test_bot_and_blank(self):
+        from .services import parse_device
+        self.assertTrue(parse_device(BOT_UA)['is_bot'])
+        self.assertEqual(parse_device(BOT_UA)['device_class'], 'bot')
+        self.assertTrue(parse_device('')['is_bot'])
+        self.assertTrue(parse_device('   ')['is_bot'])
+
+    def test_os_normalization(self):
+        from .services import normalize_os_family
+        self.assertEqual(normalize_os_family('Mac OS X'), 'macOS')
+        self.assertEqual(normalize_os_family('Windows Phone'), 'Windows')
+        self.assertEqual(normalize_os_family('Ubuntu'), 'Linux')
+        self.assertEqual(normalize_os_family('Chrome OS'), 'Chrome OS')
+        self.assertEqual(normalize_os_family(''), 'Other')
+
+
+class CountryRuleClassificationTests(TestCase):
+    def setUp(self):
+        self.workspace = _make_workspace('country_cls')
+        self.link = _make_link(self.workspace)
+
+    @patch('vericlick.services.lookup_location', return_value=dict(US_LOCATION))
+    def test_country_deny_blocks(self, _mock):
+        from .models import CountryRule
+        from .services import classify_request
+        CountryRule.objects.create(
+            workspace=self.workspace, country_code='US', action=CountryRule.Action.DENY,
+        )
+        result = classify_request(self.link, '8.8.8.8', DESKTOP_UA, self.workspace)
+        self.assertTrue(result['is_bot'])
+        self.assertEqual(result['decision'], 'blocked')
+        self.assertEqual(result['reason'], 'CountryRule: deny')
+        self.assertEqual(result['matched_rule'], 'US')
+
+    @patch('vericlick.services.lookup_location', return_value=dict(US_LOCATION))
+    def test_country_allow_wins_over_deny(self, _mock):
+        from .models import CountryRule
+        from .services import classify_request
+        CountryRule.objects.create(
+            workspace=self.workspace, country_code='US', action=CountryRule.Action.ALLOW,
+        )
+        CountryRule.objects.create(
+            workspace=self.workspace, country_code='US', action=CountryRule.Action.DENY,
+        )
+        result = classify_request(self.link, '8.8.8.8', BOT_UA, self.workspace)
+        self.assertFalse(result['is_bot'])
+        self.assertEqual(result['decision'], 'allowed')
+
+    @patch('vericlick.services.lookup_location', return_value=dict(US_LOCATION))
+    def test_other_country_not_blocked(self, _mock):
+        from .models import CountryRule
+        from .services import classify_request
+        CountryRule.objects.create(
+            workspace=self.workspace, country_code='NG', action=CountryRule.Action.DENY,
+        )
+        result = classify_request(self.link, '8.8.8.8', DESKTOP_UA, self.workspace)
+        self.assertEqual(result['decision'], 'allowed')
+
+    @patch('vericlick.services.lookup_location', return_value=dict(US_LOCATION))
+    def test_inactive_country_rule_ignored(self, _mock):
+        from .models import CountryRule
+        from .services import classify_request
+        CountryRule.objects.create(
+            workspace=self.workspace, country_code='US', action=CountryRule.Action.DENY,
+            is_active=False,
+        )
+        result = classify_request(self.link, '8.8.8.8', DESKTOP_UA, self.workspace)
+        self.assertEqual(result['decision'], 'allowed')
+
+    def test_ip_allow_rule_still_wins_over_country_deny(self):
+        from .models import CountryRule, IPRule
+        from .services import classify_request
+        CountryRule.objects.create(
+            workspace=self.workspace, country_code='US', action=CountryRule.Action.DENY,
+        )
+        IPRule.objects.create(
+            workspace=self.workspace, ip_or_cidr='8.8.8.8', action=IPRule.Action.ALLOW,
+        )
+        result = classify_request(self.link, '8.8.8.8', DESKTOP_UA, self.workspace)
+        self.assertEqual(result['decision'], 'allowed')
+        self.assertIn('allow', result['reason'])
+
+
+class DevicePolicyClassificationTests(TestCase):
+    def setUp(self):
+        self.workspace = _make_workspace('device_cls')
+        self.link = _make_link(self.workspace)
+
+    def test_no_policy_means_all_allowed(self):
+        from .services import classify_request
+        result = classify_request(self.link, '8.8.8.8', MOBILE_UA, self.workspace)
+        self.assertEqual(result['decision'], 'allowed')
+
+    def test_allowed_classes_excludes_mobile(self):
+        from .models import DevicePolicy
+        from .services import classify_request
+        DevicePolicy.objects.create(
+            workspace=self.workspace, allowed_device_classes=['desktop'],
+        )
+        result = classify_request(self.link, '8.8.8.8', MOBILE_UA, self.workspace)
+        self.assertTrue(result['is_bot'])
+        self.assertEqual(result['decision'], 'blocked')
+        self.assertEqual(result['reason'], 'device')
+        self.assertEqual(result['matched_rule'], 'mobile')
+
+    def test_blocked_os_family(self):
+        from .models import DevicePolicy
+        from .services import classify_request
+        DevicePolicy.objects.create(
+            workspace=self.workspace, blocked_os_families=['iOS'],
+        )
+        result = classify_request(self.link, '8.8.8.8', MOBILE_UA, self.workspace)
+        self.assertEqual(result['decision'], 'blocked')
+        self.assertEqual(result['reason'], 'os')
+
+    def test_desktop_allowed_when_os_blocked_is_other(self):
+        from .models import DevicePolicy
+        from .services import classify_request
+        DevicePolicy.objects.create(
+            workspace=self.workspace, blocked_os_families=['iOS'],
+        )
+        result = classify_request(self.link, '8.8.8.8', DESKTOP_UA, self.workspace)
+        self.assertEqual(result['decision'], 'allowed')
+
+
+class PerLinkRestrictionTests(TestCase):
+    def setUp(self):
+        self.workspace = _make_workspace('perlink_cls')
+        self.link = _make_link(self.workspace)
+
+    @patch('vericlick.services.lookup_location', return_value=dict(US_LOCATION))
+    def test_link_country_restriction(self, _mock):
+        from .services import classify_request
+        self.link.allowed_countries = ['NG']
+        self.link.save()
+        result = classify_request(self.link, '8.8.8.8', DESKTOP_UA, self.workspace)
+        self.assertEqual(result['decision'], 'blocked')
+        self.assertEqual(result['reason'], 'link-country')
+
+    def test_link_device_restriction(self):
+        from .services import classify_request
+        self.link.allowed_devices = ['desktop']
+        self.link.save()
+        result = classify_request(self.link, '8.8.8.8', MOBILE_UA, self.workspace)
+        self.assertEqual(result['decision'], 'blocked')
+        self.assertEqual(result['reason'], 'link-device')
+
+    def test_link_allows_matching_device(self):
+        from .services import classify_request
+        self.link.allowed_devices = ['desktop']
+        self.link.save()
+        result = classify_request(self.link, '8.8.8.8', DESKTOP_UA, self.workspace)
+        self.assertEqual(result['decision'], 'allowed')
+
+    @patch('vericlick.services.lookup_location', return_value=dict(US_LOCATION))
+    def test_workspace_country_rule_and_link_rule_both_apply(self, _mock):
+        from .models import CountryRule
+        from .services import classify_request
+        CountryRule.objects.create(
+            workspace=self.workspace, country_code='US', action=CountryRule.Action.DENY,
+        )
+        self.link.allowed_countries = ['NG']
+        self.link.save()
+        # Workspace rule fires first (higher priority in the chain).
+        result = classify_request(self.link, '8.8.8.8', DESKTOP_UA, self.workspace)
+        self.assertEqual(result['reason'], 'CountryRule: deny')
+
+
+class CountryRuleApiTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='country_api', password='pw123')
+        self.client.force_authenticate(user=self.user)
+        self.workspace = Workspace.objects.get(owner=self.user)
+
+    def test_create_country_rule(self):
+        res = self.client.post('/api/country-rules/', {
+            'country_code': 'cn', 'action': 'deny',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        body = res.json()
+        self.assertEqual(body['countryCode'], 'CN')
+        from .models import CountryRule
+        self.assertTrue(CountryRule.objects.filter(
+            workspace=self.workspace, country_code='CN', action='deny'
+        ).exists())
+
+    def test_upsert_reactivates_existing(self):
+        from .models import CountryRule
+        rule = CountryRule.objects.create(
+            workspace=self.workspace, country_code='US', action='deny', is_active=False,
+        )
+        res = self.client.post('/api/country-rules/', {
+            'country_code': 'us', 'action': 'deny',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(CountryRule.objects.filter(
+            workspace=self.workspace, country_code='US', action='deny'
+        ).count(), 1)
+        rule.refresh_from_db()
+        self.assertTrue(rule.is_active)
+
+    def test_invalid_country_code_rejected(self):
+        res = self.client.post('/api/country-rules/', {
+            'country_code': 'USA', 'action': 'deny',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_list_scoped_to_workspace(self):
+        from .models import CountryRule
+        CountryRule.objects.create(workspace=self.workspace, country_code='US', action='deny')
+        other = _make_workspace('country_api_other')
+        CountryRule.objects.create(workspace=other, country_code='NG', action='deny')
+        res = self.client.get('/api/country-rules/')
+        codes = [r['countryCode'] for r in res.json()['results']]
+        self.assertIn('US', codes)
+        self.assertNotIn('NG', codes)
+
+
+class DevicePolicyApiTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='device_api', password='pw123')
+        self.client.force_authenticate(user=self.user)
+        self.workspace = Workspace.objects.get(owner=self.user)
+
+    def test_get_creates_policy_lazily(self):
+        from .models import DevicePolicy
+        self.assertFalse(DevicePolicy.objects.filter(workspace=self.workspace).exists())
+        res = self.client.get('/api/device-policy/')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertTrue(DevicePolicy.objects.filter(workspace=self.workspace).exists())
+        self.assertEqual(res.json()['allowedDeviceClasses'], [])
+
+    def test_patch_updates_policy(self):
+        res = self.client.patch('/api/device-policy/', {
+            'allowed_device_classes': ['desktop'],
+            'blocked_os_families': ['Android'],
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        body = res.json()
+        self.assertEqual(body['allowedDeviceClasses'], ['desktop'])
+        self.assertEqual(body['blockedOsFamilies'], ['Android'])
+
+    def test_patch_rejects_unknown_device_class(self):
+        res = self.client.patch('/api/device-policy/', {
+            'allowed_device_classes': ['hoverboard'],
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_patch_rejected_when_suspended(self):
+        self.workspace.plan_expires_at = timezone.now() - timedelta(days=99)
+        self.workspace.plan_billing_mode = Workspace.BillingMode.PERIOD
+        self.workspace.plan = Plan.objects.get(code='plus')
+        self.workspace.save()
+        res = self.client.patch('/api/device-policy/', {
+            'allowed_device_classes': ['desktop'],
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+class RedirectBotActionTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='botaction_user')
+        self.workspace = Workspace.objects.get(owner=self.user)
+        self.link = _make_link(self.workspace, slug='bot-action')
+
+    def test_default_safe_diverts_bot(self):
+        res = self.client.get('/api/r/bot-action/', HTTP_USER_AGENT=BOT_UA)
+        self.assertEqual(res.status_code, status.HTTP_302_FOUND)
+        self.assertTrue(res.url.endswith('/suspicious/'))
+
+    def test_bot_action_404(self):
+        self.link.bot_action = TrackingLink.BotAction.NOT_FOUND
+        self.link.save()
+        res = self.client.get('/api/r/bot-action/', HTTP_USER_AGENT=BOT_UA)
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_bot_action_block(self):
+        self.link.bot_action = TrackingLink.BotAction.BLOCK
+        self.link.save()
+        res = self.client.get('/api/r/bot-action/', HTTP_USER_AGENT=BOT_UA)
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_bot_action_safe_url(self):
+        self.link.bot_action = TrackingLink.BotAction.SAFE
+        self.link.safe_url = 'https://privacy.example.com/notice'
+        self.link.save()
+        res = self.client.get('/api/r/bot-action/', HTTP_USER_AGENT=BOT_UA)
+        self.assertEqual(res.status_code, status.HTTP_302_FOUND)
+        self.assertEqual(res.url, 'https://privacy.example.com/notice')
+
+    def test_human_always_reaches_destination_regardless_of_bot_action(self):
+        self.link.bot_action = TrackingLink.BotAction.BLOCK
+        self.link.save()
+        res = self.client.get('/api/r/bot-action/', HTTP_USER_AGENT=DESKTOP_UA)
+        self.assertEqual(res.status_code, status.HTTP_302_FOUND)
+        self.assertEqual(res.url, 'https://example.com/landing')
+
+    @patch('vericlick.services.lookup_location', return_value=dict(US_LOCATION))
+    def test_country_blocked_human_goes_to_safe_even_with_block_bot_action(self, _mock):
+        # bot_action governs bots; a human blocked by a country rule is still
+        # diverted to the safe page, never 403/404.
+        from .models import CountryRule
+        CountryRule.objects.create(
+            workspace=self.workspace, country_code='US', action=CountryRule.Action.DENY,
+        )
+        self.link.bot_action = TrackingLink.BotAction.BLOCK
+        self.link.save()
+        res = self.client.get(
+            '/api/r/bot-action/',
+            HTTP_USER_AGENT=DESKTOP_UA,
+            REMOTE_ADDR='8.8.8.8',
+        )
+        self.assertEqual(res.status_code, status.HTTP_302_FOUND)
+        self.assertTrue(res.url.endswith('/suspicious/'))
+
+    def test_click_log_records_enriched_fields(self):
+        self.client.get('/api/r/bot-action/', HTTP_USER_AGENT=DESKTOP_UA)
+        log = ClickLog.objects.first()
+        self.assertEqual(log.device_class, 'desktop')
+        self.assertEqual(log.os_family, 'Windows')
+        self.assertIn('Chrome', log.browser)
+
+    def test_click_log_country_code_recorded(self):
+        with patch('vericlick.services.lookup_location', return_value=dict(US_LOCATION)):
+            self.client.get(
+                '/api/r/bot-action/',
+                HTTP_USER_AGENT=DESKTOP_UA,
+                REMOTE_ADDR='8.8.8.8',
+            )
+        log = ClickLog.objects.first()
+        self.assertEqual(log.country_code, 'US')
+        self.assertEqual(log.country, 'United States')
+
+
+class DashboardBreakdownTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='breakdown_user', password='pw123')
+        self.client.force_authenticate(user=self.user)
+        self.workspace = Workspace.objects.get(owner=self.user)
+        self.link = _make_link(self.workspace, slug='breakdown')
+        for i in range(3):
+            ClickLog.objects.create(
+                link=self.link, ip='1.1.1.1', country_code='US', country='United States',
+                device_class='desktop', decision='allowed',
+            )
+        ClickLog.objects.create(
+            link=self.link, ip='2.2.2.2', country_code='NG', country='Nigeria',
+            device_class='mobile', decision='blocked',
+        )
+
+    def test_country_breakdown(self):
+        res = self.client.get('/api/dashboard/breakdown/?dimension=country&range=30d')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        rows = res.json()
+        by_key = {r['key']: r for r in rows}
+        self.assertEqual(by_key['US']['total'], 3)
+        self.assertEqual(by_key['NG']['blocked'], 1)
+
+    def test_device_breakdown(self):
+        res = self.client.get('/api/dashboard/breakdown/?dimension=device&range=30d')
+        rows = res.json()
+        by_key = {r['key']: r for r in rows}
+        self.assertEqual(by_key['desktop']['total'], 3)
+        self.assertEqual(by_key['mobile']['blocked'], 1)
+
+    def test_breakdown_requires_auth(self):
+        self.client.force_authenticate(user=None)
+        res = self.client.get('/api/dashboard/breakdown/')
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+class ShieldEvaluateTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='shield_user')
+        self.workspace = Workspace.objects.get(owner=self.user)
+        self.domain = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='brand.example.com',
+        )
+        self.token = str(self.workspace.tracker_secret)
+
+    def _post(self, page_url, ua=DESKTOP_UA):
+        return self.client.post('/api/tracker/shield-evaluate/', {
+            'site_id': str(self.workspace.id),
+            'token': self.token,
+            'page_url': page_url,
+        }, HTTP_USER_AGENT=ua, format='json')
+
+    def test_authorized_domain_human_allowed(self):
+        res = self._post('https://brand.example.com/landing')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.json()['verdict'], 'allowed')
+        self.assertFalse(res.json()['isBot'])
+
+    def test_authorized_domain_bot_blocked_and_recorded(self):
+        res = self._post('https://brand.example.com/landing', ua=BOT_UA)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.json()['verdict'], 'blocked')
+        self.assertTrue(res.json()['isBot'])
+        self.assertEqual(res.json()['reason'], 'Suspicious UA')
+        event = TrackerEvent.objects.get(workspace=self.workspace)
+        self.assertEqual(event.verdict, 'blocked')
+        self.assertTrue(event.is_bot)
+
+    def test_unauthorized_host_fails_open(self):
+        res = self._post('https://someone-elses-site.com/page', ua=BOT_UA)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.json()['verdict'], 'allowed')
+        self.assertEqual(res.json()['reason'], 'not-authorized')
+        self.assertEqual(TrackerEvent.objects.count(), 0)
+
+    def test_shared_host_allowed(self):
+        with override_settings(PUBLIC_TRACKING_BASE_URL='https://links.example.org'):
+            res = self._post('https://links.example.org/page')
+        self.assertEqual(res.json()['verdict'], 'allowed')
+
+    def test_invalid_token_rejected(self):
+        res = self.client.post('/api/tracker/shield-evaluate/', {
+            'site_id': str(self.workspace.id),
+            'token': 'wrong',
+            'page_url': 'https://brand.example.com/landing',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_suspended_workspace_fails_open(self):
+        self.workspace.plan_expires_at = timezone.now() - timedelta(days=99)
+        self.workspace.plan_billing_mode = Workspace.BillingMode.PERIOD
+        plan = Plan.objects.get(code='plus')
+        self.workspace.plan = plan
+        self.workspace.save()
+        res = self._post('https://brand.example.com/landing', ua=BOT_UA)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.json()['verdict'], 'allowed')
+        self.assertEqual(res.json()['reason'], 'suspended')
+
+
+class TrackerEventBeaconVerdictTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='beacon_user')
+        self.workspace = Workspace.objects.get(owner=self.user)
+
+    def test_beacon_stores_verdict_fields(self):
+        res = self.client.post('/api/tracker/event/', {
+            'site_id': str(self.workspace.id),
+            'token': str(self.workspace.tracker_secret),
+            'page_url': 'https://brand.example.com/landing',
+            'verdict': 'allowed',
+            'is_bot': False,
+            'reason': '',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        event = TrackerEvent.objects.get(workspace=self.workspace)
+        self.assertEqual(event.verdict, 'allowed')
+        self.assertFalse(event.is_bot)
+
+    def test_beacon_without_verdict_stays_blank(self):
+        self.client.post('/api/tracker/event/', {
+            'site_id': str(self.workspace.id),
+            'token': str(self.workspace.tracker_secret),
+            'page_url': 'https://brand.example.com/landing',
+        }, format='json')
+        event = TrackerEvent.objects.get(workspace=self.workspace)
+        self.assertEqual(event.verdict, '')
+        self.assertFalse(event.is_bot)

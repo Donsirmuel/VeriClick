@@ -4,7 +4,7 @@ from bisect import bisect_right
 from datetime import timedelta
 from django.db.models import Q
 from django.utils import timezone
-from .models import IPRule, ClickLog, DomainRegistry, IpAsnRange
+from .models import IPRule, ClickLog, DomainRegistry, IpAsnRange, CountryRule
 
 
 # How often an IP must trip the traffic checks before it is auto-denied, and
@@ -50,6 +50,71 @@ def is_likely_bot_ua(user_agent):
         if re.search(pattern, ua):
             return True
     return False
+
+
+def normalize_os_family(family):
+    # ua-parser reports OS families in a handful of spellings (Mac OS X, Windows
+    # Phone, Ubuntu, ...). Collapse them to the canonical set the Traffic Rules
+    # page offers so rules and click logs always compare the same strings.
+    if not family:
+        return 'Other'
+    lower = family.lower()
+    if 'windows' in lower:
+        return 'Windows'
+    if 'mac' in lower and 'ios' not in lower:
+        return 'macOS'
+    if 'ios' in lower or lower.startswith('ipad') or lower.startswith('iphone') or lower.startswith('ipod'):
+        return 'iOS'
+    if 'android' in lower:
+        return 'Android'
+    if 'chrome os' in lower:
+        return 'Chrome OS'
+    if 'linux' in lower or 'ubuntu' in lower or 'debian' in lower or 'fedora' in lower or 'gentoo' in lower or 'arch' in lower or 'mint' in lower:
+        return 'Linux'
+    if 'blackberry' in lower or 'rim' in lower or 'playbook' in lower:
+        return 'BlackBerry'
+    if 'kaios' in lower:
+        return 'KaiOS'
+    return family or 'Other'
+
+
+def parse_device(user_agent):
+    """Classify a user agent into the normalized buckets used by device rules,
+    click logs and dashboard breakdowns. Returns:
+
+        {device_class: 'mobile'|'tablet'|'desktop'|'bot'|'other',
+         os_family: canonical OS family, browser: family, is_bot: bool}
+
+    A missing or blank UA counts as a bot, matching the legacy heuristic. The
+    user_agents library is pure-Python and safe for the redirect hot path."""
+    from user_agents import parse
+
+    raw = user_agent or ''
+    if not raw.strip():
+        return {'device_class': 'bot', 'os_family': 'Bot', 'browser': 'Unknown', 'is_bot': True}
+    try:
+        parsed = parse(raw)
+    except Exception:
+        return {'device_class': 'other', 'os_family': 'Other', 'browser': 'Unknown', 'is_bot': False}
+
+    if parsed.is_bot:
+        return {'device_class': 'bot', 'os_family': 'Bot', 'browser': 'Unknown', 'is_bot': True}
+
+    if parsed.is_mobile:
+        device_class = 'mobile'
+    elif parsed.is_tablet:
+        device_class = 'tablet'
+    elif parsed.is_pc:
+        device_class = 'desktop'
+    else:
+        device_class = 'other'
+
+    return {
+        'device_class': device_class,
+        'os_family': normalize_os_family(parsed.os.family or ''),
+        'browser': parsed.browser.family or 'Unknown',
+        'is_bot': False,
+    }
 
 
 def check_rate_limit(ip, workspace, max_clicks=60, window_seconds=60):
@@ -146,6 +211,9 @@ def lookup_location(ip):
     # Persisted location enrichment for click logs. Tries an optional GeoLite2
     # database first (pip install geoip2 + set GEOIP2_DB), then falls back to a
     # safe offline classification so records always carry country/region/city.
+    # country_code (ISO 3166-1 alpha-2) is only populated when a real lookup
+    # succeeds — the offline placeholders (Localhost, Private network, ...) are
+    # not countries, so they never match a country rule.
     try:
         from django.conf import settings as django_settings
         from geoip2.database import Reader
@@ -155,6 +223,7 @@ def lookup_location(ip):
                 resp = reader.city(ip)
                 return {
                     'country': resp.country.names.get('en', resp.country.name or ''),
+                    'country_code': resp.country.iso_code or '',
                     'region': (resp.subdivisions.most_specific.name or '') if resp.subdivisions else '',
                     'city': resp.city.name or '',
                 }
@@ -164,15 +233,15 @@ def lookup_location(ip):
     try:
         ip_obj = ipaddress.ip_address(ip)
     except ValueError:
-        return {'country': '', 'region': '', 'city': ''}
+        return {'country': '', 'country_code': '', 'region': '', 'city': ''}
 
     if ip_obj.is_loopback:
-        return {'country': 'Localhost', 'region': '', 'city': ''}
+        return {'country': 'Localhost', 'country_code': '', 'region': '', 'city': ''}
     if ip_obj.is_private or ip_obj.is_link_local:
-        return {'country': 'Private network', 'region': '', 'city': ''}
+        return {'country': 'Private network', 'country_code': '', 'region': '', 'city': ''}
     if ip_obj.is_reserved:
-        return {'country': 'Reserved', 'region': '', 'city': ''}
-    return {'country': 'Unknown', 'region': '', 'city': ''}
+        return {'country': 'Reserved', 'country_code': '', 'region': '', 'city': ''}
+    return {'country': 'Unknown', 'country_code': '', 'region': '', 'city': ''}
 
 
 def verify_domain_ownership(domain):
@@ -436,6 +505,18 @@ def reason_label(decision, reason='', matched_rule=''):
     if decision == 'blocked':
         if reason and 'IPRule: deny' in reason:
             return 'Blocked by a deny rule you created'
+        if reason == 'CountryRule: deny':
+            return 'Blocked by a country rule you created'
+        if reason == 'country':
+            return 'Blocked by a country rule you created'
+        if reason == 'device':
+            return 'Blocked by your device rules'
+        if reason == 'os':
+            return 'Blocked by your OS rules'
+        if reason == 'link-country':
+            return 'Blocked by this link\'s country restriction'
+        if reason == 'link-device':
+            return 'Blocked by this link\'s device restriction'
         if reason == 'Suspicious UA':
             return 'Request looked automated (bot-like browser)'
         if reason == 'Rate limit':
@@ -461,12 +542,12 @@ def get_safe_destination(workspace, request=None):
 def get_public_tracking_url(link, request=None):
     # Single source of truth for the shareable tracked URL. A link on a custom
     # domain resolves to https://<domain>/r/<slug>/ only when the domain is
-    # actually serving tracked traffic for us — which requires BOTH:
-    #   1. the domain owner proved control (verified, TXT record), and
-    #   2. the domain points at this server (points_to_server — its tracking
-    #      host resolves to our IP, not just *some* IP like the customer's old
-    #      web host). The apex itself doesn't need to resolve: a root domain
-    #      with no A record still serves its links on t.<domain>.
+    # actually serving tracked traffic for us — which requires that it points
+    # at this server (points_to_server — its tracking host resolves to our IP,
+    # not just *some* IP like the customer's old web host). The apex itself
+    # doesn't need to resolve: a root domain with no A record still serves its
+    # links on t.<domain>. Ownership is implied by registration (instant
+    # authorization), so no separate verified flag gates serving anymore.
     # Otherwise the app falls back to the current request host or the
     # configured public tracking base so copied links never point at a dead
     # domain.
@@ -474,7 +555,6 @@ def get_public_tracking_url(link, request=None):
     if (
         domain
         and domain.domain
-        and domain.verified
         and domain.removed_at is None
         and domain.points_to_server
     ):
@@ -495,13 +575,25 @@ def get_public_tracking_url(link, request=None):
 
 
 def classify_request(link, ip, user_agent, workspace):
+    # Decision chain, in priority order:
+    #   IP allowlist -> IP denylist -> country rules -> device/OS policy ->
+    #   per-link country/device restrictions -> bot UA -> rate limit ->
+    #   datacenter -> auto-reputation -> default allow.
+    # Allowlist is highest priority: an allow rule always wins (e.g. recovered
+    # false positives), so allowlisted IPs are never diverted. `link` may be
+    # None when classifying a bare pageview (Site Shield), in which case the
+    # per-link steps are skipped.
+    #
+    # The returned dict carries everything the caller needs to persist a rich
+    # ClickLog: decision fields plus the enriched location and device buckets,
+    # so the hot path only pays for one location lookup.
     now = timezone.now()
 
-    # Decision chain: allowlist -> denylist -> bot heuristics -> rate limits.
-    # Allowlist is highest priority: an allow rule always wins (e.g. recovered
-    # false positives), so allowlisted IPs are never diverted. Deny rules come
-    # next so a blocked address is always intercepted. Then UA heuristics, then
-    # rate limiting, then default allow for everyone else.
+    location = lookup_location(ip)
+    country_code = (location.get('country_code') or '').upper()
+    device = parse_device(user_agent)
+
+    # 1. IP allowlist / denylist.
     rules = IPRule.objects.filter(
         workspace=workspace, is_active=True,
     ).filter(
@@ -524,6 +616,8 @@ def classify_request(link, ip, user_agent, workspace):
             'reason': f'IPRule: allow ({allow_match.reason})' if allow_match.reason else 'IPRule: allow',
             'decision': 'allowed',
             'matched_rule': str(allow_match.ip_or_cidr),
+            'location': location,
+            'device': device,
         }
 
     if deny_match:
@@ -532,17 +626,108 @@ def classify_request(link, ip, user_agent, workspace):
             'reason': f'IPRule: deny ({deny_match.reason})' if deny_match.reason else 'IPRule: deny',
             'decision': 'blocked',
             'matched_rule': str(deny_match.ip_or_cidr),
+            'location': location,
+            'device': device,
         }
 
-    is_bot_ua = is_likely_bot_ua(user_agent)
-    if is_bot_ua:
+    # 2. Country rules. An allow rule for the request's country wins over any
+    # deny rule for it (same precedence as IP rules).
+    if country_code:
+        country_rules = CountryRule.objects.filter(
+            workspace=workspace, is_active=True,
+        )
+        allow_country = None
+        deny_country = None
+        for rule in country_rules:
+            if rule.country_code.upper() != country_code:
+                continue
+            if rule.action == 'allow' and allow_country is None:
+                allow_country = rule
+            if rule.action == 'deny' and deny_country is None:
+                deny_country = rule
+        if allow_country:
+            return {
+                'is_bot': False,
+                'reason': 'CountryRule: allow',
+                'decision': 'allowed',
+                'matched_rule': country_code,
+                'location': location,
+                'device': device,
+            }
+        if deny_country:
+            return {
+                'is_bot': True,
+                'reason': 'CountryRule: deny',
+                'decision': 'blocked',
+                'matched_rule': country_code,
+                'location': location,
+                'device': device,
+            }
+
+    # 3. Workspace device/OS policy (empty lists = nothing restricted).
+    policy = getattr(workspace, 'device_policy', None)
+    if policy is not None:
+        allowed_classes = policy.allowed_device_classes or []
+        blocked_os = policy.blocked_os_families or []
+        if allowed_classes and device['device_class'] not in allowed_classes:
+            return {
+                'is_bot': True,
+                'reason': 'device',
+                'decision': 'blocked',
+                'matched_rule': device['device_class'],
+                'location': location,
+                'device': device,
+            }
+        if blocked_os and device['os_family'] in blocked_os:
+            return {
+                'is_bot': True,
+                'reason': 'os',
+                'decision': 'blocked',
+                'matched_rule': device['os_family'],
+                'location': location,
+                'device': device,
+            }
+
+    # 4. Per-link country / device restrictions (empty = all allowed).
+    if link is not None:
+        if (
+            link.allowed_countries
+            and country_code
+            and country_code not in [c.upper() for c in link.allowed_countries]
+        ):
+            return {
+                'is_bot': True,
+                'reason': 'link-country',
+                'decision': 'blocked',
+                'matched_rule': country_code,
+                'location': location,
+                'device': device,
+            }
+        if (
+            link.allowed_devices
+            and device['device_class'] not in link.allowed_devices
+        ):
+            return {
+                'is_bot': True,
+                'reason': 'link-device',
+                'decision': 'blocked',
+                'matched_rule': device['device_class'],
+                'location': location,
+                'device': device,
+            }
+
+    # 5. Bot UA heuristics (the legacy blanket bot detector).
+    if device['is_bot'] or is_likely_bot_ua(user_agent):
         return {
             'is_bot': True,
             'reason': 'Suspicious UA',
             'decision': 'blocked',
             'matched_rule': '',
+            'location': location,
+            'device': device,
         }
 
+    # 6. Rate limiting (workspace-wide, so link=None still applies).
     is_ratelimited = check_rate_limit(ip, workspace)
     if is_ratelimited:
         return {
@@ -550,8 +735,11 @@ def classify_request(link, ip, user_agent, workspace):
             'reason': 'Rate limit',
             'decision': 'challenged',
             'matched_rule': '',
+            'location': location,
+            'device': device,
         }
 
+    # 7. Datacenter / hosting / VPN networks.
     if workspace.auto_reputation_enabled and is_datacenter_ip(ip):
         # Bots and scanners overwhelmingly come from hosting/datacenter/VPN
         # networks. Divert them unless the workspace turned this off. Each
@@ -561,10 +749,14 @@ def classify_request(link, ip, user_agent, workspace):
             'reason': 'Hosting/datacenter IP',
             'decision': 'blocked',
             'matched_rule': '',
+            'location': location,
+            'device': device,
         }
 
+    # 8. Auto-reputation watchlist.
     auto_block = check_auto_reputation(workspace, ip)
     if auto_block:
+        auto_block.update({'location': location, 'device': device})
         return auto_block
 
     return {
@@ -572,4 +764,6 @@ def classify_request(link, ip, user_agent, workspace):
         'reason': '',
         'decision': 'allowed',
         'matched_rule': '',
+        'location': location,
+        'device': device,
     }

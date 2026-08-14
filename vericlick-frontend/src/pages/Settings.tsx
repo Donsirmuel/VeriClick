@@ -213,6 +213,26 @@ export default function SettingsPage() {
             </ol>
           </div>
 
+          <div className="p-4 rounded-xl border border-success/30 bg-success/5 space-y-2">
+            <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+              <HugeiconsIcon icon={ShieldIcon} className="w-4 h-4 text-success" />
+              Site Shield
+            </h4>
+            <p className="text-sm text-muted leading-relaxed">
+              To also stop bots at the page itself (before they reach your tracked links), add{' '}
+              <span className="font-mono text-xs bg-neutral-100 px-1 rounded">data-shield</span> to the
+              script tag on any page whose domain you've registered. VeriClick evaluates each visitor
+              on load and diverts bots, restricted countries, and blocked devices to your safe
+              destination. The shield verdicts also appear in your dashboard activity.
+            </p>
+            <p className="text-[11px] text-muted leading-relaxed">
+              Your snippet with the shield flag:
+              <code className="mt-1 block font-mono text-[11px] bg-neutral-900 text-neutral-100 px-3 py-2 rounded-lg break-all">
+                {snippet ? snippet.replace(' async>', ' data-shield async>') : '…'}
+              </code>
+            </p>
+          </div>
+
           <div className="flex justify-end pt-4 border-t border-border">
             <button
               onClick={handleCopySnippet}

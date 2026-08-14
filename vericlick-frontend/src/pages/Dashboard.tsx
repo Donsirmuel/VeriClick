@@ -1,19 +1,23 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Activity01Icon, LinkSquare02Icon, Globe02Icon, Shield02Icon, Copy01Icon, CodeIcon, CheckmarkCircle02Icon, ArrowRight02Icon } from '@hugeicons/core-free-icons'
+import toast from 'react-hot-toast'
 import { StatCard } from '@/components/dashboard/StatCard'
 import { TrafficChart } from '@/components/dashboard/TrafficChart'
 import { ActivityFeed } from '@/components/dashboard/ActivityFeed'
 import { DomainHealthWidget } from '@/components/dashboard/DomainHealthWidget'
 import { BlockedQueueWidget } from '@/components/dashboard/BlockedQueueWidget'
-import { fetchDashboardStats, fetchTrafficData, fetchActivity } from '@/api/dashboard'
+import { TopBreakdownWidget } from '@/components/dashboard/TopBreakdownWidget'
+import { fetchDashboardStats, fetchTrafficData, fetchActivity, fetchBreakdown } from '@/api/dashboard'
 import { fetchDomains } from '@/api/domains'
 import { fetchWorkspace } from '@/api/workspace'
 import { FreeTierBanner } from '@/components/FreeTierBanner'
 import { DashboardSkeleton } from '@/components/ui/DashboardSkeleton'
 import type { TimeRange } from '@/types'
+
+const SHIELD_TOAST_KEY = 'vericlick-first-bot-blocked-toast'
 
 export default function DashboardPage() {
   const [range, setRange] = useState<TimeRange>('7d')
@@ -34,6 +38,16 @@ export default function DashboardPage() {
     queryFn: fetchActivity,
   })
 
+  const { data: countryBreakdown } = useQuery({
+    queryKey: ['breakdown', 'country', range],
+    queryFn: () => fetchBreakdown('country', range),
+  })
+
+  const { data: deviceBreakdown } = useQuery({
+    queryKey: ['breakdown', 'device', range],
+    queryFn: () => fetchBreakdown('device', range),
+  })
+
   const { data: domains, isLoading: domainsLoading } = useQuery({
     queryKey: ['domains'],
     queryFn: fetchDomains,
@@ -43,6 +57,26 @@ export default function DashboardPage() {
     queryKey: ['workspace'],
     queryFn: fetchWorkspace,
   })
+
+  useEffect(() => {
+    if (!activity) return
+    if (!activity.some((e) => e.isBot)) return
+    try {
+      const today = new Date().toDateString()
+      if (localStorage.getItem(SHIELD_TOAST_KEY) === today) return
+      localStorage.setItem(SHIELD_TOAST_KEY, today)
+    } catch {
+      // Ignore storage errors — the toast is best-effort.
+    }
+    toast.success(
+      'VeriClick just blocked its first bot for you — suspicious traffic is being diverted automatically. See the blocked list below.',
+      { duration: 7000, id: 'first-bot-blocked' },
+    )
+  }, [activity])
+
+  const canManageRules = !workspace
+    ? true
+    : workspace.planName !== null || workspace.trialActive
 
   const totalClicks = stats?.totalClicks24h ?? 0
   const activeLinks = stats?.activeLinks ?? 0
@@ -55,35 +89,26 @@ export default function DashboardPage() {
   if (!hasData && stats) {
     const domainsCount =
       (stats.domainsHealthy ?? 0) + (stats.domainsDegraded ?? 0) + (stats.domainsBlacklisted ?? 0)
-    const hasVerifiedDomain = (domains ?? []).some((d) => d.verified)
 
     const steps = [
       {
         n: 1,
         title: 'Add your domain',
-        desc: 'Register the web address your tracked links live on.',
+        desc: 'Register the web address your tracked links live on. It\u2019s authorized the moment you register it.',
         to: '/app/domains',
         icon: Globe02Icon,
         done: domainsCount > 0,
       },
       {
         n: 2,
-        title: 'Verify your domain',
-        desc: 'Add the small text record (TXT) VeriClick gives you to prove you own the domain. The app walks you through it.',
-        to: '/app/domains',
-        icon: CheckmarkCircle02Icon,
-        done: hasVerifiedDomain,
-      },
-      {
-        n: 3,
         title: 'Point your domain at VeriClick',
-        desc: 'One more short record and your links use your own brand. Until then they use the VeriClick URL — either way they work.',
+        desc: 'Add one short CNAME record and your links use your own brand. Until then they use the VeriClick URL — either way they work.',
         to: '/app/domains',
         icon: Globe02Icon,
         done: (domains ?? []).some((d) => d.ready),
       },
       {
-        n: 4,
+        n: 3,
         title: 'Create a tracked link',
         desc: 'Point a tracked link at the page you want to protect.',
         to: '/app/links',
@@ -91,7 +116,7 @@ export default function DashboardPage() {
         done: activeLinks > 0,
       },
       {
-        n: 5,
+        n: 4,
         title: 'Copy your tracked link',
         desc: 'Share the link — humans get through, suspicious traffic gets blocked.',
         to: '/app/links',
@@ -99,7 +124,7 @@ export default function DashboardPage() {
         done: activeLinks > 0,
       },
       {
-        n: 6,
+        n: 5,
         title: 'Install the site script',
         desc: 'Add extra detection to pages you own with one line of code.',
         to: '/app/settings',
@@ -239,6 +264,21 @@ export default function DashboardPage() {
             <BlockedQueueWidget activity={activity ?? []} />
           </div>
         </div>
+      </div>
+
+      <div className="grid lg:grid-cols-2 gap-6 mt-6">
+        <TopBreakdownWidget
+          dimension="country"
+          rows={countryBreakdown ?? []}
+          range={range}
+          canManage={canManageRules}
+        />
+        <TopBreakdownWidget
+          dimension="device"
+          rows={deviceBreakdown ?? []}
+          range={range}
+          canManage={canManageRules}
+        />
       </div>
 
       <div className="mt-6">

@@ -27,7 +27,7 @@ const NotFound = lazy(() => import('./pages/NotFound'))
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const Links = lazy(() => import('./pages/Links'))
 const Domains = lazy(() => import('./pages/Domains'))
-const IpRules = lazy(() => import('./pages/IpRules'))
+const IpRules = lazy(() => import('./pages/TrafficRules'))
 const BlockedIPs = lazy(() => import('./pages/BlockedIPs'))
 const Help = lazy(() => import('./pages/Help'))
 
@@ -63,7 +63,7 @@ function App() {
             <Route path="domains" element={withSuspense(<ErrorBoundary><Domains /></ErrorBoundary>)} />
             <Route path="settings" element={withSuspense(<ErrorBoundary><Settings /></ErrorBoundary>)} />
             <Route path="billing" element={withSuspense(<ErrorBoundary><Billing /></ErrorBoundary>)} />
-            <Route path="ip-rules" element={withSuspense(<ErrorBoundary><IpRules /></ErrorBoundary>)} />
+            <Route path="traffic-rules" element={withSuspense(<ErrorBoundary><IpRules /></ErrorBoundary>)} />
             <Route path="blocked-ips" element={withSuspense(<ErrorBoundary><BlockedIPs /></ErrorBoundary>)} />
             <Route path="help" element={withSuspense(<ErrorBoundary><Help /></ErrorBoundary>)} />
           </Route>

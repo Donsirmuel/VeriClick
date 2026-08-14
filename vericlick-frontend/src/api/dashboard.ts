@@ -1,5 +1,5 @@
 import { apiClient } from './client'
-import type { DashboardStats, TrafficData, ActivityEntry, TimeRange } from '@/types'
+import type { DashboardStats, TrafficData, ActivityEntry, TimeRange, BreakdownRow } from '@/types'
 
 export async function fetchDashboardStats(): Promise<DashboardStats> {
   const { data } = await apiClient.get<DashboardStats>('/dashboard/stats/')
@@ -15,5 +15,15 @@ export async function fetchTrafficData(range: TimeRange): Promise<TrafficData[]>
 
 export async function fetchActivity(): Promise<ActivityEntry[]> {
   const { data } = await apiClient.get<ActivityEntry[]>('/dashboard/activity/')
+  return data
+}
+
+export async function fetchBreakdown(
+  dimension: 'country' | 'device',
+  range: TimeRange,
+): Promise<BreakdownRow[]> {
+  const { data } = await apiClient.get<BreakdownRow[]>('/dashboard/breakdown/', {
+    params: { dimension, range },
+  })
   return data
 }
