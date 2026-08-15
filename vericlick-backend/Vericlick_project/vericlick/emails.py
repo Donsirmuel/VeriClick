@@ -1,5 +1,4 @@
 import logging
-from urllib.parse import urlencode
 
 from django.conf import settings
 
@@ -81,8 +80,10 @@ def send_welcome_email(user):
 
 
 def send_verification_email(user, uid, token):
-    params = urlencode({'uid': uid, 'token': token})
-    verify_url = f'{settings.SITE_URL}/auth/verify-email?{params}'
+    # Path-based link: email clients (Gmail in particular) wrap links and can
+    # mangle query strings, which breaks SPA routes that read ?uid&token. A
+    # path like /auth/verify-email/<uid>/<token> survives the wrapper intact.
+    verify_url = f'{settings.SITE_URL}/auth/verify-email/{uid}/{token}'
     subject = 'Confirm your VeriClick email'
     body = f"""
 <p style="color:#a3a3a3;font-size:15px;">Hi {user.first_name or user.username},</p>
@@ -109,8 +110,9 @@ def send_verification_email(user, uid, token):
 
 
 def send_password_reset_email(user, uid, token):
-    params = urlencode({'uid': uid, 'token': token})
-    reset_url = f'{settings.SITE_URL}/auth/reset-password?{params}'
+    # Path-based link for the same reason as verification: Gmail's link wrapper
+    # can corrupt ?uid&token query strings, so the token rides in the path.
+    reset_url = f'{settings.SITE_URL}/auth/reset-password/{uid}/{token}'
     subject = 'Reset your VeriClick password'
     body = f"""
 <p style="color:#a3a3a3;font-size:15px;">Hi {user.first_name or user.username},</p>

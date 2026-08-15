@@ -58,8 +58,10 @@ function App() {
           <Route path="/auth/login" element={withSuspense(<PublicOnly><Login /></PublicOnly>)} />
           <Route path="/auth/register" element={withSuspense(<PublicOnly><Register /></PublicOnly>)} />
           <Route path="/auth/verify-email" element={withSuspense(<PublicOnly><VerifyEmail /></PublicOnly>)} />
+          <Route path="/auth/verify-email/:uid/:token" element={withSuspense(<PublicOnly><VerifyEmail /></PublicOnly>)} />
           <Route path="/auth/forgot-password" element={withSuspense(<PublicOnly><ForgotPassword /></PublicOnly>)} />
           <Route path="/auth/reset-password" element={withSuspense(<PublicOnly><ResetPassword /></PublicOnly>)} />
+          <Route path="/auth/reset-password/:uid/:token" element={withSuspense(<PublicOnly><ResetPassword /></PublicOnly>)} />
           <Route path="/app" element={<DashboardLayout />}>
             <Route index element={<Navigate to="/app/dashboard" replace />} />
             <Route path="dashboard" element={withSuspense(<ErrorBoundary><Dashboard /></ErrorBoundary>)} />

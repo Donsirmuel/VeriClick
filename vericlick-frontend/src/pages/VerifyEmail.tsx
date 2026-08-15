@@ -1,4 +1,4 @@
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Cancel01Icon } from '@hugeicons/core-free-icons'
 import { useEffect, useState } from 'react'
@@ -9,10 +9,13 @@ import { parseApiError } from '@/lib/errors'
 import { notifyAuthChanged } from '@/hooks/useAuth'
 
 export default function VerifyEmail() {
+  // Tokens ride in the path (email clients mangle query strings). The
+  // ?uid&token form is kept as a fallback for older emails already sent.
+  const { uid: uidPath, token: tokenPath } = useParams<{ uid: string; token: string }>()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
-  const uid = searchParams.get('uid')
-  const token = searchParams.get('token')
+  const uid = uidPath ?? searchParams.get('uid')
+  const token = tokenPath ?? searchParams.get('token')
   const [state, setState] = useState<'loading' | 'success' | 'error'>('loading')
   const [error, setError] = useState('')
 

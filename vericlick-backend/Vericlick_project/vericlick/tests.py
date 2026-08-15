@@ -425,6 +425,29 @@ class AuthEndpointTests(APITestCase):
             self.assertEqual(res.status_code, status.HTTP_200_OK)
             mock_send.assert_not_called()
 
+    def test_email_links_are_path_based(self):
+        # Email clients (Gmail) wrap links and can mangle ?uid&token query
+        # strings, so verification/reset tokens must ride in the path.
+        from vericlick.emails import send_password_reset_email, send_verification_email
+        user = User.objects.create_user(
+            username='pathemail', email='pathemail@example.com',
+            password='testpass123', is_active=False,
+        )
+        captured = {}
+
+        def fake_send_email(to, subject, html, text=None):
+            captured['html'] = html
+
+        with patch('vericlick.emails.send_email', side_effect=fake_send_email):
+            send_verification_email(user, user.pk, 'tok123')
+        self.assertIn(f'/auth/verify-email/{user.pk}/tok123', captured['html'])
+        self.assertNotIn('/auth/verify-email?', captured['html'])
+
+        with patch('vericlick.emails.send_email', side_effect=fake_send_email):
+            send_password_reset_email(user, user.pk, 'tok456')
+        self.assertIn(f'/auth/reset-password/{user.pk}/tok456', captured['html'])
+        self.assertNotIn('/auth/reset-password?', captured['html'])
+
     def test_register_requires_password_min_length(self):
         data = {
             'username': 'shortpass',
