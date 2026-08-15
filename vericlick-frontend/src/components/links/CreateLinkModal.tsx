@@ -24,7 +24,7 @@ const DEVICE_OPTIONS: { value: DeviceClass; label: string }[] = [
 ]
 
 const BOT_ACTIONS: { value: BotAction; label: string; desc: string }[] = [
-  { value: 'safe', label: 'Send to safe page', desc: 'Bots land on your safe destination (recommended)' },
+  { value: 'safe', label: 'Send to page for blocked visitors', desc: 'Bots land on your page for blocked visitors (recommended)' },
   { value: 'not_found', label: 'Show 404', desc: 'Pretend the link doesn\'t exist' },
   { value: 'block', label: 'Block (403)', desc: 'Return an error to the bot' },
 ]
@@ -143,8 +143,8 @@ export function CreateLinkModal({ onClose, onSubmit, domains, initialData }: Cre
                 className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-black transition-colors"
               />
               <p className="text-xs text-muted mt-1.5 leading-relaxed">
-                The real page visitors reach after passing checks. Suspicious traffic is sent to your
-                safe destination instead of here.
+                The real page visitors reach after passing checks. Bots and flagged traffic land on
+                your page for blocked visitors instead of here.
               </p>
               {errors.destinationUrl && <p className="text-xs text-error mt-1">{errors.destinationUrl.message}</p>}
             </div>
@@ -264,7 +264,7 @@ export function CreateLinkModal({ onClose, onSubmit, domains, initialData }: Cre
                 <div className="mt-3">
                   <input
                     {...register('safeUrl')}
-                    placeholder="Custom safe URL (optional — leave blank to use your default safe destination)"
+                    placeholder="Custom URL for blocked visitors (optional — leave blank to use your default page for blocked visitors)"
                     className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-black transition-colors"
                   />
                   {errors.safeUrl && <p className="text-xs text-error mt-1">{errors.safeUrl.message}</p>}

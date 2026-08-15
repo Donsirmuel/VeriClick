@@ -26,7 +26,7 @@ const sections = [
       <>
         Each link has a short code called a <strong>slug</strong> (e.g. summer23). When someone visits your-domain.com/r/summer23,
         VeriClick checks if they are a bot or a real person before sending them to your destination page. Flagged visitors
-        are sent to your safe destination instead of your real page.
+        are sent to your page for blocked visitors instead of your real page.
       </>
     ),
   },

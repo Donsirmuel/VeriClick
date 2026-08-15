@@ -68,7 +68,7 @@ export function PublicFooter() {
         </div>
 
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-neutral-800/40 pt-8 text-xs text-neutral-500">
-          <span>© 2026 {COMPANY_NAME}. All rights reserved.</span>
+          <span>© 2026 MAILIONDEV TECHNOLOGY LTD (RC 9233525)</span>
           <div className="flex gap-6">
             <Link to="/privacy" className="hover:text-white transition-colors">Privacy Policy</Link>
             <Link to="/terms" className="hover:text-white transition-colors">Terms of Service</Link>

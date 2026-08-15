@@ -30,12 +30,12 @@ const TOPICS: ChatTopic[] = [
   {
     id: 'what-is',
     keywords: ['what is', 'whats', "what's", 'vericlick', 'about', 'product', 'do you do', 'purpose', 'tool'],
-    answer: `VeriClick is a link protector. You create a short tracked link for any destination URL, and every click on it is checked before it reaches your page: IP allow/deny rules first, then bot detection, then rate limits. Humans are routed through; suspicious requests are diverted to a safe page instead. Every decision is recorded and explained in plain language on your dashboard.`,
+    answer: `VeriClick is a link protector. You create a short tracked link for any destination URL, and every click on it is checked before it reaches your page: IP allow/deny rules first, then bot detection, then rate limits. Humans are routed through; suspicious requests are sent to your page for blocked visitors instead. Every decision is recorded and explained in plain language on your dashboard.`,
   },
   {
     id: 'how-it-works',
     keywords: ['how', 'works', 'work', 'function', 'mechanism', 'process', 'flow', 'what happens', 'step by step'],
-    answer: `Here's the flow: 1) Create a tracked link pointing at your destination. 2) Share the short link. 3) When someone clicks it, VeriClick checks the request against your IP rules, bot signatures, and rate limits. 4) Real visitors are redirected to your destination; flagged requests are diverted to your safe destination (or a built-in neutral page). You see all of it — clicks, verdicts, and reasons — on the dashboard.`,
+    answer: `Here's the flow: 1) Create a tracked link pointing at your destination. 2) Share the short link. 3) When someone clicks it, VeriClick checks the request against your IP rules, bot signatures, and rate limits. 4) Real visitors are redirected to your destination; flagged requests are sent to your page for blocked visitors (or a built-in protected page). You see all of it — clicks, verdicts, and reasons — on the dashboard.`,
   },
   {
     id: 'create-link',
@@ -70,7 +70,7 @@ const TOPICS: ChatTopic[] = [
   {
     id: 'safe-destination',
     keywords: ['safe', 'destination', 'safe destination', 'safe page', 'divert', 'redirect', 'suspicious', 'protected page', 'neutral page'],
-    answer: `When VeriClick flags a request it never sends it to your real page and never returns a 403 — it redirects to a safe destination you configure in Settings. Leave it blank and VeriClick uses its own neutral "This link is protected" page instead. This keeps bots away from your real content while humans are unaffected.`,
+    answer: `When VeriClick flags a request it never sends it to your real page and never returns a 403 — it redirects to the "page for blocked visitors" you set in Settings (Workspace). Leave it blank and VeriClick uses its own built-in "This link is protected" page instead. This keeps bots away from your real content while humans are unaffected.`,
   },
   {
     id: 'dashboard',

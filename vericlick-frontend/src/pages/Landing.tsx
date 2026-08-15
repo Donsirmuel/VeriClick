@@ -61,7 +61,7 @@ const VERIFICATION_LINES = [
   { text: '> User agent: python-requests/2.31', delay: 1400 },
   { text: '  └─ matches known bot signature', delay: 1800 },
   { text: '> Decision: BLOCK (automated request)', delay: 2400 },
-  { text: '> Action: divert to safe page', delay: 3000 },
+  { text: '> Action: send to page for blocked visitors', delay: 3000 },
   { text: '> Reason logged: "Request looked automated"', delay: 3600 },
 ]
 
@@ -194,14 +194,14 @@ const FEATURES = [
   { icon: FingerPrintIcon, title: 'Click verification', desc: 'Each request is checked against your IP rules, bot signatures, and rate limits — and every decision is recorded.' },
   { icon: LockIcon, title: 'IP rules', desc: 'Allow trusted addresses through and deny known-bad ones. Allow rules are checked first and always win, so whitelisted IPs are never flagged again.' },
   { icon: Globe02Icon, title: 'Domain health checks', desc: 'Your tracking domains are health-checked automatically from inside the app, and ownership is proven with a DNS TXT record.' },
-  { icon: ServerStackIcon, title: 'Safe routing', desc: 'Flagged traffic is diverted to a safe destination you control — never to your real page, never a 403.' },
+  { icon: ServerStackIcon, title: 'Safe routing', desc: 'Flagged traffic never reaches your real page — it lands on a page for blocked visitors that you control. Never a 403.' },
   { icon: Chart03Icon, title: 'Live dashboard', desc: 'Traffic chart, activity feed, domain health, and a blocked-IP review queue — with a plain-language reason for every decision.' },
 ]
 
 const STEPS = [
   { step: 1, title: 'Create a tracked link', desc: 'Paste any destination URL and get a short link. Optionally put it on a domain you own and prove ownership with a DNS TXT record.', icon: LinkSquare02Icon },
   { step: 2, title: 'Every click is checked', desc: 'When someone clicks, VeriClick checks IP allow/deny rules first, then bot signatures, then rate limits.', icon: FingerPrintIcon },
-  { step: 3, title: 'The right traffic gets through', desc: 'Humans are redirected to your destination. Suspicious requests are diverted to your safe page — and the reason is logged.', icon: ShieldIcon },
+  { step: 3, title: 'The right traffic gets through', desc: 'Humans are redirected to your destination. Suspicious requests land on your page for blocked visitors — and the reason is logged.', icon: ShieldIcon },
 ]
 
 const USE_CASES = [

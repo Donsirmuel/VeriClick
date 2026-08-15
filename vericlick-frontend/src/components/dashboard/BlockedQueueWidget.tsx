@@ -28,8 +28,8 @@ export function BlockedQueueWidget({ activity }: { activity: ActivityEntry[] }) 
       <div className="p-3 rounded-xl bg-slate-50 border border-border mb-4 flex items-start gap-2">
         <HugeiconsIcon icon={InformationCircleIcon} className="w-4 h-4 text-muted shrink-0 mt-0.5" />
         <p className="text-xs text-muted leading-relaxed">
-          Blocked traffic never reaches your real page — it's sent to your safe destination or
-          VeriClick's built-in protected page instead.
+          Blocked traffic never reaches your real page — it lands on your page for blocked
+          visitors or VeriClick's built-in protected page instead.
         </p>
       </div>
 

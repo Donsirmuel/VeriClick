@@ -133,7 +133,7 @@ export default function SettingsPage() {
             <div>
               <h3 className="text-lg font-bold text-slate-900 mb-1">Workspace</h3>
               <p className="text-sm text-muted leading-relaxed">
-                Set the name users see and the safe destination suspicious traffic should reach.
+                Set the name users see and the page where blocked visitors land.
               </p>
             </div>
           </div>
@@ -149,7 +149,7 @@ export default function SettingsPage() {
               />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700 ml-1">Safe destination</label>
+              <label className="text-sm font-medium text-slate-700 ml-1">Page for blocked visitors</label>
               <input
                 type="url"
                 value={safeDestination}
@@ -158,7 +158,9 @@ export default function SettingsPage() {
                 className="w-full bg-slate-50 border border-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-black transition-colors"
               />
               <p className="text-xs text-muted ml-1 leading-relaxed">
-                Suspicious traffic is sent here instead of your real page. Leave it blank to use VeriClick's built-in protected page.
+                Bots and flagged visitors land on this page instead of your real one. This keeps
+                them away from your actual content. Leave it blank to use VeriClick's built-in
+                protected page.
               </p>
             </div>
           </div>

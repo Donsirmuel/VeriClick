@@ -299,7 +299,7 @@ function IpTab({ canManage }: { canManage: boolean }) {
                 <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">
                   <span className="flex items-center gap-1.5">
                     Action
-                    <HelpTooltip text="Allow: traffic bypasses all checks and is always let through. Deny: traffic is blocked and sent to your safe destination." />
+                    <HelpTooltip text="Allow: traffic bypasses all checks and is always let through. Deny: traffic is blocked and sent to your page for blocked visitors." />
                   </span>
                 </th>
                 <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Reason</th>
@@ -705,7 +705,7 @@ function DevicesTab({ canManage, queryClient }: { canManage: boolean; queryClien
     <div className="max-w-2xl">
       <p className="text-sm text-muted mb-6">
         Workspace-wide device and operating-system rules. When a list is empty, nothing is
-        restricted. Visitors that don't match are sent to your safe destination.
+        restricted. Visitors that don't match are sent to your page for blocked visitors.
       </p>
 
       {isLoading ? (
@@ -749,7 +749,7 @@ function DevicesTab({ canManage, queryClient }: { canManage: boolean; queryClien
           <div className="bg-white border border-neutral-200 rounded-2xl p-6 shadow-sm">
             <h3 className="text-lg font-bold text-slate-900 mb-1">Blocked operating systems</h3>
             <p className="text-sm text-muted mb-4">
-              Visitors whose OS is checked here are sent to your safe destination.
+              Visitors on a checked operating system are sent to your page for blocked visitors.
             </p>
             <div className="flex flex-wrap gap-2">
               {OS_FAMILIES.map(osName => (

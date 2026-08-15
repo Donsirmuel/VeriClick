@@ -79,7 +79,7 @@ export default function DashboardPage() {
       // Ignore storage errors — the toast is best-effort.
     }
     toast.success(
-      'VeriClick just blocked a suspicious bot — it was diverted to your safe destination automatically, no action needed.',
+      'VeriClick just blocked a suspicious bot — it was sent to your page for blocked visitors automatically, no action needed.',
       { duration: 7000, id: 'first-bot-blocked' },
     )
   }, [activity])

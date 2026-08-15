@@ -77,7 +77,7 @@ export default function Login() {
               </div>
               <div>
                 <div className="text-sm font-bold text-white">Bot &amp; automation detection</div>
-                <p className="text-xs text-neutral-400 mt-1 leading-relaxed">Flagged traffic is diverted to your safe destination, never dropped silently.</p>
+                <p className="text-xs text-neutral-400 mt-1 leading-relaxed">Flagged traffic is sent to your page for blocked visitors, never dropped silently.</p>
               </div>
             </div>
             <div className="flex items-start gap-4 bg-black/60 backdrop-blur-sm rounded-2xl border border-neutral-800 p-5">

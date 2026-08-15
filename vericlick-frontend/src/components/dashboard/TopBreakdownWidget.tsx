@@ -49,7 +49,7 @@ export function TopBreakdownWidget({ dimension, rows, canManage }: TopBreakdownW
       createCountryRule({ countryCode: code, action: 'deny', isActive: true }),
     onSuccess: (_data, code) => {
       refresh()
-      toast.success(`${countryName(code)} blocked — traffic is now sent to your safe destination`, {
+      toast.success(`${countryName(code)} blocked — traffic is now sent to your page for blocked visitors`, {
         duration: 6000,
       })
     },
