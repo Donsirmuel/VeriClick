@@ -899,6 +899,19 @@ def blocked_ips(request):
         decision=ClickLog.Decision.BLOCKED,
     )
 
+    # A whitelisted IP is no longer "blocked": once an active allow rule exists
+    # for it, its old block events must not keep showing up in this list (the
+    # IP lives in Traffic Rules > IP Addresses now).
+    whitelisted = set(
+        IPRule.objects.filter(
+            workspace=workspace,
+            action=IPRule.Action.ALLOW,
+            is_active=True,
+        ).values_list('ip_or_cidr', flat=True)
+    )
+    if whitelisted:
+        qs = qs.exclude(ip__in=whitelisted)
+
     search = request.query_params.get('search', '').strip()
     if search:
         qs = qs.filter(Q(ip__icontains=search) | Q(link__slug__icontains=search))

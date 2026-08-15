@@ -124,7 +124,7 @@ export default function DomainsPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Domain Registry</h1>
           <ReadMore className="max-w-3xl" lines={2}>
-            A domain is the web address your links live on, like <code className="text-xs bg-neutral-100 px-1.5 py-0.5 rounded">your.domain/r/summer23</code>. Registering a domain authorizes it instantly — no DNS proof needed. One quick step remains: <strong>Point</strong> it at VeriClick (add one short record the app shows you) so your links use your own brand. Registered domains are also covered by Site Shield, so pages you deploy the tracker on get bot filtering automatically.
+            A domain is the web address your links live on, like <code className="text-xs bg-neutral-100 px-1.5 py-0.5 rounded">your.domain/r/summer23</code>. Registering it authorizes you instantly — no proof of ownership needed. There's just one step left: <strong>point it at VeriClick</strong> by adding a short record the app shows you (called a CNAME). Then your links use your own brand. Registered domains are also covered by Site Shield — pages that run the tracker script get automatic bot filtering.
           </ReadMore>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -202,7 +202,7 @@ export default function DomainsPage() {
           <EmptyState
             icon={Globe02Icon}
             title="No domains registered"
-            description="Add your first tracking domain to start routing traffic. It's authorized the moment you register it — you only need one DNS record to start using your own brand."
+            description="Add your first domain to start building tracked links. It's ready the moment you register it — you only need to add one short record (a CNAME) to start using your own brand."
             action={{ label: 'Add your first domain', onClick: () => setShowAddDialog(true) }}
           />
         </div>
@@ -260,9 +260,15 @@ export default function DomainsPage() {
                           <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-success bg-success/10 px-2 py-0.5 rounded-full" title="Ownership is authorized automatically at registration — no TXT record needed">
                             Authorized
                           </span>
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-slate-500 bg-neutral-100 px-2 py-0.5 rounded-full" title="Protect pages on this domain by installing the Site Shield snippet (see Settings → Site script)">
-                            Shield
-                          </span>
+                          {domain.ready && (
+                            <Link
+                              to="/app/settings"
+                              className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-slate-600 bg-neutral-100 hover:bg-neutral-200 px-2 py-0.5 rounded-full transition-colors"
+                              title="This domain points at VeriClick. Install the Site script snippet (Settings → Site script) to start shielding its pages from bots."
+                            >
+                              Shield
+                            </Link>
+                          )}
                         </div>
                       )}
                     </div>
@@ -355,8 +361,15 @@ export default function DomainsPage() {
         title="Remove domain"
         message={(() => {
           if (!deleteTarget) return ''
+          const isFreeTier = Boolean(workspace && workspace.planName === null)
+          const onlyDomain = isFreeTier && Boolean(workspace && workspace.domainsUsed <= 1)
           const base = `Are you sure you want to remove "${deleteTarget.domain}"? Its links are removed too.`
-          return `${base} Removing it does NOT free up one of your domain slots — authorized domains keep counting toward your plan limit until the current period ends.`
+          const parts: string[] = []
+          if (onlyDomain) {
+            parts.push('This is your only domain on the free trial — the trial includes 1 domain. Removing it means you won\'t be able to register a new one, so consider upgrading if you want to keep using your own brand.')
+          }
+          parts.push(`${base} This does not free up a domain slot — removed domains still count toward your plan limit until the current period ends.`)
+          return parts.join(' ')
         })()}
         confirmLabel="Remove"
         variant="danger"

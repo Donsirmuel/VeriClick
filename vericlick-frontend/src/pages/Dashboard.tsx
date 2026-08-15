@@ -60,7 +60,17 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!activity) return
-    if (!activity.some((e) => e.isBot)) return
+    // Only celebrate a *fresh* block. Activity keeps the last 50 events, so an
+    // old bot (blocked hours or days ago) must not re-trigger the toast — the
+    // first time a bot is blocked the account sees it here within minutes.
+    const now = Date.now()
+    const RECENT_WINDOW_MS = 10 * 60 * 1000
+    const recentBotBlock = activity.some((e) => {
+      if (!e.isBot) return false
+      const at = e.time ? new Date(e.time).getTime() : NaN
+      return Number.isFinite(at) && now - at <= RECENT_WINDOW_MS
+    })
+    if (!recentBotBlock) return
     try {
       const today = new Date().toDateString()
       if (localStorage.getItem(SHIELD_TOAST_KEY) === today) return
@@ -69,7 +79,7 @@ export default function DashboardPage() {
       // Ignore storage errors — the toast is best-effort.
     }
     toast.success(
-      'VeriClick just blocked its first bot for you — suspicious traffic is being diverted automatically. See the blocked list below.',
+      'VeriClick just blocked a suspicious bot — it was diverted to your safe destination automatically, no action needed.',
       { duration: 7000, id: 'first-bot-blocked' },
     )
   }, [activity])

@@ -2266,6 +2266,20 @@ class BlockedIPTests(APITestCase):
         rule = IPRule.objects.get(workspace=self.workspace, ip_or_cidr='203.0.113.5')
         self.assertTrue(rule.is_active)
 
+    def test_whitelisted_ip_hidden_from_blocked_list(self):
+        blocked_ip = '203.0.113.5'
+        other_ip = '198.51.100.7'
+        ClickLog.objects.create(link=self.link, ip=blocked_ip, decision='blocked', is_bot=True)
+        ClickLog.objects.create(link=self.link, ip=other_ip, decision='blocked', is_bot=True)
+        click = ClickLog.objects.get(ip=blocked_ip)
+        res = self.client.post(f'/api/ip-rules/{click.id}/whitelist/')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        # The whitelisted IP's old block events no longer appear in the list.
+        res = self.client.get('/api/ip-rules/blocked/')
+        ips = [e['ip'] for e in res.json()['results']]
+        self.assertNotIn(blocked_ip, ips)
+        self.assertIn(other_ip, ips)
+
 
 class PricingEndpointTests(APITestCase):
     def test_pricing_returns_seeded_plans(self):

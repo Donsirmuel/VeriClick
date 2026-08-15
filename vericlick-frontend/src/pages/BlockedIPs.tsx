@@ -31,10 +31,16 @@ export default function BlockedIPsPage() {
 
   const whitelistMutation = useMutation({
     mutationFn: whitelistIp,
-    onSuccess: () => {
+    onSuccess: (_, ipId) => {
       queryClient.invalidateQueries({ queryKey: ['blocked-ips'] })
       queryClient.invalidateQueries({ queryKey: ['ip-rules'] })
-      toast.success('IP whitelisted')
+      const entry = blocked.find((b) => b.id === ipId)
+      toast.success(
+        entry
+          ? `${entry.ip} is now whitelisted — it won't be blocked again. Find it under Traffic Rules → IP Addresses.`
+          : 'IP whitelisted — find it under Traffic Rules → IP Addresses.',
+        { duration: 6000 },
+      )
       setWhitelistTarget(null)
     },
     onError: () => {

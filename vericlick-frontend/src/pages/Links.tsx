@@ -185,12 +185,12 @@ export default function LinksPage() {
                 return (
                 <tr key={link.id} className="border-b border-neutral-100 hover:bg-neutral-50/50 transition-colors">
                   <td className="px-6 py-4">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono font-bold text-sm">{link.slug}</span>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="font-mono font-bold text-sm shrink-0">{link.slug}</span>
                       {domainPending && (
                         <Link
                           to="/app/domains"
-                          className="inline-flex items-center gap-1 text-[10px] font-bold text-warning bg-warning/10 hover:bg-warning/20 px-2 py-0.5 rounded-full transition-colors"
+                          className="inline-flex items-center gap-1 text-[10px] font-bold text-warning bg-warning/10 hover:bg-warning/20 px-2 py-0.5 rounded-full transition-colors shrink-0"
                           title="This link uses the VeriClick URL because your domain isn't pointed at VeriClick yet. Finish it in one quick step under Domains."
                         >
                           <span className="w-1 h-1 rounded-full bg-warning" />
@@ -198,7 +198,12 @@ export default function LinksPage() {
                         </Link>
                       )}
                     </div>
-                    <span className="mt-0.5 block max-w-[320px] truncate text-xs text-muted" title={link.trackingUrl}>{link.trackingUrl}</span>
+                    <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
+                      <span className="block max-w-[320px] truncate text-xs text-muted" title={link.trackingUrl}>{link.trackingUrl}</span>
+                      <button onClick={() => handleCopyTrackedLink(link)} className="p-1.5 rounded-md hover:bg-neutral-100 transition-colors shrink-0" title="Copy tracked link">
+                        <HugeiconsIcon icon={Copy01Icon} className="w-3.5 h-3.5 text-muted" />
+                      </button>
+                    </div>
                     {domainPending && (
                       <Link to="/app/domains" className="mt-1 block text-xs font-bold text-slate-700 underline decoration-neutral-300 hover:decoration-black underline-offset-2 transition-colors">
                         Use {link.domain} for this link →
@@ -229,9 +234,6 @@ export default function LinksPage() {
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center justify-end gap-1">
-                      <button onClick={() => handleCopyTrackedLink(link)} className="p-2.5 rounded-lg hover:bg-neutral-100 transition-colors" title="Copy tracked link">
-                        <HugeiconsIcon icon={Copy01Icon} className="w-4 h-4 text-muted" />
-                      </button>
                       <button onClick={() => handlePreviewDestination(link)} className="p-2.5 rounded-lg hover:bg-neutral-100 transition-colors" title="Preview destination">
                         <HugeiconsIcon icon={ExternalLinkIcon} className="w-4 h-4 text-muted" />
                       </button>
@@ -298,11 +300,18 @@ export default function LinksPage() {
         title="Delete link"
         message={(() => {
           if (!deleteTarget) return ''
+          const isFreeTier = Boolean(workspace && workspace.planName === null)
+          const onlyLink = isFreeTier && Boolean(workspace && workspace.linksUsed <= 1)
           const linkDomain = domains?.find(d => d.domain === deleteTarget.domain)
           const countsTowardLimit = Boolean(linkDomain?.verified)
-          return countsTowardLimit
+          const parts: string[] = []
+          if (onlyLink) {
+            parts.push('This is your only link on the free trial — the trial includes 1 link. Deleting it means you won\'t be able to create a new one, so consider upgrading if you want to keep using VeriClick.')
+          }
+          parts.push(countsTowardLimit
             ? `Deleting "${deleteTarget.slug}" stops it serving but does NOT free up your link slot — links on a verified domain keep counting toward your plan limit until the current period ends.`
-            : `Are you sure you want to delete "${deleteTarget.slug}"? This action cannot be undone. All click data for this link will be lost.`
+            : `Are you sure you want to delete "${deleteTarget.slug}"? This action cannot be undone. All click data for this link will be lost.`)
+          return parts.join(' ')
         })()}
         confirmLabel="Delete"
         variant="danger"

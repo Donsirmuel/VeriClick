@@ -215,7 +215,7 @@ export default function SettingsPage() {
             <div>
               <h3 className="text-lg font-bold text-slate-900 mb-1">Site script</h3>
               <p className="text-sm text-muted leading-relaxed">
-                Add this only to pages you control if you want extra browser signals. The link tracker works without it.
+                Optional: add this to pages you run when you want extra protection. Your tracked links work without it.
               </p>
             </div>
           </div>
@@ -245,11 +245,11 @@ export default function SettingsPage() {
               Site Shield
             </h4>
             <p className="text-sm text-muted leading-relaxed">
-              To also stop bots at the page itself (before they reach your tracked links), add{' '}
+              To stop bots at the page itself (before they reach your links), add{' '}
               <span className="font-mono text-xs bg-neutral-100 px-1 rounded">data-shield</span> to the
-              script tag on any page whose domain you've registered. VeriClick evaluates each visitor
-              on load and diverts bots, restricted countries, and blocked devices to your safe
-              destination. The shield verdicts also appear in your dashboard activity.
+              script on any page of a domain you've registered. Each visitor is checked on load —
+              bots, restricted countries, and blocked devices get sent to your safe
+              destination. Shield verdicts also show in your dashboard activity.
             </p>
             <p className="text-[11px] text-muted leading-relaxed">
               Your snippet with the shield flag:

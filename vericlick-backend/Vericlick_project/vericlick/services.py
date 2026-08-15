@@ -385,7 +385,12 @@ def diagnose_domain(domain):
 
     # 4. Tracking host — where links actually live, and whether it reaches us.
     track_ips = _resolve_addresses(tracking)
-    points_to_us = bool(track_ips & expected) if expected else bool(track_ips)
+    # A domain is "pointing at VeriClick" only when its tracking host resolves
+    # to OUR expected addresses. If we can't determine our own addresses
+    # (TRACKING_SERVER_IP unset and PUBLIC_TRACKING_BASE_URL not resolving),
+    # we must NOT fall back to "any IP counts" — a parked page, wildcard DNS,
+    # or a registrar default would then be wrongly reported as pointing at us.
+    points_to_us = bool(track_ips & expected) if expected else False
     cname_target = _resolve_cname(tracking)
     # The CNAME value users publish is our public tracking hostname (e.g.
     # getvericlick.site), not a bare IP — same as the DNS setup guidance.
@@ -393,7 +398,12 @@ def diagnose_domain(domain):
     base = getattr(django_settings, 'PUBLIC_TRACKING_BASE_URL', '').strip().rstrip('/')
     cname_value = (base.split('://')[-1].split('/')[0] if base else '') or \
         (getattr(django_settings, 'TRACKING_SERVER_IP', '').strip() or '')
-    if points_to_us:
+    if not expected:
+        add('tracking_host', 'error', 'VeriClick couldn\'t check this domain',
+            'We couldn\'t resolve our own address on this server, so we can\'t confirm the '
+            'domain points at us. Links may still work once you add the CNAME record.',
+            'Contact VeriClick support so we can finish verifying your domain.')
+    elif points_to_us:
         add('tracking_host', 'ok', 'Pointed at VeriClick',
             f'{tracking} resolves to VeriClick, so branded links are live.')
     elif track_ips:
