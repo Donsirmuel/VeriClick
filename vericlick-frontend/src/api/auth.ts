@@ -6,13 +6,30 @@ interface LoginResponse {
   refresh: string
 }
 
+export interface RegisterResponse {
+  id: number
+  username: string
+  email: string
+  emailVerified: boolean
+}
+
 export async function login(username: string, password: string): Promise<LoginResponse> {
   const { data } = await apiClient.post<LoginResponse>('/auth/login/', { username, password })
   return data
 }
 
-export async function register(username: string, email: string, password: string): Promise<AuthUser> {
-  const { data } = await apiClient.post<AuthUser>('/auth/register/', { username, email, password })
+export async function register(username: string, email: string, password: string): Promise<RegisterResponse> {
+  const { data } = await apiClient.post<RegisterResponse>('/auth/register/', { username, email, password })
+  return data
+}
+
+export async function verifyEmail(uid: string | number, token: string): Promise<LoginResponse> {
+  const { data } = await apiClient.post<LoginResponse>('/auth/verify-email/', { uid, token })
+  return data
+}
+
+export async function resendVerification(email: string): Promise<{ status: string }> {
+  const { data } = await apiClient.post('/auth/resend-verification/', { email })
   return data
 }
 

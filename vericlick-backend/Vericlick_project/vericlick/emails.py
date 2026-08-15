@@ -80,6 +80,34 @@ def send_welcome_email(user):
     return send_email(user.email, subject, _layout(body))
 
 
+def send_verification_email(user, uid, token):
+    params = urlencode({'uid': uid, 'token': token})
+    verify_url = f'{settings.SITE_URL}/auth/verify-email?{params}'
+    subject = 'Confirm your VeriClick email'
+    body = f"""
+<p style="color:#a3a3a3;font-size:15px;">Hi {user.first_name or user.username},</p>
+<p style="color:#d4d4d4;font-size:15px;line-height:1.6;">
+  You just created a VeriClick account. Confirm your email address to finish signing
+  up — it only takes a second. You'll be able to sign in right after.
+</p>
+<div style="text-align:center;margin:32px 0;">
+  <a href="{verify_url}"
+     style="background-color:#ffffff;color:#0a0a0a;padding:14px 28px;border-radius:10px;text-decoration:none;font-weight:bold;font-size:14px;">
+    Confirm my email
+  </a>
+</div>
+<p style="color:#525252;font-size:13px;margin-bottom:0;">
+  If the button doesn't work, paste this link in your browser:<br/>
+  <span style="color:#a3a3a3;">{verify_url}</span>
+</p>
+<p style="color:#525252;font-size:13px;margin-bottom:0;">
+  This link expires soon. If you didn't create a VeriClick account, you can safely
+  ignore this email.
+</p>
+"""
+    return send_email(user.email, subject, _layout(body))
+
+
 def send_password_reset_email(user, uid, token):
     params = urlencode({'uid': uid, 'token': token})
     reset_url = f'{settings.SITE_URL}/auth/reset-password?{params}'

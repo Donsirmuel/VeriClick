@@ -1,13 +1,12 @@
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { Mail01Icon, LockIcon, ArrowRight01Icon, UserIcon, ViewIcon, ViewOffIcon } from '@hugeicons/core-free-icons'
+import { Mail01Icon, LockIcon, ArrowRight01Icon, UserIcon, ViewIcon, ViewOffIcon, CheckmarkCircle02Icon, RefreshIcon } from '@hugeicons/core-free-icons'
 import { useState } from 'react'
 import toast from 'react-hot-toast'
 import { Logo } from '@/components/Logo'
 import { GoogleSignInButton } from '@/components/auth/GoogleSignInButton'
-import { register, login } from '@/api/auth'
+import { register, resendVerification } from '@/api/auth'
 import { parseApiError } from '@/lib/errors'
-import { notifyAuthChanged } from '@/hooks/useAuth'
 
 export default function Register() {
   const [name, setName] = useState('')
@@ -15,22 +14,31 @@ export default function Register() {
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
-  const navigate = useNavigate()
+  const [registered, setRegistered] = useState(false)
+  const [resending, setResending] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     try {
       await register(name, email, password)
-      const res = await login(email, password)
-      localStorage.setItem('token', res.access)
-      localStorage.setItem('refresh', res.refresh)
-      notifyAuthChanged()
-      navigate('/app/dashboard')
+      setRegistered(true)
     } catch (err) {
       toast.error(parseApiError(err))
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleResend = async () => {
+    setResending(true)
+    try {
+      await resendVerification(email)
+      toast.success('Verification email sent. Check your inbox.')
+    } catch (err) {
+      toast.error(parseApiError(err))
+    } finally {
+      setResending(false)
     }
   }
 
@@ -101,107 +109,147 @@ export default function Register() {
           </div>
 
           <div className="bg-neutral-950 border border-neutral-800 rounded-2xl p-6 sm:p-8">
-            <form onSubmit={handleSubmit} className="space-y-5">
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-neutral-300 ml-1">Username</label>
-                <div className="relative group">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-neutral-500 group-focus-within:text-white transition-colors">
-                    <HugeiconsIcon icon={UserIcon} className="w-5 h-5" />
-                  </div>
-                  <input
-                    type="text"
-                    required
-                    placeholder="your-username"
-                    className="w-full bg-black border border-neutral-800 rounded-xl pl-12 pr-4 py-3 text-white focus:outline-none focus:border-white/50 focus:ring-1 focus:ring-white/10 transition-all placeholder:text-neutral-600"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                  />
+            {registered ? (
+              <div className="text-center py-4">
+                <div className="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                  <HugeiconsIcon icon={CheckmarkCircle02Icon} className="w-8 h-8 text-white" />
+                </div>
+                <h2 className="text-2xl font-bold text-white mb-3">Check your email</h2>
+                <p className="text-neutral-400 text-sm leading-relaxed mb-1">
+                  We sent a verification link to{' '}
+                  <span className="text-white font-medium">{email}</span>.
+                </p>
+                <p className="text-neutral-500 text-sm leading-relaxed mb-8">
+                  Click it to confirm your address. You'll be able to sign in right after.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleResend}
+                  disabled={resending}
+                  className="w-full bg-white hover:bg-neutral-200 text-black font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                >
+                  {resending ? 'Sending...' : (
+                    <>
+                      <HugeiconsIcon icon={RefreshIcon} className="w-5 h-5" />
+                      Resend verification email
+                    </>
+                  )}
+                </button>
+                <p className="text-xs text-neutral-500 mt-5 leading-relaxed">
+                  Didn't get it? Check your spam folder, or resend the email above.
+                </p>
+                <div className="mt-6 pt-6 border-t border-neutral-800">
+                  <p className="text-sm text-neutral-400">
+                    Already verified?{' '}
+                    <Link to="/auth/login" className="text-white hover:text-neutral-300 font-bold transition-colors">Sign in</Link>
+                  </p>
                 </div>
               </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-neutral-300 ml-1">Email address</label>
-                <div className="relative group">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-neutral-500 group-focus-within:text-white transition-colors">
-                    <HugeiconsIcon icon={Mail01Icon} className="w-5 h-5" />
+            ) : (
+              <>
+                <form onSubmit={handleSubmit} className="space-y-5">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-neutral-300 ml-1">Username</label>
+                    <div className="relative group">
+                      <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-neutral-500 group-focus-within:text-white transition-colors">
+                        <HugeiconsIcon icon={UserIcon} className="w-5 h-5" />
+                      </div>
+                      <input
+                        type="text"
+                        required
+                        placeholder="your-username"
+                        className="w-full bg-black border border-neutral-800 rounded-xl pl-12 pr-4 py-3 text-white focus:outline-none focus:border-white/50 focus:ring-1 focus:ring-white/10 transition-all placeholder:text-neutral-600"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                      />
+                    </div>
                   </div>
-                  <input
-                    type="email"
-                    required
-                    placeholder="name@company.com"
-                    className="w-full bg-black border border-neutral-800 rounded-xl pl-12 pr-4 py-3 text-white focus:outline-none focus:border-white/50 focus:ring-1 focus:ring-white/10 transition-all placeholder:text-neutral-600"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                  />
-                </div>
-              </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-neutral-300 ml-1">Password</label>
-                <div className="relative group">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-neutral-500 group-focus-within:text-white transition-colors">
-                    <HugeiconsIcon icon={LockIcon} className="w-5 h-5" />
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-neutral-300 ml-1">Email address</label>
+                    <div className="relative group">
+                      <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-neutral-500 group-focus-within:text-white transition-colors">
+                        <HugeiconsIcon icon={Mail01Icon} className="w-5 h-5" />
+                      </div>
+                      <input
+                        type="email"
+                        required
+                        placeholder="name@company.com"
+                        className="w-full bg-black border border-neutral-800 rounded-xl pl-12 pr-4 py-3 text-white focus:outline-none focus:border-white/50 focus:ring-1 focus:ring-white/10 transition-all placeholder:text-neutral-600"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                      />
+                    </div>
                   </div>
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    required
-                    placeholder="Min 8 characters"
-                    className="w-full bg-black border border-neutral-800 rounded-xl pl-12 pr-12 py-3 text-white focus:outline-none focus:border-white/50 focus:ring-1 focus:ring-white/10 transition-all placeholder:text-neutral-600"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                  />
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-neutral-300 ml-1">Password</label>
+                    <div className="relative group">
+                      <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-neutral-500 group-focus-within:text-white transition-colors">
+                        <HugeiconsIcon icon={LockIcon} className="w-5 h-5" />
+                      </div>
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        required
+                        placeholder="Min 8 characters"
+                        className="w-full bg-black border border-neutral-800 rounded-xl pl-12 pr-12 py-3 text-white focus:outline-none focus:border-white/50 focus:ring-1 focus:ring-white/10 transition-all placeholder:text-neutral-600"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute inset-y-0 right-0 pr-4 flex items-center text-neutral-500 hover:text-white transition-colors"
+                      >
+                        <HugeiconsIcon icon={showPassword ? ViewOffIcon : ViewIcon} className="w-5 h-5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3 mt-1">
+                    <input type="checkbox" required className="mt-1 rounded border-neutral-700 bg-black text-white focus:ring-white/20" />
+                    <span className="text-xs text-neutral-500 leading-relaxed">
+                      I agree to the{' '}
+                      <Link to="/terms" className="text-white hover:text-neutral-300 transition-colors">Terms of Service</Link>
+                      {' '}and{' '}
+                      <Link to="/privacy" className="text-white hover:text-neutral-300 transition-colors">Privacy Policy</Link>
+                    </span>
+                  </div>
+
                   <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute inset-y-0 right-0 pr-4 flex items-center text-neutral-500 hover:text-white transition-colors"
+                    type="submit"
+                    disabled={loading}
+                    className="w-full bg-white hover:bg-neutral-200 text-black font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 transition-all group disabled:opacity-50"
                   >
-                    <HugeiconsIcon icon={showPassword ? ViewOffIcon : ViewIcon} className="w-5 h-5" />
+                    {loading ? 'Creating account...' : (
+                      <>
+                        Create account
+                        <HugeiconsIcon icon={ArrowRight01Icon} className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                      </>
+                    )}
                   </button>
+                </form>
+
+                <div className="mt-6">
+                  <div className="relative mb-6">
+                    <div className="absolute inset-0 flex items-center">
+                      <div className="w-full border-t border-neutral-800" />
+                    </div>
+                    <div className="relative flex justify-center text-xs">
+                      <span className="bg-neutral-950 px-3 text-neutral-500">or continue with</span>
+                    </div>
+                  </div>
+                  <GoogleSignInButton />
                 </div>
-              </div>
 
-              <div className="flex items-start gap-3 mt-1">
-                <input type="checkbox" required className="mt-1 rounded border-neutral-700 bg-black text-white focus:ring-white/20" />
-                <span className="text-xs text-neutral-500 leading-relaxed">
-                  I agree to the{' '}
-                  <Link to="/terms" className="text-white hover:text-neutral-300 transition-colors">Terms of Service</Link>
-                  {' '}and{' '}
-                  <Link to="/privacy" className="text-white hover:text-neutral-300 transition-colors">Privacy Policy</Link>
-                </span>
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-white hover:bg-neutral-200 text-black font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 transition-all group disabled:opacity-50"
-              >
-                {loading ? 'Creating account...' : (
-                  <>
-                    Create account
-                    <HugeiconsIcon icon={ArrowRight01Icon} className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                  </>
-                )}
-              </button>
-            </form>
-
-            <div className="mt-6">
-              <div className="relative mb-6">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-neutral-800" />
+                <div className="mt-6 pt-6 border-t border-neutral-800 text-center">
+                  <p className="text-sm text-neutral-400">
+                    Already have an account?{' '}
+                    <Link to="/auth/login" className="text-white hover:text-neutral-300 font-bold transition-colors">Sign in</Link>
+                  </p>
                 </div>
-                <div className="relative flex justify-center text-xs">
-                  <span className="bg-neutral-950 px-3 text-neutral-500">or continue with</span>
-                </div>
-              </div>
-              <GoogleSignInButton />
-            </div>
-
-            <div className="mt-6 pt-6 border-t border-neutral-800 text-center">
-              <p className="text-sm text-neutral-400">
-                Already have an account?{' '}
-                <Link to="/auth/login" className="text-white hover:text-neutral-300 font-bold transition-colors">Sign in</Link>
-              </p>
-            </div>
+              </>
+            )}
           </div>
         </div>
       </div>

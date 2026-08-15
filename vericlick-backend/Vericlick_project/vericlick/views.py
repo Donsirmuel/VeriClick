@@ -38,7 +38,12 @@ from .serializers import (
     PlanSerializer,
 )
 from .version import get_version
-from .emails import send_welcome_email, send_password_reset_email, send_plan_upgraded_email
+from .emails import (
+    send_welcome_email,
+    send_password_reset_email,
+    send_plan_upgraded_email,
+    send_verification_email,
+)
 from .services import (
     classify_request,
     lookup_location,
@@ -549,8 +554,60 @@ def register(request):
     serializer = RegisterSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     user = serializer.save()
-    send_welcome_email(user)
-    return Response(RegisterSerializer(user).data, status=status.HTTP_201_CREATED)
+    # New accounts are inactive until the address is confirmed. The welcome
+    # email is sent once verification succeeds instead of here.
+    token = default_token_generator.make_token(user)
+    send_verification_email(user, user.pk, token)
+    return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def verify_email(request):
+    uid = request.data.get('uid')
+    token = request.data.get('token')
+    if not uid or not token:
+        return Response(
+            {'errors': [{'field': 'token', 'detail': 'This verification link is incomplete. Please request a new one.'}]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    try:
+        user = User.objects.get(pk=uid)
+    except (User.DoesNotExist, ValueError):
+        user = None
+    if user is None or not default_token_generator.check_token(user, token):
+        return Response(
+            {'errors': [{'field': 'token', 'detail': 'Invalid or expired verification link. Please request a new one.'}]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if not user.is_active:
+        user.is_active = True
+        user.save(update_fields=['is_active'])
+        send_welcome_email(user)
+    # Sign the user straight in — the link itself proved ownership of the email.
+    refresh = RefreshToken.for_user(user)
+    return Response({
+        'access': str(refresh.access_token),
+        'refresh': str(refresh),
+    })
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def resend_verification_email(request):
+    identifier = (request.data.get('email') or '').strip()
+    if not identifier:
+        return Response(
+            {'errors': [{'field': 'email', 'detail': 'Email is required'}]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    # Accept an email or a username (login box accepts both). Generic response
+    # either way: never reveal whether an account exists or is already verified.
+    user = User.objects.filter(Q(email__iexact=identifier) | Q(username__iexact=identifier)).first()
+    if user is not None and not user.is_active:
+        token = default_token_generator.make_token(user)
+        send_verification_email(user, user.pk, token)
+    return Response({'status': 'ok'})
 
 
 @api_view(['POST'])

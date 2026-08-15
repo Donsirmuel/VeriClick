@@ -24,6 +24,8 @@ urlpatterns = [
     path('discount-codes/validate/', views.discount_code_validate, name='discount-code-validate'),
     # Auth
     path('auth/register/', views.register, name='register'),
+    path('auth/verify-email/', views.verify_email, name='verify-email'),
+    path('auth/resend-verification/', views.resend_verification_email, name='resend-verification'),
     path('auth/google/', views.google_login, name='google-login'),
     path('auth/me/', views.auth_me, name='auth-me'),
     path('auth/delete-account/', views.delete_account, name='delete-account'),

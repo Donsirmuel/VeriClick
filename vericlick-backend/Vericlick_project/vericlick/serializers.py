@@ -34,6 +34,11 @@ class EmailOrUsernameTokenObtainPairSerializer(TokenObtainPairSerializer):
         except Exception as exc:
             from rest_framework.exceptions import AuthenticationFailed
             if isinstance(exc, AuthenticationFailed):
+                if matched is not None and not matched.is_active:
+                    raise AuthenticationFailed(
+                        'Please verify your email first. Check your inbox for the '
+                        'verification link we sent when you signed up, or request a new one.'
+                    )
                 if matched is None:
                     raise AuthenticationFailed(
                         'We couldn\'t find an account with that username or email. '
@@ -145,16 +150,23 @@ class DiscountCodeSerializer(serializers.ModelSerializer):
 
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, min_length=8)
+    email_verified = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'password']
+        fields = ['id', 'username', 'email', 'email_verified', 'password']
+
+    def get_email_verified(self, obj):
+        return obj.is_active
 
     def create(self, validated_data):
+        # Accounts start inactive until the address is confirmed via email —
+        # login is blocked until the verification link is used.
         user = User.objects.create_user(
             username=validated_data['username'],
             email=validated_data.get('email', ''),
             password=validated_data['password'],
+            is_active=False,
         )
         return user
 

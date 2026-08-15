@@ -90,12 +90,12 @@ const TOPICS: ChatTopic[] = [
   {
     id: 'get-started',
     keywords: ['start', 'get started', 'begin', 'setup', 'onboarding', 'first', 'beginner', 'tutorial', 'guide', 'quick start'],
-    answer: `To get started: 1) Create an account (free, no card). 2) Add a domain under Domains. 3) Verify you own it (add a text/TXT record) then point it at VeriClick (one short record — the app walks you through both). 4) Create your first tracked link under Links. 5) Share the link and watch your dashboard. Your dashboard has a step-by-step onboarding checklist that walks you through all of it.`,
+    answer: `To get started: 1) Create an account (free, no card) and click the verification link we email you. 2) Add a domain under Domains. 3) Verify you own it (add a text/TXT record) then point it at VeriClick (one short record — the app walks you through both). 4) Create your first tracked link under Links. 5) Share the link and watch your dashboard. Your dashboard has a step-by-step onboarding checklist that walks you through all of it.`,
   },
   {
     id: 'account',
-    keywords: ['account', 'login', 'sign in', 'signin', 'sign up', 'signup', 'register', 'password', 'reset', 'forgot', 'oauth', 'google', 'profile'],
-    answer: `Accounts are created in seconds with an email and password (or Google sign-in). You'll be logged into your workspace automatically. Forgot your password? Use "Forgot password" on the sign-in page to get a reset token. You can see your login email under Settings → Account, and close your account there too — it types DELETE to confirm and removes everything permanently.`,
+    keywords: ['account', 'login', 'sign in', 'signin', 'sign up', 'signup', 'register', 'verify', 'verification', 'confirm email', 'password', 'reset', 'forgot', 'oauth', 'google', 'profile'],
+    answer: `Accounts are created with an email and password (or Google sign-in — Google has already verified the address, so it logs you in directly). Email sign-ups must confirm their address first: we email a verification link, and once you click it your account is active and you can sign in. Didn't get the email? The sign-up and sign-in pages both have a "Resend verification email" button. Forgot your password? Use "Forgot password" on the sign-in page to get a reset token. You can see your login email under Settings → Account, and close your account there too — it types DELETE to confirm and removes everything permanently.`,
   },
   {
     id: 'contact',

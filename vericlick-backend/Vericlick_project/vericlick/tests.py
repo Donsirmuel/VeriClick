@@ -7,6 +7,7 @@ from datetime import timedelta
 from unittest.mock import patch
 from django.test import TestCase, override_settings
 from django.contrib.auth.models import User
+from django.contrib.auth.tokens import default_token_generator
 from django.contrib import admin
 from django.urls import reverse
 from django.utils import timezone
@@ -287,6 +288,116 @@ class AuthEndpointTests(APITestCase):
         self.assertTrue(User.objects.filter(username='newuser').exists())
         user = User.objects.get(username='newuser')
         self.assertTrue(Workspace.objects.filter(owner=user).exists())
+        # Accounts start inactive until the email is verified.
+        self.assertFalse(user.is_active)
+
+    def test_register_sends_verification_email(self):
+        with patch('vericlick.views.send_verification_email') as mock_send:
+            res = self.client.post('/api/auth/register/', {
+                'username': 'vemail',
+                'email': 'vemail@example.com',
+                'password': 'strongpass123',
+            }, format='json')
+            self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+            user = User.objects.get(username='vemail')
+            self.assertFalse(user.is_active)
+            self.assertIn('emailVerified', res.json())
+            self.assertFalse(res.json()['emailVerified'])
+            mock_send.assert_called_once()
+            sent_user, sent_uid, sent_token = mock_send.call_args[0]
+            self.assertEqual(sent_user, user)
+            self.assertEqual(sent_uid, user.pk)
+            self.assertTrue(default_token_generator.check_token(user, sent_token))
+
+    def test_login_unverified_email_blocked_with_message(self):
+        User.objects.create_user(
+            username='unverified', email='unverified@example.com',
+            password='testpass123', is_active=False,
+        )
+        res = self.client.post('/api/auth/login/', {
+            'username': 'unverified', 'password': 'testpass123',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+        body = res.json()
+        self.assertIn('errors', body)
+        self.assertIn('verify', body['errors'][0]['detail'].lower())
+
+    def test_verify_email_activates_user_and_returns_tokens(self):
+        user = User.objects.create_user(
+            username='verifyuser', email='verify@example.com',
+            password='testpass123', is_active=False,
+        )
+        token = default_token_generator.make_token(user)
+        res = self.client.post('/api/auth/verify-email/', {
+            'uid': user.pk, 'token': token,
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        user.refresh_from_db()
+        self.assertTrue(user.is_active)
+        body = res.json()
+        self.assertIn('access', body)
+        self.assertIn('refresh', body)
+
+    def test_verify_email_invalid_token_rejected(self):
+        user = User.objects.create_user(
+            username='verifybad', email='verifybad@example.com',
+            password='testpass123', is_active=False,
+        )
+        res = self.client.post('/api/auth/verify-email/', {
+            'uid': user.pk, 'token': 'not-a-real-token',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        user.refresh_from_db()
+        self.assertFalse(user.is_active)
+
+    def test_verify_email_unknown_user_rejected(self):
+        res = self.client.post('/api/auth/verify-email/', {
+            'uid': 999999, 'token': 'whatever',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_verify_email_already_active_still_returns_tokens(self):
+        user = User.objects.create_user(
+            username='verifyactive', email='verifyactive@example.com',
+            password='testpass123',
+        )
+        token = default_token_generator.make_token(user)
+        res = self.client.post('/api/auth/verify-email/', {
+            'uid': user.pk, 'token': token,
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        user.refresh_from_db()
+        self.assertTrue(user.is_active)
+
+    def test_resend_verification_sends_email_for_unverified(self):
+        with patch('vericlick.views.send_verification_email') as mock_send:
+            user = User.objects.create_user(
+                username='resenduser', email='resend@example.com',
+                password='testpass123', is_active=False,
+            )
+            res = self.client.post('/api/auth/resend-verification/', {
+                'email': 'resend@example.com',
+            }, format='json')
+            self.assertEqual(res.status_code, status.HTTP_200_OK)
+            mock_send.assert_called_once()
+            sent_user, _, sent_token = mock_send.call_args[0]
+            self.assertEqual(sent_user, user)
+            self.assertTrue(default_token_generator.check_token(user, sent_token))
+
+    def test_resend_verification_noop_for_active_or_unknown(self):
+        with patch('vericlick.views.send_verification_email') as mock_send:
+            User.objects.create_user(
+                username='already', email='already@example.com', password='testpass123',
+            )
+            res = self.client.post('/api/auth/resend-verification/', {
+                'email': 'already@example.com',
+            }, format='json')
+            self.assertEqual(res.status_code, status.HTTP_200_OK)
+            res = self.client.post('/api/auth/resend-verification/', {
+                'email': 'nobody@example.com',
+            }, format='json')
+            self.assertEqual(res.status_code, status.HTTP_200_OK)
+            mock_send.assert_not_called()
 
     def test_register_requires_password_min_length(self):
         data = {

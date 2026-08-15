@@ -5,7 +5,7 @@ import { useState } from 'react'
 import toast from 'react-hot-toast'
 import { Logo } from '@/components/Logo'
 import { GoogleSignInButton } from '@/components/auth/GoogleSignInButton'
-import { login } from '@/api/auth'
+import { login, resendVerification } from '@/api/auth'
 import { parseApiError } from '@/lib/errors'
 import { notifyAuthChanged } from '@/hooks/useAuth'
 
@@ -15,11 +15,14 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [needsVerification, setNeedsVerification] = useState(false)
+  const [resending, setResending] = useState(false)
   const navigate = useNavigate()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+    setNeedsVerification(false)
     if (!username.trim() || !password) {
       setError('Please enter your username and password')
       return
@@ -35,9 +38,22 @@ export default function Login() {
     } catch (err) {
       const message = parseApiError(err)
       setError(message || 'Invalid username or password. Please try again.')
+      setNeedsVerification(message.toLowerCase().includes('verify your email'))
       toast.error(message || 'Invalid username or password. Please try again.')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleResendVerification = async () => {
+    setResending(true)
+    try {
+      await resendVerification(username)
+      toast.success('Verification email sent. Check your inbox.')
+    } catch (err) {
+      toast.error(parseApiError(err))
+    } finally {
+      setResending(false)
     }
   }
 
@@ -166,6 +182,16 @@ export default function Login() {
                   className="bg-red-950/40 border border-red-800/60 rounded-xl px-4 py-3 text-sm text-red-300 leading-relaxed"
                 >
                   {error}
+                  {needsVerification && (
+                    <button
+                      type="button"
+                      onClick={handleResendVerification}
+                      disabled={resending}
+                      className="mt-3 w-full bg-red-900/50 hover:bg-red-900/70 border border-red-800/60 text-red-200 font-bold py-2.5 rounded-lg transition-colors disabled:opacity-50"
+                    >
+                      {resending ? 'Sending...' : 'Resend verification email'}
+                    </button>
+                  )}
                 </div>
               )}
 

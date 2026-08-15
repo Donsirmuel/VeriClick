@@ -15,6 +15,7 @@ const Landing = lazy(() => import('./pages/Landing'))
 
 const Login = lazy(() => import('./pages/Login'))
 const Register = lazy(() => import('./pages/Register'))
+const VerifyEmail = lazy(() => import('./pages/VerifyEmail'))
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword'))
 const ResetPassword = lazy(() => import('./pages/ResetPassword'))
 const Pricing = lazy(() => import('./pages/Pricing'))
@@ -54,6 +55,7 @@ function App() {
           <Route path="/terms" element={withSuspense(<TermsOfService />)} />
           <Route path="/auth/login" element={withSuspense(<PublicOnly><Login /></PublicOnly>)} />
           <Route path="/auth/register" element={withSuspense(<PublicOnly><Register /></PublicOnly>)} />
+          <Route path="/auth/verify-email" element={withSuspense(<PublicOnly><VerifyEmail /></PublicOnly>)} />
           <Route path="/auth/forgot-password" element={withSuspense(<PublicOnly><ForgotPassword /></PublicOnly>)} />
           <Route path="/auth/reset-password" element={withSuspense(<PublicOnly><ResetPassword /></PublicOnly>)} />
           <Route path="/app" element={<DashboardLayout />}>
