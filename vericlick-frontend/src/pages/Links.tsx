@@ -301,12 +301,14 @@ export default function LinksPage() {
         message={(() => {
           if (!deleteTarget) return ''
           const isFreeTier = Boolean(workspace && workspace.planName === null)
-          const onlyLink = isFreeTier && Boolean(workspace && workspace.linksUsed <= 1)
+          const onlyLink = Boolean(workspace && workspace.linksUsed <= 1)
           const linkDomain = domains?.find(d => d.domain === deleteTarget.domain)
           const countsTowardLimit = Boolean(linkDomain?.verified)
           const parts: string[] = []
           if (onlyLink) {
-            parts.push('This is your only link on the free trial — the trial includes 1 link. Deleting it means you won\'t be able to create a new one, so consider upgrading if you want to keep using VeriClick.')
+            parts.push(isFreeTier
+              ? 'This is your only link on the free trial — the trial includes 1 link. Deleting it means you won\'t be able to create a new one, so consider upgrading if you want to keep using VeriClick.'
+              : 'This is your only tracked link. Deleting it leaves you with no active link, and it cannot be undone — all its click data is lost.')
           }
           parts.push(countsTowardLimit
             ? `Deleting "${deleteTarget.slug}" stops it serving but does NOT free up your link slot — links on a verified domain keep counting toward your plan limit until the current period ends.`

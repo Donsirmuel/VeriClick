@@ -1,4 +1,4 @@
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, ReferenceLine, Tooltip, ResponsiveContainer, Legend } from 'recharts'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import type { TrafficData, TimeRange } from '@/types'
 import { formatNumber } from '@/lib/utils'
 import { Skeleton } from '@/components/ui/Skeleton'
@@ -10,11 +10,6 @@ interface TrafficChartProps {
   loading?: boolean
 }
 
-// Bot traffic is plotted below the central axis so the two lines diverge
-// around it; ticks and tooltips show the absolute value.
-const toDiverging = (points: TrafficData[]) =>
-  points.map((p) => ({ ...p, bot: -p.bot }))
-
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload || !payload.length) return null
   return (
@@ -24,7 +19,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
         <div key={i} className="flex items-center gap-2 text-xs mb-1">
           <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
           <span className="text-muted font-medium">{entry.name}:</span>
-          <span className="font-bold text-slate-900">{formatNumber(Math.abs(entry.value))}</span>
+          <span className="font-bold text-slate-900">{formatNumber(entry.value)}</span>
         </div>
       ))}
     </div>
@@ -32,8 +27,6 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 }
 
 export function TrafficChart({ data, range, onRangeChange, loading = false }: TrafficChartProps) {
-  const maxAbs = Math.max(1, ...data.flatMap((p) => [p.human, p.bot]))
-  const chartData = toDiverging(data)
   return (
     <div className="bg-white p-6 rounded-2xl border border-border shadow-sm">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
@@ -66,7 +59,7 @@ export function TrafficChart({ data, range, onRangeChange, loading = false }: Tr
           </div>
         ) : (
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+          <LineChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e5e5" />
             <XAxis 
               dataKey="date" 
@@ -78,10 +71,8 @@ export function TrafficChart({ data, range, onRangeChange, loading = false }: Tr
               axisLine={false} 
               tickLine={false} 
               tick={{ fontSize: 11, fill: '#737373' }}
-              tickFormatter={(value) => formatNumber(Math.abs(value))}
-              domain={[-maxAbs, maxAbs]}
+              tickFormatter={(value) => formatNumber(value)}
             />
-            <ReferenceLine y={0} stroke="#0a0a0a" strokeOpacity={0.25} />
             <Tooltip content={<CustomTooltip />} />
             <Legend 
               verticalAlign="top" 
@@ -94,8 +85,8 @@ export function TrafficChart({ data, range, onRangeChange, loading = false }: Tr
               type="monotone" 
               dataKey="human" 
               name="Human Traffic" 
-              stroke="#0a0a0a" 
-              strokeWidth={2}
+              stroke="#3B82F6" 
+              strokeWidth={2.5}
               dot={false}
               activeDot={{ r: 4 }}
             />
@@ -104,7 +95,7 @@ export function TrafficChart({ data, range, onRangeChange, loading = false }: Tr
               dataKey="bot" 
               name="Bot Traffic" 
               stroke="#EF4444" 
-              strokeWidth={2}
+              strokeWidth={2.5}
               dot={false}
               activeDot={{ r: 4 }}
             />

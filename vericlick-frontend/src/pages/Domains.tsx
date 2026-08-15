@@ -362,11 +362,13 @@ export default function DomainsPage() {
         message={(() => {
           if (!deleteTarget) return ''
           const isFreeTier = Boolean(workspace && workspace.planName === null)
-          const onlyDomain = isFreeTier && Boolean(workspace && workspace.domainsUsed <= 1)
+          const onlyDomain = Boolean(workspace && workspace.domainsUsed <= 1)
           const base = `Are you sure you want to remove "${deleteTarget.domain}"? Its links are removed too.`
           const parts: string[] = []
           if (onlyDomain) {
-            parts.push('This is your only domain on the free trial — the trial includes 1 domain. Removing it means you won\'t be able to register a new one, so consider upgrading if you want to keep using your own brand.')
+            parts.push(isFreeTier
+              ? 'This is your only domain on the free trial — the trial includes 1 domain. Removing it means you won\'t be able to register a new one, so consider upgrading if you want to keep using your own brand.'
+              : 'This is your only domain. Removing it leaves you with no way to serve tracked links under your own brand.')
           }
           parts.push(`${base} This does not free up a domain slot — removed domains still count toward your plan limit until the current period ends.`)
           return parts.join(' ')
