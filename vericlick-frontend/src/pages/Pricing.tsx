@@ -86,11 +86,21 @@ function PlanCard({ plan, popular }: { plan: Plan; popular?: boolean }) {
         ${plan.monthlyPrice}
         <span className="text-base text-neutral-500 font-normal">/month</span>
       </div>
-      <div className="mb-6">
-        <span className="inline-flex items-center gap-2 text-sm font-bold text-white bg-neutral-800/70 px-3 py-1.5 rounded-full">
-          <HugeiconsIcon icon={Globe02Icon} className="w-4 h-4" />
-          {plan.domainLimit} {plan.domainLimit === 1 ? 'domain' : 'domains'}
-        </span>
+      <div className="grid grid-cols-2 gap-2 mb-6">
+        <div className="rounded-xl bg-neutral-800/50 border border-neutral-700/60 px-4 py-3">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 mb-1">Domains</div>
+          <div className="flex items-center gap-1.5 text-sm font-bold text-white">
+            <HugeiconsIcon icon={Globe02Icon} className="w-4 h-4" />
+            {plan.domainLimit}
+          </div>
+        </div>
+        <div className="rounded-xl bg-neutral-800/50 border border-neutral-700/60 px-4 py-3">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 mb-1">Links</div>
+          <div className="flex items-center gap-1.5 text-sm font-bold text-white">
+            <HugeiconsIcon icon={LinkSquare02Icon} className="w-4 h-4" />
+            Unlimited
+          </div>
+        </div>
       </div>
 
       <ul className="space-y-2.5 mb-8 text-sm text-neutral-300 flex-1">
@@ -117,6 +127,49 @@ function PlanCard({ plan, popular }: { plan: Plan; popular?: boolean }) {
         Choose {plan.name}
         <HugeiconsIcon icon={ArrowRight01Icon} className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
       </Link>
+    </div>
+  )
+}
+
+function LimitsBand({ plans }: { plans: Plan[] }) {
+  return (
+    <div className="mb-8 bg-neutral-950 border border-neutral-800 rounded-3xl p-6 sm:p-8">
+      <div className="flex items-center gap-2 mb-1">
+        <HugeiconsIcon icon={Globe02Icon} className="w-4 h-4 text-neutral-300" />
+        <h3 className="text-sm font-bold">Domain &amp; link limits</h3>
+      </div>
+      <p className="text-xs text-neutral-400 mb-6">
+        Your plan only sets how many domains you can track — links are never the thing that changes.
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[560px] text-sm">
+          <thead>
+            <tr className="border-b border-neutral-800 text-neutral-400">
+              <th className="text-left pb-3 pr-6 font-semibold">Limit</th>
+              <th className="text-left pb-3 pr-6 font-semibold">Free trial</th>
+              {plans.map((p) => (
+                <th key={p.code} className="text-left pb-3 font-bold text-white">{p.name}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="border-b border-neutral-900">
+              <td className="py-3 pr-6 text-neutral-400">Tracked domains</td>
+              <td className="py-3 pr-6 text-neutral-300">1</td>
+              {plans.map((p) => (
+                <td key={p.code} className="py-3 font-bold text-white">{p.domainLimit}</td>
+              ))}
+            </tr>
+            <tr>
+              <td className="py-3 pr-6 text-neutral-400">Tracked links</td>
+              <td className="py-3 pr-6 text-neutral-300">1</td>
+              {plans.map((p) => (
+                <td key={p.code} className="py-3 font-bold text-white">Unlimited</td>
+              ))}
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
@@ -165,7 +218,7 @@ export default function Pricing() {
           </h1>
           <p className="text-lg text-neutral-400 max-w-2xl mx-auto mb-4 leading-relaxed">
             Start with a free 7-day trial — 1 domain and 1 link, no credit card required. Then pick
-            the plan that fits your domain count; every tier gets the full protection engine.
+            the plan that fits your domain count; tracked links are unlimited on every paid plan.
           </p>
         </div>
       </section>
@@ -188,6 +241,7 @@ export default function Pricing() {
           {!isLoading && !isError && (
           <>
             <FreeTierCard />
+            <LimitsBand plans={plans} />
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {plans.map((plan) => (
                 <PlanCard key={plan.code} plan={plan} popular={plan.code === 'plus'} />
@@ -197,7 +251,8 @@ export default function Pricing() {
           )}
 
           <p className="text-center text-sm text-neutral-500 mt-8">
-            The only difference between plans is the number of domains — Basic 5, Plus 10, Pro 20. Everything else is the same product.
+            The only difference between plans is the number of domains — Basic 5, Plus 10, Pro 20.
+            Tracked links are unlimited on every paid plan, and every tier runs the full protection engine.
           </p>
         </div>
       </section>

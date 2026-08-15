@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { CheckmarkCircle02Icon, CreditCardIcon, Globe02Icon, Invoice01Icon, RefreshIcon, ShieldIcon } from '@hugeicons/core-free-icons'
+import { CheckmarkCircle02Icon, CreditCardIcon, Globe02Icon, Invoice01Icon, LinkSquare02Icon, RefreshIcon, ShieldIcon } from '@hugeicons/core-free-icons'
 import toast from 'react-hot-toast'
 import { fetchPricing } from '@/api/pricing'
 import { fetchWorkspace, fetchBillingHistory, startCheckout } from '@/api/workspace'
@@ -114,7 +114,8 @@ export default function Billing() {
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Billing &amp; Plan</h1>
         <p className="text-sm text-muted mt-1">
-          Your plan controls how many tracked domains your workspace can register. Pay monthly by card, or buy a 30-day period with the payment method that suits you.
+          Your plan controls how many tracked domains your workspace can register — tracked links are
+          unlimited on every paid plan. Pay monthly by card, or buy a 30-day period with the payment method that suits you.
         </p>
       </div>
 
@@ -161,7 +162,7 @@ export default function Billing() {
       )}
 
       {/* Current status */}
-      <div className="grid sm:grid-cols-3 gap-4">
+      <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <div className="bg-white border border-neutral-200 rounded-2xl p-5">
           <div className="text-xs font-bold text-muted uppercase tracking-wider mb-1">Current plan</div>
           <div className="text-xl font-bold text-slate-900">
@@ -217,6 +218,17 @@ export default function Billing() {
               ? `${workspace.domainsUsed} / ${workspace.domainLimit} used`
               : `${workspace?.domainsUsed ?? 0} / unlimited`}
           </div>
+        </div>
+        <div className="bg-white border border-neutral-200 rounded-2xl p-5">
+          <div className="text-xs font-bold text-muted uppercase tracking-wider mb-1">Links</div>
+          <div className="text-xl font-bold text-slate-900">
+            {workspace?.linkLimit != null
+              ? `${workspace.linksUsed} / ${workspace.linkLimit} used`
+              : 'Unlimited'}
+          </div>
+          {workspace?.linkLimit == null && (
+            <div className="text-xs text-muted mt-1">Links are never capped on paid plans</div>
+          )}
         </div>
       </div>
 
@@ -278,11 +290,21 @@ export default function Billing() {
                     {billingMode === 'subscription' ? '/month' : '/30 days'}
                   </span>
                 </div>
-                <div className="flex items-center gap-2 mb-5">
-                  <HugeiconsIcon icon={Globe02Icon} className="w-4 h-4 text-muted" />
-                  <span className="text-sm font-bold text-slate-700">
-                    {plan.domainLimit} {plan.domainLimit === 1 ? 'domain' : 'domains'}
-                  </span>
+                <div className="grid grid-cols-2 gap-2 mb-5">
+                  <div className="rounded-xl bg-neutral-50 border border-neutral-200 px-3 py-2.5">
+                    <div className="text-[10px] font-bold text-muted uppercase tracking-wider mb-1">Domains</div>
+                    <div className="flex items-center gap-1.5 text-sm font-bold text-slate-900">
+                      <HugeiconsIcon icon={Globe02Icon} className="w-4 h-4 text-muted" />
+                      {plan.domainLimit}
+                    </div>
+                  </div>
+                  <div className="rounded-xl bg-neutral-50 border border-neutral-200 px-3 py-2.5">
+                    <div className="text-[10px] font-bold text-muted uppercase tracking-wider mb-1">Links</div>
+                    <div className="flex items-center gap-1.5 text-sm font-bold text-slate-900">
+                      <HugeiconsIcon icon={LinkSquare02Icon} className="w-4 h-4 text-muted" />
+                      Unlimited
+                    </div>
+                  </div>
                 </div>
                 <ul className="space-y-2.5 mb-6 text-sm text-slate-600 flex-1">
                   <li className="flex items-start gap-2">
@@ -360,7 +382,8 @@ export default function Billing() {
           </div>
         ) : (
           <div className="bg-white border border-neutral-200 rounded-2xl p-6 text-sm text-muted">
-            No payments yet. Your free trial includes 1 domain and 1 link — pick a plan above when you're ready for more room.
+            No payments yet. Your free trial includes 1 domain and 1 link — links are unlimited once
+            you're on a paid plan. Pick a plan above when you're ready for more room.
           </div>
         )}
       </div>
