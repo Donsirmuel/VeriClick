@@ -18,6 +18,7 @@ export default function ResetPassword() {
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [deadLink, setDeadLink] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -31,7 +32,15 @@ export default function ResetPassword() {
       toast.success('Password reset successfully')
       navigate('/auth/login')
     } catch (err) {
-      toast.error(parseApiError(err))
+      const message = parseApiError(err)
+      // The token the user reached this page with is no good (corrupted by an
+      // email client's link wrapper, or expired). Swap the form for the
+      // "request a new link" recovery state instead of leaving them stuck.
+      if (/invalid or expired|invalid or already used/i.test(message)) {
+        setDeadLink(true)
+        return
+      }
+      toast.error(message)
     } finally {
       setLoading(false)
     }
@@ -52,9 +61,14 @@ export default function ResetPassword() {
         </div>
 
         <div className="bg-neutral-950 border border-neutral-800 rounded-2xl p-6 sm:p-8">
-          {!uid || !token ? (
+          {!uid || !token || deadLink ? (
             <div className="text-center py-4">
-              <p className="text-error font-bold mb-4">Invalid or expired reset link.</p>
+              <p className="text-error font-bold mb-2">Invalid or expired reset link.</p>
+              {deadLink && (
+                <p className="text-neutral-400 text-sm mb-4">
+                  The link you opened can't be used. Request a fresh one below.
+                </p>
+              )}
               <Link to="/auth/forgot-password" className="text-white hover:text-neutral-300 font-bold text-sm transition-colors">
                 Request a new reset link
               </Link>
