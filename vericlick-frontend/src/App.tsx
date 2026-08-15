@@ -20,6 +20,7 @@ const ForgotPassword = lazy(() => import('./pages/ForgotPassword'))
 const ResetPassword = lazy(() => import('./pages/ResetPassword'))
 const Pricing = lazy(() => import('./pages/Pricing'))
 const Contact = lazy(() => import('./pages/Contact'))
+const HelpPublic = lazy(() => import('./pages/HelpPublic'))
 const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'))
 const TermsOfService = lazy(() => import('./pages/TermsOfService'))
 const Settings = lazy(() => import('./pages/Settings'))
@@ -50,6 +51,7 @@ function App() {
           {/* Landing is public even for signed-in users (nav adapts to show "Dashboard"). */}
           <Route path="/" element={withSuspense(<Landing />)} />
           <Route path="/pricing" element={withSuspense(<Pricing />)} />
+          <Route path="/help" element={withSuspense(<HelpPublic />)} />
           <Route path="/contact" element={withSuspense(<Contact />)} />
           <Route path="/privacy" element={withSuspense(<PrivacyPolicy />)} />
           <Route path="/terms" element={withSuspense(<TermsOfService />)} />

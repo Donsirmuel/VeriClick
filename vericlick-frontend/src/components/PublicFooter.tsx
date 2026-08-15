@@ -36,7 +36,7 @@ export function PublicFooter() {
                 <li><Link to="/app/dashboard" className="hover:text-white transition-colors">Dashboard</Link></li>
                 <li><a href="/#features" className="hover:text-white transition-colors">Features</a></li>
                 <li><Link to="/pricing" className="hover:text-white transition-colors">Pricing</Link></li>
-                <li><Link to="/app/help" className="hover:text-white transition-colors">Help & Docs</Link></li>
+                <li><Link to="/help" className="hover:text-white transition-colors">Help & Docs</Link></li>
               </ul>
             </div>
 
