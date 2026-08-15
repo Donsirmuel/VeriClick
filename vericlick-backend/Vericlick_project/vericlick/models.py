@@ -385,16 +385,19 @@ class DomainRegistry(models.Model):
 
     def run_health_check(self):
         # Full DNS diagnosis, persisted so the status explains itself:
-        #   1. health_status: the registered domain resolves at all (legacy
-        #      semantics — the apex, for root domains).
-        #   2. points_to_server: the tracking host (e.g. t.example.com) resolves
-        #      to *this* server — the signal that actually gates branded links.
+        #   1. health_status: whether the domain actually serves branded links —
+        #      the tracking host (e.g. t.example.com) resolving to *this*
+        #      server. Whether the apex/root itself resolves is informational
+        #      only: a root domain without an A record still serves its links
+        #      on t.<domain>, so it must NOT mark the domain degraded.
+        #   2. points_to_server: the same signal, stored as a bool.
         #   3. health_detail: the plain-language report shown in the app/admin.
-        # Ownership verification (TXT) remains a separate step ("verified").
+        # Ownership is authorized instantly at registration ("verified"), so it
+        # no longer gates health.
         from .services import diagnose_domain
         report = diagnose_domain(self)
         self.health_status = (
-            self.HealthStatus.HEALTHY if report.get('apex_resolves')
+            self.HealthStatus.HEALTHY if report.get('points_to_us')
             else self.HealthStatus.DEGRADED
         )
         self.points_to_server = bool(report.get('points_to_us'))

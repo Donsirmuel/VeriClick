@@ -1175,13 +1175,14 @@ class DomainRegistryViewSet(viewsets.ModelViewSet):
                         'Open the Domains page to manage it.'
                     )
                 })
-            # Resurrect a previously-removed domain: clear the soft-delete, bring
-            # its links back, and authorize it instantly (v2.0.0). This keeps the
-            # "remove and re-add freely" promise that the unique domain column
-            # would otherwise block. Re-adding a removed domain does not consume
-            # a new plan slot — the row already existed — so the limit checks
-            # below do not apply to it.
-            existing.links.filter(removed_at__isnull=False).update(removed_at=None)
+            # Reuse the previously-removed domain row (the domain column is
+            # globally unique) and authorize it instantly (v2.0.0). This keeps
+            # the "remove and re-add freely" promise without consuming a new
+            # plan slot — the row already existed — so the limit checks below
+            # do not apply to it. Its links were deleted along with the domain,
+            # so a re-added domain starts fresh: purge the soft-deleted links
+            # now, which also frees their slugs for new links.
+            existing.links.filter(removed_at__isnull=False).delete()
             existing.removed_at = None
             existing.verified = True
             existing.save(update_fields=['removed_at', 'verified'])

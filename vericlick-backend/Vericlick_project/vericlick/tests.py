@@ -291,6 +291,32 @@ class AuthEndpointTests(APITestCase):
         # Accounts start inactive until the email is verified.
         self.assertFalse(user.is_active)
 
+    def test_register_rejects_duplicate_email(self):
+        User.objects.create_user(
+            username='existing', email='dupe@example.com', password='testpass123',
+        )
+        res = self.client.post('/api/auth/register/', {
+            'username': 'newuser2',
+            'email': 'dupe@example.com',
+            'password': 'strongpass123',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        errors = ' '.join(e['detail'] for e in res.json()['errors'])
+        self.assertIn('already exists', errors.lower())
+        self.assertFalse(User.objects.filter(username='newuser2').exists())
+
+    def test_register_rejects_duplicate_email_case_insensitive(self):
+        User.objects.create_user(
+            username='existing', email='dupe@example.com', password='testpass123',
+        )
+        res = self.client.post('/api/auth/register/', {
+            'username': 'newuser3',
+            'email': 'DUPE@example.com',
+            'password': 'strongpass123',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(User.objects.filter(username='newuser3').exists())
+
     def test_register_sends_verification_email(self):
         with patch('vericlick.views.send_verification_email') as mock_send:
             res = self.client.post('/api/auth/register/', {
@@ -1218,8 +1244,22 @@ class DomainDiagnosisTests(APITestCase):
         self.domain.refresh_from_db()
         self.assertEqual(self.domain.health_detail, fake)
         self.assertTrue(self.domain.points_to_server)
-        self.assertEqual(self.domain.health_status, DomainRegistry.HealthStatus.DEGRADED)
+        # Health follows the serving path: the tracking host points at us, so
+        # the domain is healthy even though the apex itself doesn't resolve.
+        self.assertEqual(self.domain.health_status, DomainRegistry.HealthStatus.HEALTHY)
         self.assertIsNotNone(self.domain.last_checked)
+
+    def test_run_health_check_degraded_when_not_pointing(self):
+        fake = {
+            'generated_at': '2026-01-01T00:00:00Z', 'tracking_host': 't.example.com',
+            'expected_ips': ['1.2.3.4'], 'verified': True, 'points_to_us': False,
+            'apex_resolves': True, 'ready': False, 'findings': [],
+        }
+        with patch('vericlick.services.diagnose_domain', return_value=fake):
+            self.domain.run_health_check()
+        self.domain.refresh_from_db()
+        self.assertFalse(self.domain.points_to_server)
+        self.assertEqual(self.domain.health_status, DomainRegistry.HealthStatus.DEGRADED)
 
     def test_ready_true_when_pointing_even_if_apex_degraded(self):
         domain = DomainRegistry.objects.create(
@@ -2540,7 +2580,7 @@ class DomainReaddTests(APITestCase):
         self.assertEqual(len(listing), 1)
         self.assertEqual(listing[0]['id'], str(domain.id))
 
-    def test_readding_restores_removed_links(self):
+    def test_readding_domain_does_not_restore_removed_links(self):
         domain = self._create_domain(verified=True)
         link = TrackingLink.objects.create(
             workspace=self.workspace, domain=domain,
@@ -2554,13 +2594,19 @@ class DomainReaddTests(APITestCase):
         with patch('vericlick.services.diagnose_domain', return_value=FAKE_DIAGNOSIS):
             res = self.client.post('/api/domains/', {'domain': 'readd.example.com'}, format='json')
         self.assertEqual(res.status_code, status.HTTP_201_CREATED)
-        link.refresh_from_db()
         domain.refresh_from_db()
         self.assertIsNone(domain.removed_at)
-        self.assertIsNone(link.removed_at)
-        self.assertTrue(
-            TrackingLink.objects.filter(id=link.id, removed_at__isnull=True).exists()
-        )
+        self.assertTrue(domain.verified)
+        # The old link is gone for good — re-adding the domain starts fresh.
+        self.assertFalse(TrackingLink.objects.filter(id=link.id).exists())
+        # Its slug is free again, so a brand-new link can take it.
+        fresh = self.client.post('/api/links/', {
+            'domain': 'readd.example.com', 'slug': 'readd-link',
+            'destination_url': 'https://newsite.com',
+        }, format='json')
+        self.assertEqual(fresh.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(fresh.json()['slug'], 'readd-link')
+        self.assertEqual(fresh.json()['destinationUrl'], 'https://newsite.com')
 
     def test_registering_active_same_workspace_domain_is_friendly_400(self):
         self._create_domain(verified=True)

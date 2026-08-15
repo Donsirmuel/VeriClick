@@ -159,6 +159,14 @@ class RegisterSerializer(serializers.ModelSerializer):
     def get_email_verified(self, obj):
         return obj.is_active
 
+    def validate_email(self, value):
+        email = (value or '').strip()
+        if email and User.objects.filter(email__iexact=email).exists():
+            raise serializers.ValidationError(
+                'An account with this email already exists. Try logging in instead.'
+            )
+        return value
+
     def create(self, validated_data):
         # Accounts start inactive until the address is confirmed via email —
         # login is blocked until the verification link is used.
