@@ -71,18 +71,13 @@ export function PublicNav({ featuresHref = '#features' }: PublicNavProps) {
                 Dashboard
               </Link>
             ) : (
-              <>
-                <Link to="/auth/login" onClick={() => setMenuOpen(false)} className="hover:text-white transition-colors">
-                  Log in
-                </Link>
-                <Link
-                  to="/auth/register"
-                  onClick={() => setMenuOpen(false)}
-                  className="bg-white hover:bg-neutral-200 text-black text-center font-bold rounded-lg px-4 py-3 transition-colors"
-                >
-                  Get Started
-                </Link>
-              </>
+              <Link
+                to="/auth/register"
+                onClick={() => setMenuOpen(false)}
+                className="bg-white hover:bg-neutral-200 text-black text-center font-bold rounded-lg px-4 py-3 transition-colors"
+              >
+                Get Started
+              </Link>
             )}
           </div>
         </div>

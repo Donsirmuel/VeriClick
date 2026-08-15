@@ -36,7 +36,8 @@ export function AddDomainDialog({ onClose, onSubmit, loading }: AddDomainDialogP
               <HugeiconsIcon icon={ShieldIcon} className="w-5 h-5 text-black" />
             </div>
             <p className="text-xs text-slate-700 leading-relaxed">
-              Add a domain you own. It's authorized the moment you register it — no DNS proof needed. You'll be shown one short CNAME record to point it at VeriClick and use your own brand.
+              Add a domain you own. It's authorized the moment you register it — no DNS proof needed, and your links work right away.
+              You can optionally add one short CNAME record later to switch your links to your own brand.
             </p>
           </div>
 

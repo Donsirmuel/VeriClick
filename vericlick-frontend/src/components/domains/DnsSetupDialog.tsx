@@ -123,7 +123,8 @@ export function DnsSetupDialog({ domain, onClose, onRechecked }: DnsSetupDialogP
                   <HugeiconsIcon icon={Globe02Icon} className="w-5 h-5 text-black" />
                 </div>
                 <p className="text-xs text-slate-700 leading-relaxed">
-                  Ownership is already authorized — no TXT record needed. Just add{' '}
+                  Your links already work without this — they share the VeriClick URL. This step is{' '}
+                  <strong>optional</strong> and just switches them to your own brand. When you're ready, add{' '}
                   <strong>one</strong> record at your DNS provider, then press{' '}
                   <strong>Check setup</strong>. Your tracked links will live on{' '}
                   <span className="font-mono text-xs bg-white border border-neutral-200 px-1 rounded">{trackingHost}</span>

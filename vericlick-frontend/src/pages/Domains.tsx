@@ -58,14 +58,11 @@ export default function DomainsPage() {
 
   const createMutation = useMutation({
     mutationFn: createDomain,
-    onSuccess: (created) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['domains'] })
       queryClient.invalidateQueries({ queryKey: ['workspace'] })
       toast.success('Domain registered successfully')
       setShowAddDialog(false)
-      // Jump straight into the DNS setup so the CNAME record is added
-      // in one take (ownership is already authorized).
-      setDnsSetupTarget(created)
     },
   })
 
@@ -124,7 +121,7 @@ export default function DomainsPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Domain Registry</h1>
           <ReadMore className="max-w-3xl" lines={2}>
-            A domain is the web address your links live on, like <code className="text-xs bg-neutral-100 px-1.5 py-0.5 rounded">your.domain/r/summer23</code>. Registering it authorizes you instantly — no proof of ownership needed. There's just one step left: <strong>point it at VeriClick</strong> by adding a short record the app shows you (called a CNAME). Then your links use your own brand. Registered domains are also covered by Site Shield — pages that run the tracker script get automatic bot filtering.
+            A domain is the web address your links live on, like <code className="text-xs bg-neutral-100 px-1.5 py-0.5 rounded">your.domain/r/summer23</code>. Registering it authorizes you instantly — no proof of ownership needed, and links work right away (sharing the VeriClick URL until you're ready). When you want your own brand, there's one optional step: <strong>point it at VeriClick</strong> by adding a short record the app shows you (called a CNAME). Registered domains are also covered by Site Shield — pages that run the tracker script get automatic bot filtering.
           </ReadMore>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -167,21 +164,17 @@ export default function DomainsPage() {
 
       {needsDnsStepDomains.length > 0 && (
         <div className="mb-6">
-          <div className="flex items-center justify-between gap-3 flex-wrap rounded-2xl border border-warning/30 bg-warning/10 p-4">
+          <div className="flex items-center justify-between gap-3 flex-wrap rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
             <div className="flex items-start gap-3 min-w-0">
               <div className="mt-0.5 shrink-0">
-                <HugeiconsIcon icon={Globe02Icon} className="w-5 h-5 text-warning" />
+                <HugeiconsIcon icon={Globe02Icon} className="w-5 h-5 text-slate-500" />
               </div>
               <div className="min-w-0">
-                <h3 className="text-sm font-bold text-slate-900">
-                  {needsDnsStepDomains.length === 1
-                    ? 'Your domain is authorized — one quick step left'
-                    : `${needsDnsStepDomains.length} of your domains need one quick step`}
-                </h3>
+                <h3 className="text-sm font-bold text-slate-900">Optional: use your own brand</h3>
                 <p className="text-sm text-slate-600 leading-relaxed mt-0.5">
-                  Ownership is confirmed, but {needsDnsStepDomains.length === 1 ? `your domain` : 'these domains'} don't
-                  point at VeriClick yet. Links share the VeriClick URL until they do. Add one short CNAME record
-                  to use your own brand.
+                  Your links already work — they share the VeriClick URL. Add one short CNAME record any
+                  time to point {needsDnsStepDomains.length === 1 ? 'your domain' : 'these domains'} at
+                  VeriClick and switch your links to your own brand.
                 </p>
               </div>
             </div>
@@ -202,7 +195,7 @@ export default function DomainsPage() {
           <EmptyState
             icon={Globe02Icon}
             title="No domains registered"
-            description="Add your first domain to start building tracked links. It's ready the moment you register it — you only need to add one short record (a CNAME) to start using your own brand."
+            description="Add your first domain to start building tracked links. Links work the moment you register it — adding a short CNAME record later just switches them to your own brand."
             action={{ label: 'Add your first domain', onClick: () => setShowAddDialog(true) }}
           />
         </div>
@@ -224,7 +217,7 @@ export default function DomainsPage() {
                 <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">
                   <span className="flex items-center gap-1.5">
                     Status
-                    <HelpTooltip text="A domain is fully ready when it points at VeriClick — you add one CNAME record we show you. Ownership is authorized instantly at registration, so that's the only step left. 'One quick step left' means it hasn't reached our servers yet." />
+                    <HelpTooltip text="A domain is 'ready' when it points at VeriClick — one optional CNAME record you can add any time. Ownership is authorized instantly at registration and your links already work, sharing the VeriClick URL until then." />
                   </span>
                 </th>
                 <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Last Checked</th>

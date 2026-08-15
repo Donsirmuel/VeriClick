@@ -111,8 +111,8 @@ export default function DashboardPage() {
       },
       {
         n: 2,
-        title: 'Point your domain at VeriClick',
-        desc: 'Add one short CNAME record and your links use your own brand. Until then they use the VeriClick URL — either way they work.',
+        title: 'Optional: use your own brand',
+        desc: 'Add one short CNAME record and your links use your own brand. Skip it and they use the VeriClick URL — either way they work.',
         to: '/app/domains',
         icon: Globe02Icon,
         done: (domains ?? []).some((d) => d.ready),
