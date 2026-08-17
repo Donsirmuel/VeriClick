@@ -26,12 +26,12 @@ RUN apk add --no-cache go git
 ENV GOPATH=/go
 ENV PATH=$PATH:/go/bin
 RUN go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
-RUN xcaddy build --with github.com/josuebrunel/caddy-ja3ja4
+RUN xcaddy build --with github.com/josuebrunel/caddy-ja3ja4 --output /tmp/caddy
 
 # --- Stage 3: final image ---
 FROM alpine:3.19
 RUN apk add --no-cache ca-certificates tzdata
-COPY --from=caddy-build /go/bin/caddy /usr/bin/caddy
+COPY --from=caddy-build /tmp/caddy /usr/bin/caddy
 COPY Caddyfile /etc/caddy/Caddyfile
 COPY --from=build /build/dist /usr/share/caddy
 # Certificates/ACME state persist in the caddy_data volume (see compose file).
