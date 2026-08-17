@@ -1,0 +1,25 @@
+RESPONSE FOR RADIX ONLINE CONTACT FORM
+========================================
+
+Steps completed:
+
+1. PHISHING URL REMOVED: The flagged link /r/44wkekw/ has been permanently disabled and returns 410 Gone. The offending user account has been deactivated.
+
+2. PHISHING CONTENTS CLEARED: We have made a permanent structural change — the /r/* path on getvericlick.site no longer serves tracked links at all (removed from web server config). The domain now only serves the product dashboard and admin panel. All tracked links now require user-owned custom domains.
+
+3. ALL EXISTING PRODUCT-DOMAIN LINKS DISABLED: We ran a migration to disable every link that was using the shared product domain. Affected users have been notified to add their own domains.
+
+4. SECURITY MEASURES IMPLEMENTED:
+- Destination URL blocklist (malicious URLs blocked at link creation)
+- Google Safe Browsing integration (all destinations checked before link creation)
+- Public abuse reporting endpoint
+- Rate limiting (30 link creates/hour/account)
+- Admin rapid-response actions (one-click bulk disable + workspace ban)
+- Destination change logging (every URL change logged with IP/user agent)
+- Daily re-scanning of all active links
+- Expanded Terms of Service with abuse takedown clauses
+
+The product domain will never again appear in tracked link URLs. VeriClick is now a pure engine — users bring their own domains.
+
+Contact: samuelolaonipekun050@gmail.com
+Company: MAILIONDEV TECHNOLOGY LTD (RC 9233525)
