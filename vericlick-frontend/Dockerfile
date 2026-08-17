@@ -23,6 +23,8 @@ RUN npm run build
 # --- Stage 2: custom Caddy with JA4 TLS fingerprinting plugin ---
 FROM caddy:2-alpine AS caddy-build
 RUN apk add --no-cache go git
+ENV GOPATH=/go
+ENV PATH=$PATH:/go/bin
 RUN go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
 RUN xcaddy build --with github.com/josuebrunel/caddy-ja3ja4
 
