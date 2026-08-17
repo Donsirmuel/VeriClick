@@ -3199,10 +3199,10 @@ class BillingGraceSuspensionTests(APITestCase):
         self.assertFalse(self.workspace.can_add_domain)
         self.assertFalse(self.workspace.can_add_link)
 
-    def test_suspended_link_passes_through_without_tracking(self):
-        # A suspended workspace's links must behave like dumb redirects: even
-        # bot user-agents, deny rules, and a safe_destination are bypassed, and
-        # nothing is logged.
+    def test_suspended_link_returns_410_gone(self):
+        # A suspended workspace's links now return 410 Gone instead of
+        # pass-through. This prevents abuse from lapsed accounts and aligns
+        # with the ZeroBot model (no product-domain pass-through).
         self._end_grace()
         self.workspace.safe_destination = 'https://safety.example.com/honeypot'
         self.workspace.save()
@@ -3212,8 +3212,7 @@ class BillingGraceSuspensionTests(APITestCase):
         res = self.client.get(
             f'/r/{self.link.slug}/', HTTP_USER_AGENT='Googlebot/2.1', REMOTE_ADDR='203.0.113.5',
         )
-        self.assertEqual(res.status_code, status.HTTP_302_FOUND)
-        self.assertEqual(res.url, 'https://example.com/landing')
+        self.assertEqual(res.status_code, 410)
         self.assertFalse(ClickLog.objects.filter(link=self.link).exists())
         self.link.refresh_from_db()
         self.assertEqual(self.link.total_clicks, 0)

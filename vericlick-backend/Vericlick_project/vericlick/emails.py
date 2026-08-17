@@ -48,8 +48,9 @@ def _layout(body_html):
       <span style="color:#ffffff;font-size:22px;font-weight:bold;">VeriClick</span>
     </div>
     {body_html}
-    <p style="color:#525252;font-size:12px;text-align:center;margin-top:32px;">
+    <p style="color:#525252;font-size:12px;text-align:center;margin-top:32px;border-top:1px solid #262626;padding-top:16px;">
       You received this email because you have an account with VeriClick.<br/>
+      VeriClick links must comply with our Terms of Service. Abuse may result in account suspension.<br/>
       If this wasn't you, you can safely ignore it.
     </p>
   </div>
@@ -226,9 +227,9 @@ def send_period_expiring_email(user, workspace, plan, expires_at):
 </p>
 <p style="color:#a3a3a3;font-size:15px;line-height:1.6;">
   If it lapses, you get a <strong style="color:#ffffff;">7-day grace period</strong> where
-  everything keeps working while you renew. After that your tracked links will still
-  redirect your visitors straight to their destination — so your audience is
-  unaffected — but VeriClick will stop recording and filtering traffic until you renew.
+  everything keeps working while you renew. After that your tracked links will become
+  inactive and return a "link no longer active" message to visitors — renew to restore
+  them immediately.
 </p>
 <div style="text-align:center;margin:32px 0;">
   <a href="{settings.SITE_URL}/app/billing"
@@ -258,9 +259,8 @@ def send_period_expired_email(user, workspace, plan, expires_at):
 </p>
 <p style="color:#a3a3a3;font-size:15px;line-height:1.6;">
   If you don't renew by <strong style="color:#ffffff;">{grace_when}</strong>, your
-  tracked links will still redirect your visitors straight to their destination (so
-  your audience is unaffected), but VeriClick will stop recording and filtering
-  traffic until you renew.
+  tracked links will become inactive and return a "link no longer active" message
+  to visitors. Renew to restore them immediately.
 </p>
 <div style="text-align:center;margin:32px 0;">
   <a href="{settings.SITE_URL}/app/billing"
@@ -274,8 +274,9 @@ def send_period_expired_email(user, workspace, plan, expires_at):
 
 
 def send_plan_suspended_email(user, workspace, plan, grace_ended_at):
-    # Sent once when the grace window passes without renewal. Links keep
-    # passing visitors through, but nothing is recorded or filtered.
+    # Sent once when the grace window passes without renewal. Links now
+    # return 410 Gone instead of pass-through to prevent abuse from lapsed
+    # accounts.
     subject = f'Your {plan.name} plan was suspended'
     body = f"""
 <p style="color:#a3a3a3;font-size:15px;">Hi {user.first_name or user.username},</p>
@@ -285,11 +286,9 @@ def send_plan_suspended_email(user, workspace, plan, grace_ended_at):
   wasn't renewed during the 7-day grace period.
 </p>
 <p style="color:#a3a3a3;font-size:15px;line-height:1.6;">
-  Your tracked links still redirect visitors straight to their destination — so your
-  audience is unaffected — but VeriClick is no longer recording click traffic or
-  applying any filtering, bot blocking, or protection. Renew to restore full
-  analytics and protection immediately; your domains, links, and data are all
-  intact.
+  Your tracked links are now inactive and will return a "link no longer active"
+  message to visitors. Renew to restore full analytics and protection immediately;
+  your domains, links, and data are all intact.
 </p>
 <div style="text-align:center;margin:32px 0;">
   <a href="{settings.SITE_URL}/app/billing"
@@ -298,5 +297,38 @@ def send_plan_suspended_email(user, workspace, plan, grace_ended_at):
   </a>
 </div>
 <p style="color:#525252;font-size:13px;margin-bottom:0;">Questions? Reply to this email and we'll help.</p>
+"""
+    return send_email(user.email, subject, _layout(body))
+
+
+def send_domain_migration_email(user, workspace, disabled_count):
+    """Notifies a user that their links on the shared product domain have been
+    disabled and they need to add a custom domain to restore them."""
+    subject = 'Action needed: Add a custom domain to your VeriClick links'
+    body = f"""
+<p style="color:#a3a3a3;font-size:15px;">Hi {user.first_name or user.username},</p>
+<p style="color:#d4d4d4;font-size:15px;line-height:1.6;">
+  We've upgraded how VeriClick handles link hosting. All tracked links now
+  require your own custom domain instead of running on the shared VeriClick domain.
+</p>
+<p style="color:#d4d4d4;font-size:15px;line-height:1.6;">
+  <strong style="color:#ffffff;">{disabled_count} link(s)</strong> in your workspace
+  <strong style="color:#ffffff;">{workspace.name}</strong> have been temporarily
+  disabled until you add and verify a custom domain.
+</p>
+<p style="color:#d4d4d4;font-size:15px;line-height:1.6;">
+  This protects you and your visitors: your links will always resolve on a domain
+  you control, not a shared platform domain.
+</p>
+<div style="text-align:center;margin:32px 0;">
+  <a href="{settings.SITE_URL}/app/domains"
+     style="background-color:#ffffff;color:#0a0a0a;padding:14px 28px;border-radius:10px;text-decoration:none;font-weight:bold;font-size:14px;">
+    Add your domain
+  </a>
+</div>
+<p style="color:#525252;font-size:13px;margin-bottom:0;">
+  If you need help setting up your domain, reply to this email or visit our
+  <a href="{settings.SITE_URL}/help" style="color:#a3a3a3;">help page</a>.
+</p>
 """
     return send_email(user.email, subject, _layout(body))

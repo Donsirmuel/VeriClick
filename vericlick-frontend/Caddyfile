@@ -46,9 +46,10 @@
 	handle /static/* {
 		reverse_proxy backend:8000
 	}
-	handle /r/* {
-		reverse_proxy backend:8000
-	}
+	# /r/* intentionally NOT served on the product domain. All tracked links
+	# must live on user-owned custom domains (ZeroBot model). Serving /r/*
+	# here would make the product domain appear in customer-facing URLs,
+	# which is a phishing risk. See NAMECHEAP_RESPONSE.md (NC-GLI-5245).
 	handle /suspicious* {
 		reverse_proxy backend:8000
 	}

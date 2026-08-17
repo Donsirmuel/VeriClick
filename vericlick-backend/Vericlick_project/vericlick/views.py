@@ -1,4 +1,5 @@
 from datetime import timedelta
+import logging
 from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
 from django.db.models import Count, Q, F
 from django.db.models.functions import TruncDate
@@ -22,6 +23,7 @@ from decouple import config
 from .models import (
     Workspace, DomainRegistry, TrackingLink, ClickLog, IPRule, CountryRule,
     DevicePolicy, TrackerEvent, Plan, DiscountCode, SiteConfig, CheckoutIntent,
+    BlockedDestination, AbuseReport, DestinationChangeLog,
 )
 from .serializers import (
     UserSerializer,
@@ -52,6 +54,8 @@ from .services import (
     refresh_stale_domains_async,
     reason_label,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def get_user_workspace(user):
@@ -1045,6 +1049,15 @@ class TrackingLinkViewSet(viewsets.ModelViewSet):
     serializer_class = TrackingLinkSerializer
     pagination_class = TrackingLinkPagination
     filterset_fields = ['status', 'domain']
+    throttle_classes = []  # Default throttle applies per-view below
+
+    def get_throttles(self):
+        if self.action == 'create':
+            from rest_framework.throttling import ScopedRateThrottle
+            throttle = ScopedRateThrottle()
+            throttle.scope = 'link_create'
+            return [throttle]
+        return super().get_throttles()
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -1089,7 +1102,90 @@ class TrackingLinkViewSet(viewsets.ModelViewSet):
                     else 'Your free trial includes 1 link. Upgrade to create more.'
                 )
             })
-        serializer.save(workspace=workspace)
+
+        # --- Abuse prevention checks ---
+
+        # 1. Block product-domain links (ZeroBot model: users must bring own domain)
+        product_domain = getattr(settings, 'PRODUCT_DOMAIN', '')
+        domain_name = serializer.validated_data.get('domain')
+        if product_domain and domain_name:
+            link_domain = getattr(domain_name, 'domain', str(domain_name)).lower().rstrip('.')
+            if link_domain == product_domain.lower():
+                raise ValidationError({
+                    'detail': (
+                        'Tracking links cannot be created on the VeriClick product domain. '
+                        'Please add and verify your own custom domain first.'
+                    )
+                })
+
+        # 2. Destination URL blocklist check
+        dest = serializer.validated_data.get('destination_url', '')
+        if dest:
+            normalized_dest = dest.rstrip('/').lower()
+            if BlockedDestination.objects.filter(url__iexact=normalized_dest).exists():
+                raise ValidationError({
+                    'detail': 'This destination URL has been flagged and cannot be used.'
+                })
+
+        # 3. Google Safe Browsing check (non-blocking warning logged, not blocking)
+        # Implemented in Wave 2 — for now we check the blocklist only.
+
+        link = serializer.save(workspace=workspace)
+
+        # Log the initial destination
+        DestinationChangeLog.objects.create(
+            link=link,
+            old_destination='',
+            new_destination=link.destination_url,
+            changed_by=self.request.user if self.request.user.is_authenticated else None,
+            ip_address=self._get_client_ip(),
+            user_agent=self.request.META.get('HTTP_USER_AGENT', ''),
+        )
+
+    def perform_update(self, serializer):
+        old_dest = serializer.instance.destination_url
+        new_dest = serializer.validated_data.get('destination_url', old_dest)
+
+        # Block product-domain links on edit too
+        product_domain = getattr(settings, 'PRODUCT_DOMAIN', '')
+        domain_name = serializer.validated_data.get('domain')
+        if product_domain and domain_name:
+            link_domain = getattr(domain_name, 'domain', str(domain_name)).lower().rstrip('.')
+            if link_domain == product_domain.lower():
+                raise ValidationError({
+                    'detail': (
+                        'Tracking links cannot be created on the VeriClick product domain. '
+                        'Please add and verify your own custom domain first.'
+                    )
+                })
+
+        # Destination URL blocklist check on edit
+        if new_dest:
+            normalized_dest = new_dest.rstrip('/').lower()
+            if BlockedDestination.objects.filter(url__iexact=normalized_dest).exists():
+                raise ValidationError({
+                    'detail': 'This destination URL has been flagged and cannot be used.'
+                })
+
+        link = serializer.save()
+
+        # Log destination changes
+        if old_dest != new_dest:
+            DestinationChangeLog.objects.create(
+                link=link,
+                old_destination=old_dest,
+                new_destination=new_dest,
+                changed_by=self.request.user if self.request.user.is_authenticated else None,
+                ip_address=self._get_client_ip(),
+                user_agent=self.request.META.get('HTTP_USER_AGENT', ''),
+            )
+
+    def _get_client_ip(self):
+        ip = self.request.META.get('REMOTE_ADDR', '127.0.0.1')
+        forwarded = self.request.META.get('HTTP_X_FORWARDED_FOR')
+        if forwarded:
+            ip = forwarded.split(',')[0].strip()
+        return ip
 
 
 class DomainRegistryViewSet(viewsets.ModelViewSet):
@@ -1278,11 +1374,19 @@ def redirect_click(request, slug):
     workspace = link.workspace
 
     if workspace.plan_status == 'suspended':
-        # Suspended workspaces get a pure pass-through: visitors are redirected
-        # straight to the destination with zero filtering, bot detection, or
-        # logging. This is what keeps a lapsed customer's deployed links safe
-        # for their audience while giving them no unpaid service.
-        return HttpResponseRedirect(redirect_to=_merge_query_params(link.destination_url, request.query_params))
+        # Suspended workspaces no longer pass traffic through. Links return
+        # 410 Gone so visitors know the link is inactive and no abuse can
+        # originate from a suspended account's links. The workspace owner is
+        # told to renew to restore their links.
+        return HttpResponse(
+            '<!DOCTYPE html><html><head><title>Link inactive</title></head>'
+            '<body style="font-family:system-ui,sans-serif;text-align:center;padding:60px 20px;">'
+            '<h1 style="font-size:18px;color:#333;">This link is no longer active</h1>'
+            '<p style="color:#666;">The workspace that owned this link has been suspended. '
+            'Please contact the link owner.</p></body></html>',
+            status=410,
+            content_type='text/html',
+        )
 
     result = classify_request(link, ip, user_agent, workspace)
     device = result['device']
@@ -1334,6 +1438,100 @@ def neutral_page(request):
     # configured default rather than shown an in-house page. Workspaces can
     # override this entirely by setting their own safe_destination.
     return HttpResponseRedirect(redirect_to=getattr(settings, 'NEUTRAL_DEFAULT_DESTINATION', 'https://google.com'))
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def abuse_report(request):
+    """Public abuse-reporting endpoint. Anyone can report a link or workspace.
+    Reports are stored for admin review; the reporter is thanked via a generic
+    response. No data is exposed about the link or workspace."""
+    slug = request.data.get('slug', '').strip()
+    destination_url = request.data.get('destination_url', '').strip()
+    reporter_email = request.data.get('reporter_email', '').strip()
+    reason = request.data.get('reason', '').strip()
+
+    if not slug and not destination_url:
+        return Response(
+            {'errors': [{'field': 'slug', 'detail': 'Provide a link slug or destination URL to report.'}]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    link = None
+    workspace = None
+    if slug:
+        try:
+            link = TrackingLink.objects.select_related('workspace').get(slug=slug)
+            workspace = link.workspace
+        except TrackingLink.DoesNotExist:
+            pass
+
+    AbuseReport.objects.create(
+        link=link,
+        workspace=workspace,
+        destination_url=destination_url or (link.destination_url if link else ''),
+        reporter_email=reporter_email,
+        reason=reason,
+    )
+
+    logger.warning(
+        'Abuse report received: slug=%s dest=%s reporter=%s reason=%s',
+        slug, destination_url, reporter_email, reason[:200],
+    )
+
+    return Response({'detail': 'Report received. Thank you.'}, status=status.HTTP_201_CREATED)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def google_safe_browsing_check(request):
+    """Check a destination URL against Google Safe Browsing v5. Returns the
+    verdict without creating or modifying any links. Used by the frontend
+    to show warnings before link creation. Requires GOOGLE_SAFE_BROWSING_API_KEY."""
+    api_key = getattr(settings, 'GOOGLE_SAFE_BROWSING_API_KEY', '').strip()
+    if not api_key:
+        return Response({'safe': True, 'detail': 'Safe Browsing not configured'})
+
+    url = request.data.get('url', '').strip()
+    if not url:
+        return Response(
+            {'errors': [{'field': 'url', 'detail': 'URL is required.'}]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    import urllib.request
+    import json as json_module
+
+    payload = json_module.dumps({
+        'client': {'clientId': 'vericlick', 'clientVersion': '2.0'},
+        'threatInfo': {
+            'threatTypes': [
+                'MALWARE', 'SOCIAL_ENGINEERING', 'UNWANTED_SOFTWARE',
+                'POTENTIALLY_HARMFUL_APPLICATION',
+            ],
+            'platformTypes': ['ANY_PLATFORM'],
+            'threatEntryTypes': ['URL'],
+            'threatEntries': [{'url': url}],
+        },
+    }).encode()
+
+    gsb_url = f'https://safebrowsing.googleapis.com/v4/threatMatches:find?key={api_key}'
+    try:
+        req = urllib.request.Request(gsb_url, data=payload, headers={'Content-Type': 'application/json'})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            result = json_module.loads(resp.read())
+            matches = result.get('matches', [])
+            if matches:
+                threats = [m.get('threatType', 'unknown') for m in matches]
+                return Response({
+                    'safe': False,
+                    'detail': f'Detected threats: {", ".join(threats)}',
+                    'threats': threats,
+                })
+            return Response({'safe': True})
+    except Exception:
+        logger.exception('Google Safe Browsing check failed')
+        return Response({'safe': True, 'detail': 'Check failed, allowing by default'})
 
 
 class IPRuleViewSet(viewsets.ModelViewSet):

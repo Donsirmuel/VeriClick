@@ -181,8 +181,8 @@ class Workspace(models.Model):
         # Lifecycle for one-time "period" payments:
         #   active     — paid period in force (full access)
         #   grace      — period lapsed, PLAN_GRACE_DAYS of full access remain
-        #   suspended  — grace passed; links pass through with no filtering or
-        #                analytics until the plan is renewed
+        #   suspended  — grace passed; links return 410 Gone (no abuse from
+        #                lapsed accounts) until the plan is renewed
         # Workspaces with no paid plan report 'none'; card subscriptions stay
         # 'active' indefinitely.
         if not self.plan:
@@ -914,6 +914,115 @@ class BillingEvent(models.Model):
 
     def __str__(self):
         return f'{self.workspace_id} {self.kind} {self.amount} {self.occurred_at}'
+
+
+# --- Abuse prevention models ------------------------------------------------
+
+
+class UserProfile(models.Model):
+    """Per-user profile for terms-of-service acceptance and abuse tracking.
+    Created alongside the user on first login / registration."""
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='vericlick_profile')
+    tos_accepted_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text='When the user last accepted the Terms of Service.',
+    )
+    tos_version = models.CharField(
+        max_length=20, blank=True, default='',
+        help_text='Version string of the ToS the user accepted (e.g. "2026-08-v1").',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f'Profile({self.user.username})'
+
+
+class BlockedDestination(models.Model):
+    """URLs known to be malicious (phishing, malware, scam). Checked at link
+    creation and during daily re-scans. Entries are global — they block any
+    workspace from using the URL as a destination."""
+    url = models.URLField(max_length=2048, unique=True, db_index=True)
+    reason = models.CharField(max_length=255, blank=True, default='')
+    source = models.CharField(
+        max_length=20, blank=True, default='',
+        help_text='How this block was added (manual, safe_browsing, abuse_report, etc.).',
+    )
+    added_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'BLOCKED: {self.url}'
+
+
+class AbuseReport(models.Model):
+    """Reports of abuse from the public or internal team. Linked to a specific
+    tracking link when available; standalone reports (no link) flag a workspace."""
+    class Status(models.TextChoices):
+        OPEN = 'open', 'Open'
+        REVIEWED = 'reviewed', 'Reviewed'
+        RESOLVED = 'resolved', 'Resolved'
+        DISMISSED = 'dismissed', 'Dismissed'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    link = models.ForeignKey(
+        TrackingLink, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='abuse_reports',
+    )
+    workspace = models.ForeignKey(
+        Workspace, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='abuse_reports',
+    )
+    destination_url = models.URLField(
+        max_length=2048, blank=True, default='',
+        help_text='The destination URL being reported (captured at report time).',
+    )
+    reporter_email = models.EmailField(blank=True, default='')
+    reason = models.TextField(blank=True, default='')
+    status = models.CharField(
+        max_length=12, choices=Status.choices, default=Status.OPEN,
+    )
+    resolved_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='resolved_abuse_reports',
+    )
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        target = self.link.slug if self.link else (self.workspace.name if self.workspace else 'unknown')
+        return f'AbuseReport({target}, {self.status})'
+
+
+class DestinationChangeLog(models.Model):
+    """Immutable log of every destination-URL change on a link. Created at link
+    creation (initial value) and on every update. Used for forensic auditing
+    when a link's destination is changed to something malicious."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    link = models.ForeignKey(
+        TrackingLink, on_delete=models.CASCADE, related_name='destination_changes',
+    )
+    old_destination = models.URLField(max_length=2048, blank=True, default='')
+    new_destination = models.URLField(max_length=2048)
+    changed_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+    )
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.link.slug}: {self.old_destination} -> {self.new_destination}'
 
 
 @receiver(post_save, sender=User)

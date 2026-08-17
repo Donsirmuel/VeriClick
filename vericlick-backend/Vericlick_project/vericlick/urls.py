@@ -45,6 +45,9 @@ urlpatterns = [
     path('device-policy/', views.device_policy, name='device-policy'),
     # Public redirect
     path('r/<slug:slug>/', views.redirect_click, name='redirect-click'),
+    # Abuse prevention
+    path('abuse/report/', views.abuse_report, name='abuse-report'),
+    path('safety/check/', views.google_safe_browsing_check, name='safe-browsing-check'),
     # Tracker
     path('tracker.js', views.serve_tracker_script, name='tracker-script'),
     path('tracker/event/', views.receive_tracker_event, name='tracker-event'),

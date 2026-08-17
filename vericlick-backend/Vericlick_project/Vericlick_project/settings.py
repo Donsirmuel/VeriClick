@@ -260,6 +260,14 @@ RESEND_API_KEY = _env_str('RESEND_API_KEY')
 RESEND_FROM_EMAIL = _env_str('RESEND_FROM_EMAIL', 'VeriClick <noreply@getvericlick.site>')
 SITE_URL = _env_str('SITE_URL', 'https://getvericlick.site').rstrip('/')
 
+# The product domain that should NEVER appear in tracked link URLs. Links
+# created with a domain matching this are rejected — all links must live on
+# user-owned custom domains (ZeroBot model). Derived from SITE_URL.
+PRODUCT_DOMAIN = SITE_URL.split('://')[-1].split('/')[0].rstrip('.') if '://' in SITE_URL else ''
+
+# Google Safe Browsing API v5 key. Blank = check is a no-op (always safe).
+GOOGLE_SAFE_BROWSING_API_KEY = _env_str('GOOGLE_SAFE_BROWSING_API_KEY')
+
 # Comma-separated addresses notified on successful payments (owner + senior
 # engineer). Email delivery is a no-op when RESEND_API_KEY is blank.
 PAYMENT_NOTIFY_EMAILS = [
@@ -300,6 +308,7 @@ REST_FRAMEWORK = {
         'anon': '100/hour',
         'user': '1000/hour',
         'tracker': '600/min',
+        'link_create': '30/hour',
     },
     'DEFAULT_RENDERER_CLASSES': [
         'vericlick.utils.CamelCaseJSONRenderer',

@@ -8,6 +8,7 @@ from .models import (
     Workspace, DomainRegistry, TrackingLink, ClickLog, IPRule, CountryRule,
     DevicePolicy, TrackerEvent, Plan, DiscountCode, SiteConfig, CheckoutIntent,
     BillingEvent, PLAN_PERIOD_DAYS,
+    BlockedDestination, AbuseReport, DestinationChangeLog, UserProfile,
 )
 
 
@@ -217,6 +218,19 @@ class TrackingLinkAdmin(admin.ModelAdmin):
     readonly_fields = ('id', 'total_clicks', 'bot_clicks', 'created_at', 'updated_at', 'removed_at')
     autocomplete_fields = ['workspace', 'domain']
     date_hierarchy = 'created_at'
+    actions = ['disable_links', 'ban_workspace']
+
+    @admin.action(description='Disable selected links')
+    def disable_links(self, request, queryset):
+        updated = queryset.update(status=TrackingLink.Status.DISABLED)
+        self.message_user(request, f'{updated} link(s) disabled.')
+
+    @admin.action(description='Disable links and ban their workspaces')
+    def ban_workspace(self, request, queryset):
+        workspace_ids = set(queryset.values_list('workspace_id', flat=True))
+        updated = queryset.update(status=TrackingLink.Status.DISABLED)
+        Workspace.objects.filter(id__in=workspace_ids).update(plan=None, plan_expires_at=None)
+        self.message_user(request, f'{updated} link(s) disabled, {len(workspace_ids)} workspace(s) banned.')
 
 
 @admin.register(ClickLog)
@@ -343,4 +357,59 @@ class DiscountCodeAdmin(admin.ModelAdmin):
     search_fields = ('code',)
     readonly_fields = ('uses_count', 'created_at')
     autocomplete_fields = ['created_by']
+    date_hierarchy = 'created_at'
+
+
+@admin.register(UserProfile)
+class UserProfileAdmin(admin.ModelAdmin):
+    list_display = ('user', 'tos_accepted_at', 'tos_version', 'created_at')
+    search_fields = ('user__username', 'user__email')
+    autocomplete_fields = ['user']
+    readonly_fields = ('created_at',)
+
+
+@admin.register(BlockedDestination)
+class BlockedDestinationAdmin(admin.ModelAdmin):
+    list_display = ('url', 'reason', 'source', 'added_by', 'created_at')
+    list_filter = ('source', 'created_at')
+    search_fields = ('url', 'reason')
+    readonly_fields = ('created_at',)
+    autocomplete_fields = ['added_by']
+
+
+@admin.register(AbuseReport)
+class AbuseReportAdmin(admin.ModelAdmin):
+    list_display = ('link', 'workspace', 'destination_url', 'reporter_email', 'status', 'created_at')
+    list_filter = ('status', 'created_at')
+    search_fields = ('destination_url', 'reporter_email', 'reason')
+    readonly_fields = ('id', 'created_at')
+    autocomplete_fields = ['link', 'workspace', 'resolved_by']
+    date_hierarchy = 'created_at'
+    actions = ['resolve_reports', 'dismiss_reports']
+
+    @admin.action(description='Mark selected reports as resolved')
+    def resolve_reports(self, request, queryset):
+        updated = queryset.update(
+            status=AbuseReport.Status.RESOLVED,
+            resolved_by=request.user,
+            resolved_at=timezone.now(),
+        )
+        self.message_user(request, f'{updated} report(s) resolved.')
+
+    @admin.action(description='Dismiss selected reports')
+    def dismiss_reports(self, request, queryset):
+        updated = queryset.update(
+            status=AbuseReport.Status.DISMISSED,
+            resolved_by=request.user,
+            resolved_at=timezone.now(),
+        )
+        self.message_user(request, f'{updated} report(s) dismissed.')
+
+
+@admin.register(DestinationChangeLog)
+class DestinationChangeLogAdmin(admin.ModelAdmin):
+    list_display = ('link', 'old_destination', 'new_destination', 'changed_by', 'ip_address', 'created_at')
+    list_filter = ('created_at',)
+    search_fields = ('link__slug', 'new_destination', 'ip_address')
+    readonly_fields = ('id', 'link', 'old_destination', 'new_destination', 'changed_by', 'ip_address', 'user_agent', 'created_at')
     date_hierarchy = 'created_at'

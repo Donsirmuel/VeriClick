@@ -558,9 +558,9 @@ def get_public_tracking_url(link, request=None):
     # doesn't need to resolve: a root domain with no A record still serves its
     # links on t.<domain>. Ownership is implied by registration (instant
     # authorization), so no separate verified flag gates serving anymore.
-    # Otherwise the app falls back to the current request host or the
-    # configured public tracking base so copied links never point at a dead
-    # domain.
+    #
+    # ZeroBot model: links WITHOUT a custom domain return a placeholder — the
+    # product domain is NEVER used as a tracking URL fallback.
     domain = link.domain
     if (
         domain
@@ -574,14 +574,9 @@ def get_public_tracking_url(link, request=None):
         # root domains can't carry a CNAME.
         host = tracking_host(domain.domain)
         return f'https://{host}/r/{link.slug}/'
-    if request is not None:
-        return request.build_absolute_uri(f'/r/{link.slug}/')
-    from django.conf import settings as django_settings
-
-    base_url = getattr(django_settings, 'PUBLIC_TRACKING_BASE_URL', '').strip().rstrip('/')
-    if base_url:
-        return f'{base_url}/r/{link.slug}/'
-    return f'/r/{link.slug}/'
+    # No valid domain — return a placeholder. The link cannot be shared until
+    # the owner adds a custom domain.
+    return ''
 
 
 def classify_request(link, ip, user_agent, workspace):
