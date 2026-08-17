@@ -772,3 +772,185 @@ def classify_request(link, ip, user_agent, workspace):
         'location': location,
         'device': device,
     }
+
+
+# ---------------------------------------------------------------------------
+# Layer 5: Behavioral scoring (composite trust score)
+# ---------------------------------------------------------------------------
+
+# Weights for each signal (must sum to ~1.0). Higher weight = more influence.
+_WEIGHTS = {
+    'ja4_ua_match': 0.08,
+    'ja4_is_browser': 0.05,
+    'has_client_hints': 0.04,
+    'has_sec_fetch': 0.03,
+    'ua_consistent': 0.03,
+    'canvas_stability': 0.06,
+    'canvas_provided': 0.04,
+    'mouse_straightness': 0.10,
+    'mouse_speed_var': 0.08,
+    'click_offset': 0.06,
+    'click_dwell': 0.05,
+    'keystroke_var': 0.06,
+    'no_teleports': 0.08,
+    'has_mouse': 0.05,
+    'events_trusted': 0.12,
+    'pow_solved': 0.06,
+    'pow_timing': 0.05,
+}
+
+
+def compute_bot_score(signals):
+    """Compute a composite bot score from multiple signal layers.
+
+    Args:
+        signals: dict with boolean/float values for each signal.
+
+    Returns:
+        dict with 'score' (0.0-1.0), 'verdict' (human/suspicious/bot),
+        'breakdown' (per-signal scores), and 'flags' (suspicious indicators).
+    """
+    breakdown = {}
+    flags = []
+    weighted_sum = 0.0
+    total_weight = 0.0
+
+    def _add(name, value, flag_name=None):
+        nonlocal weighted_sum, total_weight
+        w = _WEIGHTS.get(name, 0)
+        if w == 0:
+            return
+        score = max(0.0, min(1.0, float(value)))
+        breakdown[name] = round(score, 3)
+        if flag_name and score < 0.5:
+            flags.append(flag_name)
+        weighted_sum += score * w
+        total_weight += w
+
+    # TLS signals
+    _add('ja4_ua_match', 1.0 if signals.get('ja4_matches_ua', True) else 0.0,
+         'JA4_UA_MISMATCH')
+    _add('ja4_is_browser', 1.0 if signals.get('tls_is_browser', True) else 0.0,
+         'NON_BROWSER_TLS')
+    _add('has_client_hints', 1.0 if signals.get('has_client_hints', False) else 0.0,
+         'MISSING_CLIENT_HINTS')
+    _add('has_sec_fetch', 1.0 if signals.get('has_sec_fetch', False) else 0.0,
+         'MISSING_SEC_FETCH')
+    _add('ua_consistent', 1.0 if signals.get('ua_consistent', True) else 0.0,
+         'UA_INCONSISTENT')
+
+    # Fingerprint signals
+    _add('canvas_stability', 1.0 if signals.get('canvas_hash_stable', True) else 0.0,
+         'CANVAS_UNSTABLE')
+    _add('canvas_provided', 1.0 if signals.get('canvas_provided', False) else 0.0,
+         'NO_CANVAS')
+
+    # Behavioral signals (already 0-1 from client-side computation)
+    _add('mouse_straightness', signals.get('mouse_straightness', 0.5),
+         'LINEAR_MOUSE')
+    _add('mouse_speed_var', signals.get('mouse_speed_variance', 0.5),
+         'CONSTANT_SPEED')
+    _add('click_offset', signals.get('click_center_offset', 0.5),
+         'EXACT_CENTER_CLICK')
+    _add('click_dwell', signals.get('click_dwell_time', 0.5),
+         'INSTANT_CLICK')
+    _add('keystroke_var', signals.get('keystroke_variance', 0.5),
+         'ROBOTIC_TYPING')
+
+    teleports = signals.get('teleport_count', 0)
+    teleport_score = 1.0 if teleports == 0 else max(0.0, 1.0 - teleports * 0.15)
+    _add('no_teleports', teleport_score,
+         f'TELEPORTS_{teleports}' if teleports > 0 else None)
+
+    _add('has_mouse', 1.0 if signals.get('has_mouse_events', False) else 0.3)
+
+    _add('events_trusted', 1.0 if signals.get('event_trusted', True) else 0.0,
+         'UNTRUSTED_EVENTS')
+
+    # PoW signals
+    _add('pow_solved', 1.0 if signals.get('pow_solved', False) else 0.0,
+         'POW_FAILED')
+    pow_time = signals.get('pow_solve_time_ms', 2000)
+    pow_timing = 1.0 if pow_time > 1500 else (0.7 if pow_time > 500 else 0.2)
+    _add('pow_timing', pow_timing,
+         'POW_TOO_FAST' if pow_time < 500 and signals.get('pow_solved') else None)
+
+    # Hard-fail: untrusted events = definite bot
+    if not signals.get('event_trusted', True):
+        return {'score': 0.0, 'verdict': 'bot', 'breakdown': breakdown, 'flags': flags}
+
+    score = weighted_sum / total_weight if total_weight > 0 else 0.5
+
+    if score >= 0.70:
+        verdict = 'human'
+    elif score >= 0.35:
+        verdict = 'suspicious'
+    else:
+        verdict = 'bot'
+
+    return {
+        'score': round(score, 4),
+        'verdict': verdict,
+        'breakdown': breakdown,
+        'flags': flags,
+    }
+
+
+def score_from_signals(request, tracker_signals, trajectory, click_metrics):
+    """Build the signals dict from request metadata + client-side telemetry.
+
+    Called from the tracker event endpoint to compute the behavioral score.
+    """
+    ja4 = getattr(request, 'ja4_hash', '') or ''
+    ua = request.META.get('HTTP_USER_AGENT', '')
+
+    # Cross-layer JA4 vs UA consistency
+    ja4_matches_ua = True
+    tls_is_browser = True
+    if ja4:
+        if 'Chrome' in ua and not any(ja4.startswith(p) for p in ['t13d151', 't12d151']):
+            ja4_matches_ua = False
+        elif 'Firefox' in ua and not ja4.startswith('t13d19'):
+            ja4_matches_ua = False
+        elif 'Safari' in ua and not any(ja4.startswith(p) for p in ['t13d16', 't12d16']):
+            ja4_matches_ua = False
+        if any(ja4.startswith(p) for p in ['t10_', 't11_']):
+            tls_is_browser = False
+
+    # Trajectory metrics -> human-like scores
+    straightness_raw = trajectory.get('straightness', 1.0)
+    # Straightness ~1.0 = human (natural curves), <1.05 = too straight = bot
+    mouse_straightness = min(1.0, max(0.0, (straightness_raw - 1.0) / 0.5)) if straightness_raw >= 1.0 else 0.1
+
+    speed_var = trajectory.get('speed_var', 0.0)
+    # Speed CV > 0.4 = human (Fitts' Law), < 0.15 = constant = bot
+    mouse_speed_var = min(1.0, max(0.0, (speed_var - 0.15) / 0.35))
+
+    teleports = trajectory.get('teleports', 0)
+
+    # Click metrics
+    click_dwell = 0.5
+    if click_metrics:
+        timing_var = click_metrics.get('timing_var', 0)
+        # High timing variance = human
+        click_dwell = min(1.0, max(0.0, timing_var / 0.5))
+
+    return {
+        'ja4_matches_ua': ja4_matches_ua,
+        'tls_is_browser': tls_is_browser,
+        'has_client_hints': bool(request.META.get('HTTP_SEC_CH_UA')),
+        'has_sec_fetch': bool(request.META.get('HTTP_SEC_FETCH_MODE')),
+        'ua_consistent': True,
+        'canvas_hash_stable': True,
+        'canvas_provided': bool(tracker_signals.get('canvas_hash')),
+        'mouse_straightness': mouse_straightness,
+        'mouse_speed_variance': mouse_speed_var,
+        'click_center_offset': 0.5,
+        'click_dwell_time': click_dwell,
+        'keystroke_variance': 0.5,
+        'teleport_count': teleports,
+        'has_mouse_events': trajectory.get('event_count', 0) > 0,
+        'event_trusted': True,
+        'pow_solved': False,
+        'pow_solve_time_ms': 2000,
+    }

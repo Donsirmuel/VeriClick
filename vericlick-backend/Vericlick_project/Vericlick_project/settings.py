@@ -94,6 +94,7 @@ MIDDLEWARE = [
     'django.contrib.sessions.middleware.SessionMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'vericlick.middleware.RegisteredDomainHostMiddleware',
+    'vericlick.middleware.TLSFingerprintMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -267,6 +268,10 @@ PRODUCT_DOMAIN = SITE_URL.split('://')[-1].split('/')[0].rstrip('.') if '://' in
 
 # Google Safe Browsing API v5 key. Blank = check is a no-op (always safe).
 GOOGLE_SAFE_BROWSING_API_KEY = _env_str('GOOGLE_SAFE_BROWSING_API_KEY')
+
+# Proof-of-Work HMAC secret. Used to sign clearance tokens. Falls back to
+# SECRET_KEY if not set — change in production for isolation.
+POW_HMAC_SECRET = _env_str('POW_HMAC_SECRET', SECRET_KEY)
 
 # Comma-separated addresses notified on successful payments (owner + senior
 # engineer). Email delivery is a no-op when RESEND_API_KEY is blank.

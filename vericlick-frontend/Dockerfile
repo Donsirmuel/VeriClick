@@ -20,9 +20,18 @@ RUN npm install
 COPY . .
 RUN npm run build
 
-# --- Stage 2: static files + HTTPS reverse proxy (Caddy) ---
-FROM caddy:2-alpine
+# --- Stage 2: custom Caddy with JA4 TLS fingerprinting plugin ---
+FROM caddy:2-alpine AS caddy-build
+RUN apk add --no-cache go git
+RUN go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
+RUN xcaddy build --with github.com/josuebrunel/caddy-ja3ja4
+
+# --- Stage 3: final image ---
+FROM alpine:3.19
+RUN apk add --no-cache ca-certificates tzdata
+COPY --from=caddy-build /go/bin/caddy /usr/bin/caddy
 COPY Caddyfile /etc/caddy/Caddyfile
 COPY --from=build /build/dist /usr/share/caddy
 # Certificates/ACME state persist in the caddy_data volume (see compose file).
 EXPOSE 80 443
+CMD ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]

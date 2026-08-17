@@ -416,6 +416,7 @@ class TrackerEventSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'workspace', 'page_url', 'referrer', 'signals',
             'engagement', 'ip', 'user_agent', 'verdict', 'is_bot', 'reason',
+            'canvas_hash', 'trajectory', 'ja4_hash', 'bot_score', 'bot_verdict',
             'created_at',
         ]
         read_only_fields = ['id', 'created_at']

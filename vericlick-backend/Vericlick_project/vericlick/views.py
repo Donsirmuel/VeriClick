@@ -428,11 +428,20 @@ def receive_tracker_event(request):
     if forwarded:
         ip = forwarded.split(',')[0].strip()
 
+    tracker_signals = request.data.get('signals') or {}
+    trajectory = tracker_signals.get('trajectory') or {}
+    click_metrics = tracker_signals.get('click_metrics') or {}
+
+    # Layer 5: Compute behavioral score
+    from .services import score_from_signals, compute_bot_score
+    bot_signals = score_from_signals(request, tracker_signals, trajectory, click_metrics)
+    bot_result = compute_bot_score(bot_signals)
+
     data = {
         'workspace': workspace.id,
         'page_url': request.data.get('page_url'),
         'referrer': request.data.get('referrer', ''),
-        'signals': request.data.get('signals') or {},
+        'signals': tracker_signals,
         'engagement': request.data.get('engagement') or {},
         'ip': ip,
         'user_agent': request.META.get('HTTP_USER_AGENT', ''),
@@ -441,6 +450,15 @@ def receive_tracker_event(request):
         'verdict': request.data.get('verdict', ''),
         'is_bot': bool(request.data.get('is_bot', False)),
         'reason': request.data.get('reason', ''),
+        # Layer 1: Canvas fingerprint
+        'canvas_hash': tracker_signals.get('canvas_hash', ''),
+        # Layer 2: Mouse trajectory
+        'trajectory': trajectory,
+        # Layer 3: TLS fingerprint
+        'ja4_hash': getattr(request, 'ja4_hash', ''),
+        # Layer 5: Behavioral score
+        'bot_score': bot_result['score'],
+        'bot_verdict': bot_result['verdict'],
     }
 
     serializer = TrackerEventSerializer(data=data)

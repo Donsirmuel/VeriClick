@@ -30,18 +30,30 @@
 	on_demand_tls {
 		ask http://backend:8000/api/internal/tls-allowed/
 	}
+
+	# Layer 3: JA4 TLS fingerprinting plugin
+	order ja3_ja4 before reverse_proxy
 }
 
 # ---- Static product domains (SPA + product API + admin) ----
 {$SITE_ADDRESSES} {
 	encode gzip
 
+	# Layer 3: JA4 TLS fingerprinting — extract and forward to Django
+	ja3_ja4
+
 	# ---- Django routes proxied to the backend service ----
 	handle /api/* {
-		reverse_proxy backend:8000
+		reverse_proxy backend:8000 {
+			header_up X-JA4 {tls.ja4}
+			header_up X-JA3 {tls.ja3}
+		}
 	}
 	handle /admin/* {
-		reverse_proxy backend:8000
+		reverse_proxy backend:8000 {
+			header_up X-JA4 {tls.ja4}
+			header_up X-JA3 {tls.ja3}
+		}
 	}
 	handle /static/* {
 		reverse_proxy backend:8000
@@ -82,8 +94,14 @@ https:// {
 		on_demand
 	}
 
+	# Layer 3: JA4 TLS fingerprinting for customer domains
+	ja3_ja4
+
 	handle /r/* {
-		reverse_proxy backend:8000
+		reverse_proxy backend:8000 {
+			header_up X-JA4 {tls.ja4}
+			header_up X-JA3 {tls.ja3}
+		}
 	}
 	handle /suspicious* {
 		reverse_proxy backend:8000

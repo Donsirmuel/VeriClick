@@ -48,6 +48,8 @@ urlpatterns = [
     # Abuse prevention
     path('abuse/report/', views.abuse_report, name='abuse-report'),
     path('safety/check/', views.google_safe_browsing_check, name='safe-browsing-check'),
+    # Proof-of-Work
+    path('pow/', include('pow.urls')),
     # Tracker
     path('tracker.js', views.serve_tracker_script, name='tracker-script'),
     path('tracker/event/', views.receive_tracker_event, name='tracker-event'),

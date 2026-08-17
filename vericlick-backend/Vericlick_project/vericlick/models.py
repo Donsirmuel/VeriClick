@@ -672,6 +672,30 @@ class TrackerEvent(models.Model):
         max_length=100, blank=True, default='',
         help_text='Short reason code behind the verdict (e.g. suspicious UA, country deny).',
     )
+    # Layer 1: Canvas fingerprint
+    canvas_hash = models.CharField(
+        max_length=64, blank=True, default='',
+        help_text='Stable device canvas fingerprint hash.',
+    )
+    # Layer 2: Mouse trajectory metrics (computed client-side)
+    trajectory = models.JSONField(
+        default=dict, blank=True,
+        help_text='Mouse trajectory metrics: straightness, speed_var, curvature_entropy, teleports.',
+    )
+    # Layer 3: TLS fingerprint (JA4 from Caddy proxy)
+    ja4_hash = models.CharField(
+        max_length=128, blank=True, default='',
+        help_text='JA4 TLS fingerprint hash from Caddy proxy.',
+    )
+    # Layer 5: Behavioral scoring
+    bot_score = models.FloatField(
+        default=0.5,
+        help_text='Composite bot score: 0.0 (definitely bot) to 1.0 (definitely human).',
+    )
+    bot_verdict = models.CharField(
+        max_length=20, blank=True, default='',
+        help_text='Behavioral verdict: "human", "suspicious", or "bot".',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

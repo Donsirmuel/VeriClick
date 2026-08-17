@@ -313,6 +313,20 @@ export interface TrackerEventSignals {
   screenDepth: number | null
   plugins: number
   viewport: { width: number; height: number }
+  canvasHash: string
+  trajectory: {
+    straightness: number
+    speed_var: number
+    curvature_entropy: number
+    teleports: number
+    event_count: number
+    max_jump: number
+  }
+  clickMetrics: {
+    dwell_avg: number
+    timing_var: number
+    click_count: number
+  }
 }
 
 export interface TrackerEvent {
@@ -332,5 +346,10 @@ export interface TrackerEvent {
   verdict: string
   isBot: boolean
   reason: string
+  canvasHash: string
+  trajectory: Record<string, unknown>
+  ja4Hash: string
+  botScore: number
+  botVerdict: string
   createdAt: string
 }
