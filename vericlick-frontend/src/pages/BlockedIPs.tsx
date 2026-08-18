@@ -114,9 +114,9 @@ export default function BlockedIPsPage() {
                 <tr key={entry.id} className="border-b border-neutral-100 hover:bg-neutral-50/50 transition-colors">
                   <td className="px-6 py-4">
                     <span className="font-mono font-bold text-sm">{entry.ip}</span>
-                    {(entry.country || entry.region || entry.city) && (
+                    {entry.country && (
                       <span className="block text-xs text-muted mt-0.5">
-                        {[entry.city, entry.region, entry.country].filter(Boolean).join(', ')}
+                        {entry.country}
                       </span>
                     )}
                   </td>

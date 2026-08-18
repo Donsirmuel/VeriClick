@@ -55,7 +55,7 @@ export default function DashboardPage() {
     const RECENT_WINDOW_MS = 10 * 60 * 1000
     const recentBotBlock = activity.some((e) => {
       if (!e.isBot) return false
-      const at = e.time ? new Date(e.time).getTime() : NaN
+      const at = e.createdAt ? new Date(e.createdAt).getTime() : NaN
       return Number.isFinite(at) && now - at <= RECENT_WINDOW_MS
     })
     if (!recentBotBlock) return

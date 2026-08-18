@@ -37,7 +37,7 @@ export default function ShieldPage() {
     queryFn: fetchWorkspace,
   })
 
-  const { data: config, isLoading } = useQuery({
+  const { data: config } = useQuery({
     queryKey: ['shield-config', workspace?.trackerSecret],
     queryFn: async () => {
       const { data } = await apiClient.get<ShieldConfig>('/shield/config/', {

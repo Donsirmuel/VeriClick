@@ -10,7 +10,7 @@ import {
 import toast from "react-hot-toast";
 import { fetchWorkspace } from "@/api/workspace";
 import { apiClient } from "@/api/client";
-import { DashboardSkeleton } from "@/components/ui/DashboardSnippet";
+import { DashboardSkeleton } from "@/components/ui/DashboardSkeleton";
 
 const API_BASE = (apiClient.defaults.baseURL || "").replace(/\/$/, "");
 
