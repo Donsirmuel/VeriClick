@@ -56,12 +56,12 @@ function AnimatedBlock({ children, delay = 0, className = '' }: { children: Reac
 }
 
 const VERIFICATION_LINES = [
-  { text: '> GET /r/7x9k2m', delay: 0 },
+  { text: '> POST /api/v1/collect', delay: 0 },
   { text: '> IP rules: checked — no allow/deny match', delay: 700 },
-  { text: '> User agent: python-requests/2.31', delay: 1400 },
+  { text: '> Device signals: canvas + TLS fingerprint', delay: 1400 },
   { text: '  └─ matches known bot signature', delay: 1800 },
   { text: '> Decision: BLOCK (automated request)', delay: 2400 },
-  { text: '> Action: send to page for blocked visitors', delay: 3000 },
+  { text: '> Action: bot blocked before page loads', delay: 3000 },
   { text: '> Reason logged: "Request looked automated"', delay: 3600 },
 ]
 
@@ -90,7 +90,7 @@ function LiveTerminal() {
         <div className="w-3 h-3 rounded-full bg-neutral-600" />
         <div className="w-3 h-3 rounded-full bg-neutral-600" />
         <div className="w-3 h-3 rounded-full bg-neutral-600" />
-        <span className="text-[10px] font-mono text-neutral-500 ml-2">vericlick-relay</span>
+        <span className="text-[10px] font-mono text-neutral-500 ml-2">vericlick-shield</span>
         <span className="ml-auto text-[10px] font-mono text-neutral-600">live</span>
       </div>
       <div className="p-5 font-mono text-[11px] leading-loose min-h-70">
@@ -126,7 +126,7 @@ function HeroVisual() {
         <div className="w-3 h-3 rounded-full bg-neutral-600" />
         <div className="w-3 h-3 rounded-full bg-neutral-600" />
         <div className="w-3 h-3 rounded-full bg-neutral-600" />
-        <span className="text-[10px] font-mono text-neutral-500 ml-2">vericlick-relay</span>
+        <span className="text-[10px] font-mono text-neutral-500 ml-2">vericlick-shield</span>
         <span className="ml-auto text-[10px] font-mono text-neutral-600">live</span>
       </div>
       {failed ? (
@@ -185,30 +185,30 @@ function FloatingParticles() {
 const HERO_POINTS = [
   { title: 'Simple plans', desc: 'Basic, Plus, and Pro.' },
   { title: 'IP allow/deny rules', desc: 'Allow rules always win.' },
-  { title: 'Domain health + ownership', desc: 'Checked in-app, proven via TXT.' },
+  { title: 'Instant setup', desc: 'One script tag, zero DNS changes.' },
   { title: 'Every decision explained', desc: 'Plain-language reasons.' },
 ]
 
 const FEATURES = [
-  { icon: LinkSquare02Icon, title: 'Tracked links', desc: 'Create a short link for any destination. Every click is logged, counted, and classified before it reaches your page.' },
-  { icon: FingerPrintIcon, title: 'Click verification', desc: 'Each request is checked against your IP rules, bot signatures, and rate limits — and every decision is recorded.' },
+  { icon: LinkSquare02Icon, title: 'Script-based protection', desc: 'Paste one script tag into your site\'s head. Every visitor is verified before your page loads — no link creation, no DNS changes.' },
+  { icon: FingerPrintIcon, title: 'Device fingerprinting', desc: 'Canvas fingerprinting, mouse trajectory analysis, and TLS fingerprinting identify real users from automated traffic in milliseconds.' },
   { icon: LockIcon, title: 'IP rules', desc: 'Allow trusted addresses through and deny known-bad ones. Allow rules are checked first and always win, so whitelisted IPs are never flagged again.' },
-  { icon: Globe02Icon, title: 'Domain health checks', desc: 'Your tracking domains are health-checked automatically from inside the app, and ownership is proven with a DNS TXT record.' },
-  { icon: ServerStackIcon, title: 'Safe routing', desc: 'Flagged traffic never reaches your real page — it lands on a page for blocked visitors that you control. Never a 403.' },
-  { icon: Chart03Icon, title: 'Live dashboard', desc: 'Traffic chart, activity feed, domain health, and a blocked-IP review queue — with a plain-language reason for every decision.' },
+  { icon: Globe02Icon, title: 'Real-time bot detection', desc: 'Every visitor is analyzed in real time against known bot signatures, behavioral patterns, and proof-of-work challenges.' },
+  { icon: ServerStackIcon, title: 'Safe routing', desc: 'Suspicious traffic is blocked before your page loads — never a 403, never a broken experience for real visitors.' },
+  { icon: Chart03Icon, title: 'Live dashboard', desc: 'Traffic chart, activity feed, visitor breakdown, and a blocked-IP review queue — with a plain-language reason for every decision.' },
 ]
 
 const STEPS = [
-  { step: 1, title: 'Create a tracked link', desc: 'Paste any destination URL and get a short link. Optionally put it on a domain you own and prove ownership with a DNS TXT record.', icon: LinkSquare02Icon },
-  { step: 2, title: 'Every click is checked', desc: 'When someone clicks, VeriClick checks IP allow/deny rules first, then bot signatures, then rate limits.', icon: FingerPrintIcon },
-  { step: 3, title: 'The right traffic gets through', desc: 'Humans are redirected to your destination. Suspicious requests land on your page for blocked visitors — and the reason is logged.', icon: ShieldIcon },
+  { step: 1, title: 'Paste one line of code', desc: 'Copy the VeriClick script snippet and paste it into your site\'s <head>. Works with any platform — HTML, WordPress, Shopify, Next.js.', icon: LinkSquare02Icon },
+  { step: 2, title: 'Every visitor is checked', desc: 'When someone visits, VeriClick collects device signals, checks IP allow/deny rules, runs bot detection, and applies rate limits.', icon: FingerPrintIcon },
+  { step: 3, title: 'Bots blocked, humans through', desc: 'Real visitors see your site instantly. Suspicious traffic is blocked before your page loads — and the reason is logged.', icon: ShieldIcon },
 ]
 
 const USE_CASES = [
-  { title: 'Campaign links', desc: 'Protect the redirect links you put in emails, ads, and bios from scanners and automated previews.', icon: UserGroupIcon },
-  { title: 'Link operations', desc: 'Manage links, domains, and rules in one workspace, with a shared click history across everything.', icon: Activity01Icon },
-  { title: 'Traffic review', desc: 'Inspect who hit your links, see why anyone was blocked, and whitelist a mistake in one click.', icon: EyeIcon },
-  { title: 'Automation bursts', desc: 'Slow and divert bursts of automated requests with rate limiting so they never reach your real page.', icon: ZapIcon },
+  { title: 'E-commerce stores', desc: 'Protect product pages and checkout flows from scalper bots, credential stuffing, and inventory scrapers.', icon: UserGroupIcon },
+  { title: 'Website operations', desc: 'Configure protection, IP rules, and visitor analytics in one dashboard. No DNS changes, no domain setup.', icon: Activity01Icon },
+  { title: 'Traffic review', desc: 'Inspect who visits your site, see why anyone was blocked, and whitelist a mistake in one click.', icon: EyeIcon },
+  { title: 'Automation bursts', desc: 'Slow and divert bursts of automated requests with rate limiting and proof-of-work challenges so they never reach your page.', icon: ZapIcon },
 ]
 
 const REASON_LABELS = [
@@ -220,7 +220,7 @@ const REASON_LABELS = [
   'Blocked by automated detection',
 ]
 
-const HERO_WORDS = ['click', 'Traffic', 'Visitor', 'Browser']
+const HERO_WORDS = ['Visitor', 'Traffic', 'Session', 'Request']
 
 function RotatingWord() {
   const [index, setIndex] = useState(0)
@@ -263,7 +263,7 @@ export default function Landing() {
             <div>
               <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-neutral-700/50 bg-neutral-900/60 backdrop-blur-sm text-xs font-bold text-neutral-300 uppercase tracking-wider mb-8 opacity-0" style={{ animation: 'fade-in-up 0.6s ease-out 0.1s forwards' }}>
                 <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse-dot" />
-                Link protection for real traffic
+                Website protection for real traffic
               </div>
 
               <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-[5.5rem] font-bold tracking-tight mb-8 leading-[0.95] opacity-0" style={{ animation: 'fade-in-up 0.7s ease-out 0.2s forwards' }}>
@@ -272,9 +272,10 @@ export default function Landing() {
               </h1>
 
               <p className="text-lg md:text-xl text-neutral-400 mb-10 leading-relaxed max-w-lg opacity-0" style={{ animation: 'fade-in-up 0.6s ease-out 0.35s forwards' }}>
-                VeriClick protects your links from bots and suspicious traffic. Create a tracked link,
-                and every click is checked — IP rules first, then bot detection, then rate limits.
-                Humans get through; flagged requests are diverted. Simple plans, from just $25/month.
+                VeriClick protects your website from bots and suspicious traffic. Paste one script tag
+                into your site's head, and every visitor is checked — device fingerprinting first,
+                then bot detection, then rate limits. Humans get through; bots are blocked before your page loads.
+                Simple plans, from just $25/month.
               </p>
 
               <div className="flex flex-col sm:flex-row items-center gap-4 mb-14 opacity-0" style={{ animation: 'fade-in-up 0.6s ease-out 0.45s forwards' }}>
@@ -314,7 +315,7 @@ export default function Landing() {
             <p className="text-xs font-bold text-neutral-500 uppercase tracking-widest">What sets VeriClick apart</p>
             <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-3 text-neutral-500">
               <div className="flex items-center gap-2 text-sm font-medium"><HugeiconsIcon icon={Tick02Icon} className="w-4 h-4 text-white/40" /> Simple, flat pricing</div>
-              <div className="flex items-center gap-2 text-sm font-medium"><HugeiconsIcon icon={Tick02Icon} className="w-4 h-4 text-white/40" /> Your domains, your links</div>
+              <div className="flex items-center gap-2 text-sm font-medium"><HugeiconsIcon icon={Tick02Icon} className="w-4 h-4 text-white/40" /> Your site. Your rules.</div>
               <div className="flex items-center gap-2 text-sm font-medium"><HugeiconsIcon icon={Tick02Icon} className="w-4 h-4 text-white/40" /> Every decision explained</div>
             </div>
           </div>
@@ -331,11 +332,11 @@ export default function Landing() {
               </div>
             </AnimatedBlock>
             <AnimatedBlock delay={80}>
-              <h2 className="text-4xl md:text-5xl font-bold mb-6">Built to protect every click</h2>
+              <h2 className="text-4xl md:text-5xl font-bold mb-6">Built to protect every visitor</h2>
             </AnimatedBlock>
             <AnimatedBlock delay={160}>
               <p className="text-neutral-400 text-lg max-w-2xl mx-auto">
-                Everything runs inside VeriClick — from click verification to domain health checks — with
+                Everything runs inside VeriClick — from device fingerprinting to real-time bot detection — with
                 a plain-language explanation for every decision it makes.
               </p>
             </AnimatedBlock>
@@ -372,8 +373,8 @@ export default function Landing() {
             </AnimatedBlock>
             <AnimatedBlock delay={160}>
               <p className="text-neutral-400 text-lg max-w-2xl mx-auto">
-                VeriClick sits between your traffic and your destination, making a split-second decision
-                for every single click.
+                VeriClick sits between your visitors and your page, making a split-second decision
+                for every single request.
               </p>
             </AnimatedBlock>
           </div>
@@ -479,12 +480,12 @@ export default function Landing() {
         <div className="max-w-4xl mx-auto text-center">
           <AnimatedBlock>
             <h2 className="text-4xl md:text-6xl font-bold mb-8 leading-tight">
-              Keep bots off<br />your links.
+              Keep bots off<br />your site.
             </h2>
           </AnimatedBlock>
           <AnimatedBlock delay={100}>
             <p className="text-neutral-400 text-lg mb-12 max-w-xl mx-auto">
-              Pick a plan, add your domain, and start protecting your links today.
+              Pick a plan, paste the script, and start protecting your site today.
             </p>
           </AnimatedBlock>
           <AnimatedBlock delay={200}>

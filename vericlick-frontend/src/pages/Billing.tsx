@@ -114,7 +114,7 @@ export default function Billing() {
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Billing &amp; Plan</h1>
         <p className="text-sm text-muted mt-1">
-          Your plan controls how many tracked domains your workspace can register — tracked links are
+          Your plan controls plan features for your workspace — protected pages are
           unlimited on every paid plan. Pay monthly by card, or buy a 30-day period with the payment method that suits you.
         </p>
       </div>
@@ -127,7 +127,7 @@ export default function Billing() {
           <div>
             <h3 className="text-sm font-bold text-green-900 mb-1">Payment confirmed</h3>
             <p className="text-sm text-green-700 leading-relaxed">
-              Your new plan is active. Open the domains page to start using your extra domain room.
+              Your new plan is active. Configure your shield settings.
             </p>
           </div>
         </div>
@@ -140,8 +140,8 @@ export default function Billing() {
             <p className="text-sm text-amber-800 leading-relaxed">
               Your <strong>{sub.planName}</strong> period ended on {formatDate(sub.expiresAt)}. Everything
               keeps working during your 7-day grace period. Renew by {formatDate(sub.graceExpiresAt)} to keep
-              full analytics and protection — after that your links still redirect visitors to their
-              destination, but no traffic is recorded or filtered until you renew.
+              full analytics and protection — after that your site is still protected but no traffic is
+              recorded or filtered until you renew.
             </p>
           </div>
         </div>
@@ -152,9 +152,9 @@ export default function Billing() {
           <div>
             <h3 className="text-sm font-bold text-red-900 mb-1">Your plan is suspended</h3>
             <p className="text-sm text-red-800 leading-relaxed">
-              Your tracked links still redirect visitors straight to their destination — your audience is
-              unaffected — but VeriClick is no longer recording click traffic or applying any filtering or
-              protection. Renew below to restore full analytics and protection. Your domains, links, and data
+              Your site is still protected — your audience is
+              unaffected — but VeriClick is no longer recording traffic or applying any filtering or
+              protection. Renew below to restore full analytics and protection. Your settings and data
               are all intact.
             </p>
           </div>
@@ -212,23 +212,14 @@ export default function Billing() {
           )}
         </div>
         <div className="bg-white border border-neutral-200 rounded-2xl p-5">
-          <div className="text-xs font-bold text-muted uppercase tracking-wider mb-1">Domains</div>
-          <div className="text-xl font-bold text-slate-900">
-            {workspace?.domainLimit
-              ? `${workspace.domainsUsed} / ${workspace.domainLimit} used`
-              : `${workspace?.domainsUsed ?? 0} / unlimited`}
-          </div>
+          <div className="text-xs font-bold text-muted uppercase tracking-wider mb-1">Sites protected</div>
+          <div className="text-xl font-bold text-slate-900">Active</div>
+          <div className="text-xs text-muted mt-1">Script installed on your site</div>
         </div>
         <div className="bg-white border border-neutral-200 rounded-2xl p-5">
-          <div className="text-xs font-bold text-muted uppercase tracking-wider mb-1">Links</div>
-          <div className="text-xl font-bold text-slate-900">
-            {workspace?.linkLimit != null
-              ? `${workspace.linksUsed} / ${workspace.linkLimit} used`
-              : 'Unlimited'}
-          </div>
-          {workspace?.linkLimit == null && (
-            <div className="text-xs text-muted mt-1">Links are never capped on paid plans</div>
-          )}
+          <div className="text-xs font-bold text-muted uppercase tracking-wider mb-1">Protected pages</div>
+          <div className="text-xl font-bold text-slate-900">Unlimited</div>
+          <div className="text-xs text-muted mt-1">Pages are never capped on paid plans</div>
         </div>
       </div>
 
@@ -292,14 +283,14 @@ export default function Billing() {
                 </div>
                 <div className="grid grid-cols-2 gap-2 mb-5">
                   <div className="rounded-xl bg-neutral-50 border border-neutral-200 px-3 py-2.5">
-                    <div className="text-[10px] font-bold text-muted uppercase tracking-wider mb-1">Domains</div>
+                    <div className="text-[10px] font-bold text-muted uppercase tracking-wider mb-1">Sites</div>
                     <div className="flex items-center gap-1.5 text-sm font-bold text-slate-900">
                       <HugeiconsIcon icon={Globe02Icon} className="w-4 h-4 text-muted" />
-                      {plan.domainLimit}
+                      Unlimited
                     </div>
                   </div>
                   <div className="rounded-xl bg-neutral-50 border border-neutral-200 px-3 py-2.5">
-                    <div className="text-[10px] font-bold text-muted uppercase tracking-wider mb-1">Links</div>
+                    <div className="text-[10px] font-bold text-muted uppercase tracking-wider mb-1">Pages</div>
                     <div className="flex items-center gap-1.5 text-sm font-bold text-slate-900">
                       <HugeiconsIcon icon={LinkSquare02Icon} className="w-4 h-4 text-muted" />
                       Unlimited
@@ -320,10 +311,10 @@ export default function Billing() {
                 </ul>
                 {isCurrentPlan ? (
                   <Link
-                    to="/app/domains"
+                    to="/app/shield"
                     className="text-center bg-neutral-100 text-slate-900 px-4 py-3 rounded-xl text-sm font-bold transition-all"
                   >
-                    Manage domains
+                    Configure shield
                   </Link>
                 ) : (
                   <button
@@ -382,8 +373,7 @@ export default function Billing() {
           </div>
         ) : (
           <div className="bg-white border border-neutral-200 rounded-2xl p-6 text-sm text-muted">
-            No payments yet. Your free trial includes 1 domain and 1 link — links are unlimited once
-            you're on a paid plan. Pick a plan above when you're ready for more room.
+            No payments yet. Choose a plan to start managing your site protection — protected pages are unlimited on every plan.
           </div>
         )}
       </div>

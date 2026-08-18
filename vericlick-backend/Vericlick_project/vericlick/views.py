@@ -1,37 +1,32 @@
 from datetime import timedelta
 import logging
-from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
-from django.db.models import Count, Q, F
+from django.db.models import Count, Q
 from django.db.models.functions import TruncDate
 from django.conf import settings
 from django.utils import timezone
 from django.contrib.auth.models import User
 from django.contrib.auth.tokens import default_token_generator
-from django.shortcuts import get_object_or_404
-from django.http import HttpResponse, HttpResponseRedirect
+from django.http import HttpResponse
 
 from rest_framework import viewsets, status
 from rest_framework.decorators import api_view, permission_classes, action, throttle_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.exceptions import ValidationError, PermissionDenied
+from rest_framework.exceptions import ValidationError
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework_simplejwt.tokens import RefreshToken
 from decouple import config
 
 from .models import (
-    Workspace, DomainRegistry, TrackingLink, ClickLog, IPRule, CountryRule,
+    Workspace, IPRule, CountryRule,
     DevicePolicy, TrackerEvent, Plan, DiscountCode, SiteConfig, CheckoutIntent,
-    BlockedDestination, AbuseReport, DestinationChangeLog,
+    ShieldConfig,
 )
 from .serializers import (
     UserSerializer,
     WorkspaceSerializer,
     RegisterSerializer,
-    DomainRegistrySerializer,
-    TrackingLinkSerializer,
-    ClickLogSerializer,
     IPRuleSerializer,
     CountryRuleSerializer,
     DevicePolicySerializer,
@@ -48,10 +43,6 @@ from .emails import (
 )
 from .services import (
     classify_request,
-    lookup_location,
-    get_safe_destination,
-    verify_domain_ownership,
-    refresh_stale_domains_async,
     reason_label,
 )
 
@@ -73,19 +64,6 @@ def get_user_workspace(user):
     return workspace
 
 
-def _merge_query_params(destination, incoming_query):
-    # Preserves UTM / campaign / click-id parameters on the tracked URL by
-    # appending them to whatever destination the visitor is routed to (target
-    # URL or the safe page). Incoming params win over destination defaults so
-    # attribution/funnel pixels keep firing on the final page.
-    if not incoming_query:
-        return destination
-    parts = list(urlparse(destination))
-    params = dict(parse_qsl(parts[4], keep_blank_values=True))
-    params.update({k: v[0] if isinstance(v, (list, tuple)) else v for k, v in incoming_query.items()})
-    parts[4] = urlencode(params)
-    return urlunparse(parts)
-
 
 class TrackerEventThrottle(ScopedRateThrottle):
     scope = 'tracker'
@@ -99,9 +77,6 @@ def workspace_detail(request):
         return Response({'error': 'No workspace found'}, status=status.HTTP_404_NOT_FOUND)
 
     if request.method == 'GET':
-        # First touch starts the free-trial clock for workspaces with no paid
-        # plan, so the UI can show how long their free allowance lasts.
-        workspace.ensure_trial_started()
         serializer = WorkspaceSerializer(workspace)
         return Response(serializer.data)
 
@@ -346,35 +321,6 @@ def discount_code_validate(request):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 @throttle_classes([])
-def tls_allowed(request):
-    # Caddy on-demand TLS gate. Caddy calls this with ?domain=<hostname>
-    # before issuing a certificate for a host that isn't statically listed in
-    # SITE_ADDRESSES. We only say yes for domains a customer has registered AND
-    # proven ownership of (verified), so strangers can't make us mint Let's
-    # Encrypt certificates for domains they don't control.
-    host = (request.query_params.get('domain') or '').strip().lower().rstrip('.')
-    if not host:
-        return Response(status=status.HTTP_400_BAD_REQUEST)
-    # Allow a registered verified domain itself, OR its tracking host. An apex
-    # domain (e.g. donnable.site) can't hold a CNAME, so its branded links run
-    # on the `t.` subdomain (t.donnable.site) which Caddy must also serve TLS
-    # for.
-    candidates = [host]
-    if host.startswith('t.'):
-        apex = host[2:]
-        if apex.count('.') == 1:
-            candidates.append(apex)
-    allowed = DomainRegistry.objects.filter(
-        verified=True, removed_at__isnull=True, domain__in=candidates
-    ).exists()
-    if not allowed:
-        return Response(status=status.HTTP_403_FORBIDDEN)
-    return Response(status=status.HTTP_200_OK)
-
-
-@api_view(['GET'])
-@permission_classes([AllowAny])
-@throttle_classes([])
 def serve_tracker_script(request):
     try:
         with open(settings.TRACKER_SCRIPT_PATH, 'r', encoding='utf-8') as f:
@@ -474,64 +420,51 @@ def receive_tracker_event(request):
 @api_view(['POST'])
 @permission_classes([AllowAny])
 @throttle_classes([TrackerEventThrottle])
-def shield_evaluate(request):
-    # Site Shield evaluation. The data-shield tracker script calls this with
-    # the workspace id + tracker token before deciding how to handle the
-    # pageview. The endpoint is deliberately fail-open: any uncertainty
-    # (suspended workspace, page host that isn't one of the workspace's own
-    # authorized domains, missing data) returns "allowed" so real visitors are
-    # never caught in the crossfire.
-    site_id = request.data.get('site_id')
-    token = request.data.get('token')
-    page_url = request.data.get('page_url') or ''
-    if not site_id or not token or not page_url:
+def shield_verify(request):
+    """Core script verification endpoint. The shield.js script calls this with
+    telemetry signals before deciding how to handle the pageview. The endpoint
+    runs the full bot detection pipeline and returns a verdict.
+
+    Fail-open: any uncertainty returns 'allow' so real visitors are never blocked."""
+    api_key = request.data.get('api_key') or ''
+    if not api_key:
         return Response(
-            {'errors': [{'field': 'site_id', 'detail': 'site_id, token and page_url are required'}]},
+            {'errors': [{'field': 'api_key', 'detail': 'api_key is required'}]},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    try:
-        workspace = Workspace.objects.get(id=site_id)
-    except (Workspace.DoesNotExist, ValueError):
+    # Authenticate via workspace tracker_secret (the api_key)
+    workspace = Workspace.objects.filter(tracker_secret=api_key).first()
+    if not workspace:
         return Response(
-            {'errors': [{'field': 'site_id', 'detail': 'Invalid workspace'}]},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    if token != str(workspace.tracker_secret):
-        return Response(
-            {'errors': [{'field': 'token', 'detail': 'Invalid tracker token'}]},
+            {'errors': [{'field': 'api_key', 'detail': 'Invalid API key'}]},
             status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    page_url = request.data.get('page_url') or ''
+    if not page_url:
+        return Response(
+            {'errors': [{'field': 'page_url', 'detail': 'page_url is required'}]},
+            status=status.HTTP_400_BAD_REQUEST,
         )
 
     def _allow(reason=''):
         return Response({
-            'verdict': 'allowed',
+            'verdict': 'allow',
             'is_bot': False,
             'reason': reason,
             'reason_label': '',
         })
 
     if workspace.plan_status == 'suspended':
-        # Suspended workspaces get no filtering: fail open so their deployed
-        # shield never harms the audience.
         return _allow('suspended')
 
-    # Host authorization, fail-open: the shield only judges pageviews on the
-    # workspace's own registered domains (any registered domain is authorized —
-    # instant authorization) or on the shared VeriClick host. A page on some
-    # other site can't be evaluated for this workspace.
-    from .models import tracking_host
-
-    host = (urlparse(page_url).hostname or '').lower().rstrip('.')
-    authorized_hosts = set()
-    for domain in DomainRegistry.objects.filter(workspace=workspace, removed_at__isnull=True):
-        authorized_hosts.add(domain.domain.lower().rstrip('.'))
-        authorized_hosts.add(tracking_host(domain.domain).lower().rstrip('.'))
-    shared_base = getattr(settings, 'PUBLIC_TRACKING_BASE_URL', '').strip()
-    shared_host = (urlparse(shared_base).hostname or '').lower().rstrip('.') if shared_base else ''
-    if host and shared_host and host != shared_host and host not in authorized_hosts:
-        return _allow('not-authorized')
+    # Check shield config
+    shield_config = getattr(workspace, 'shield_config', None)
+    if shield_config and shield_config.protection_mode == 'monitor':
+        # Monitor mode: log but don't block
+        _log_shield_event(request, workspace, page_url, blocked=False, reason='monitor-mode')
+        return _allow('monitor-mode')
 
     ip = request.META.get('REMOTE_ADDR', '127.0.0.1')
     forwarded = request.META.get('HTTP_X_FORWARDED_FOR')
@@ -541,28 +474,118 @@ def shield_evaluate(request):
 
     result = classify_request(None, ip, user_agent, workspace)
     blocked = result['decision'] != 'allowed'
+
+    # In balanced mode, only block obvious bots (not challenged/suspicious)
+    if shield_config and shield_config.protection_mode == 'balanced':
+        if result['decision'] == 'challenged':
+            blocked = False
+
     if blocked:
-        # A blocked pageview is recorded here (the script shows the block page
-        # instead of sending the normal beacon, so this is its only chance to
-        # be counted).
-        TrackerEvent.objects.create(
-            workspace=workspace,
-            page_url=page_url,
-            referrer=request.data.get('referrer', ''),
-            signals=request.data.get('signals') or {},
-            ip=ip,
-            user_agent=user_agent,
-            verdict='blocked',
-            is_bot=result['is_bot'],
-            reason=result['reason'],
-        )
+        _log_shield_event(request, workspace, page_url, blocked=True, reason=result['reason'])
+
+    reason_label_str = reason_label(result['decision'], result['reason'], result['matched_rule'])
 
     return Response({
-        'verdict': 'blocked' if blocked else 'allowed',
+        'verdict': 'block' if blocked else 'allow',
         'is_bot': result['is_bot'],
         'reason': result['reason'],
-        'reason_label': reason_label(result['decision'], result['reason'], result['matched_rule']),
+        'reason_label': reason_label_str,
+        'bot_action': shield_config.bot_action if shield_config else 'block',
     })
+
+
+def _log_shield_event(request, workspace, page_url, blocked=False, reason=''):
+    """Log a shield event to TrackerEvent."""
+    ip = request.META.get('REMOTE_ADDR', '127.0.0.1')
+    forwarded = request.META.get('HTTP_X_FORWARDED_FOR')
+    if forwarded:
+        ip = forwarded.split(',')[0].strip()
+
+    tracker_signals = request.data.get('signals') or {}
+    trajectory = tracker_signals.get('trajectory') or {}
+    click_metrics = tracker_signals.get('click_metrics') or {}
+
+    from .services import score_from_signals, compute_bot_score
+    bot_signals = score_from_signals(request, tracker_signals, trajectory, click_metrics)
+    bot_result = compute_bot_score(bot_signals)
+
+    TrackerEvent.objects.create(
+        workspace=workspace,
+        page_url=page_url,
+        referrer=request.data.get('referrer', ''),
+        signals=tracker_signals,
+        engagement=request.data.get('engagement') or {},
+        ip=ip,
+        user_agent=request.META.get('HTTP_USER_AGENT', ''),
+        verdict='blocked' if blocked else 'allowed',
+        is_bot=blocked,
+        reason=reason,
+        canvas_hash=tracker_signals.get('canvas_hash', ''),
+        trajectory=trajectory,
+        ja4_hash=getattr(request, 'ja4_hash', ''),
+        bot_score=bot_result['score'],
+        bot_verdict=bot_result['verdict'],
+    )
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+@throttle_classes([])
+def shield_config_view(request):
+    """Serve the shield configuration for a workspace. The script calls this
+    on first load to get protection settings."""
+    api_key = request.query_params.get('api_key') or ''
+    if not api_key:
+        return Response(
+            {'errors': [{'field': 'api_key', 'detail': 'api_key is required'}]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    workspace = Workspace.objects.filter(tracker_secret=api_key).first()
+    if not workspace:
+        return Response(
+            {'errors': [{'field': 'api_key', 'detail': 'Invalid API key'}]},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    config = getattr(workspace, 'shield_config', None)
+    if not config:
+        config = ShieldConfig.objects.create(workspace=workspace)
+
+    return Response({
+        'protection_mode': config.protection_mode,
+        'bot_action': config.bot_action,
+        'protected_paths': config.protected_paths,
+        'blocked_paths': config.blocked_paths,
+        'rate_limit_per_hour': config.rate_limit_per_hour,
+    })
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+@throttle_classes([TrackerEventThrottle])
+def shield_telemetry(request):
+    """Receive batch telemetry from the script for analytics. Separate from
+    verify to keep the verify endpoint fast and focused."""
+    api_key = request.data.get('api_key') or ''
+    if not api_key:
+        return Response(
+            {'errors': [{'field': 'api_key', 'detail': 'api_key is required'}]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    workspace = Workspace.objects.filter(tracker_secret=api_key).first()
+    if not workspace:
+        return Response(
+            {'errors': [{'field': 'api_key', 'detail': 'Invalid API key'}]},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    if workspace.plan_status == 'suspended':
+        return Response({'status': 'ok'})
+
+    _log_shield_event(request, workspace, request.data.get('page_url', ''), blocked=False, reason='telemetry')
+    return Response({'status': 'ok'})
 
 
 @api_view(['POST'])
@@ -796,66 +819,42 @@ def dashboard_stats(request):
     if not workspace:
         return Response({'error': 'No workspace found'}, status=status.HTTP_404_NOT_FOUND)
 
-    # Refresh stale domain health asynchronously so this request never blocks
-    # on DNS lookups. The page shows the last-known status immediately.
-    refresh_stale_domains_async(workspace)
-
     now = timezone.now()
     twenty_four_hours_ago = now - timedelta(hours=24)
 
-    clicks_24h = ClickLog.objects.filter(
-        link__workspace=workspace, created_at__gte=twenty_four_hours_ago
+    # Use TrackerEvent (script telemetry) instead of ClickLog (link redirects)
+    events_24h = TrackerEvent.objects.filter(
+        workspace=workspace, created_at__gte=twenty_four_hours_ago
     )
-    total_clicks_24h = clicks_24h.count()
-    bot_clicks_24h = clicks_24h.filter(is_bot=True).count()
-    blocked_24h = clicks_24h.filter(decision=ClickLog.Decision.BLOCKED).count()
-    challenged_24h = clicks_24h.filter(decision=ClickLog.Decision.CHALLENGED).count()
+    total_events_24h = events_24h.count()
+    bot_events_24h = events_24h.filter(is_bot=True).count()
+    blocked_24h = events_24h.filter(verdict='blocked').count()
 
-    # Real change vs the previous 24h window today, not a placeholder. Falls back
-    # to null (no badge shown) when there's no prior traffic to compare against.
-    previous_clicks_24h = ClickLog.objects.filter(
-        link__workspace=workspace,
+    previous_events_24h = TrackerEvent.objects.filter(
+        workspace=workspace,
         created_at__gte=twenty_four_hours_ago - timedelta(hours=24),
         created_at__lt=twenty_four_hours_ago,
     ).count()
-    if previous_clicks_24h > 0:
+    if previous_events_24h > 0:
         clicks_trend = round(
-            ((total_clicks_24h - previous_clicks_24h) / previous_clicks_24h) * 100, 1
+            ((total_events_24h - previous_events_24h) / previous_events_24h) * 100, 1
         )
     else:
         clicks_trend = None
 
-    active_links = TrackingLink.objects.filter(
-        workspace=workspace, status=TrackingLink.Status.ACTIVE, removed_at__isnull=True
-    ).count()
-    domains_healthy = DomainRegistry.objects.filter(
-        workspace=workspace, removed_at__isnull=True,
-        health_status=DomainRegistry.HealthStatus.HEALTHY
-    ).count()
-    domains_degraded = DomainRegistry.objects.filter(
-        workspace=workspace, removed_at__isnull=True,
-        health_status=DomainRegistry.HealthStatus.DEGRADED
-    ).count()
-    domains_blacklisted = DomainRegistry.objects.filter(
-        workspace=workspace, removed_at__isnull=True,
-        health_status=DomainRegistry.HealthStatus.BLACKLISTED
-    ).count()
+    shield_config = getattr(workspace, 'shield_config', None)
 
     data = {
-        'totalClicks24h': total_clicks_24h,
+        'totalVisits24h': total_events_24h,
         'clicksTrend': clicks_trend,
-        'botTrafficBlocked': bot_clicks_24h,
+        'botsBlocked': bot_events_24h,
         'blocked': blocked_24h,
-        'challenged': challenged_24h,
-        'allowed': total_clicks_24h - bot_clicks_24h,
+        'allowed': total_events_24h - bot_events_24h,
         'botTrafficPercentage': round(
-            (bot_clicks_24h / total_clicks_24h * 100) if total_clicks_24h else 0, 1
+            (bot_events_24h / total_events_24h * 100) if total_events_24h else 0, 1
         ),
-        'activeLinks': active_links,
-        'domainsHealthy': domains_healthy,
-        'domainsDegraded': domains_degraded,
-        'domainsBlacklisted': domains_blacklisted,
-        'lastDomainScan': workspace.last_domain_scan_at,
+        'protectionMode': shield_config.protection_mode if shield_config else 'balanced',
+        'botAction': shield_config.bot_action if shield_config else 'block',
     }
     return Response(data)
 
@@ -874,8 +873,8 @@ def dashboard_traffic(request):
     since = timezone.now() - timedelta(days=days)
 
     qs = (
-        ClickLog.objects
-        .filter(link__workspace=workspace, created_at__gte=since)
+        TrackerEvent.objects
+        .filter(workspace=workspace, created_at__gte=since)
         .annotate(date=TruncDate('created_at'))
         .values('date')
         .annotate(
@@ -912,8 +911,8 @@ def dashboard_breakdown(request):
     days = days_map.get(range_param, 7)
     since = timezone.now() - timedelta(days=days)
 
-    qs = ClickLog.objects.filter(
-        link__workspace=workspace, created_at__gte=since,
+    qs = TrackerEvent.objects.filter(
+        workspace=workspace, created_at__gte=since,
     )
 
     if dimension == 'device':
@@ -922,7 +921,7 @@ def dashboard_breakdown(request):
             .values('device_class')
             .annotate(
                 total=Count('id'),
-                blocked=Count('id', filter=Q(decision='blocked')),
+                blocked=Count('id', filter=Q(verdict='blocked')),
             )
             .order_by('-total')[:8]
         )
@@ -941,7 +940,7 @@ def dashboard_breakdown(request):
         .values('country_code')
         .annotate(
             total=Count('id'),
-            blocked=Count('id', filter=Q(decision='blocked')),
+            blocked=Count('id', filter=Q(verdict='blocked')),
         )
         .order_by('-total')[:8]
     )
@@ -973,14 +972,12 @@ def blocked_ips(request):
     if not workspace:
         return Response({'error': 'No workspace found'}, status=status.HTTP_404_NOT_FOUND)
 
-    qs = ClickLog.objects.select_related('link').filter(
-        link__workspace=workspace,
-        decision=ClickLog.Decision.BLOCKED,
+    qs = TrackerEvent.objects.filter(
+        workspace=workspace,
+        verdict='blocked',
     )
 
-    # A whitelisted IP is no longer "blocked": once an active allow rule exists
-    # for it, its old block events must not keep showing up in this list (the
-    # IP lives in Traffic Rules > IP Addresses now).
+    # A whitelisted IP is no longer "blocked"
     whitelisted = set(
         IPRule.objects.filter(
             workspace=workspace,
@@ -993,7 +990,7 @@ def blocked_ips(request):
 
     search = request.query_params.get('search', '').strip()
     if search:
-        qs = qs.filter(Q(ip__icontains=search) | Q(link__slug__icontains=search))
+        qs = qs.filter(Q(ip__icontains=search) | Q(page_url__icontains=search))
 
     qs = qs.order_by('-created_at')[:500]
 
@@ -1022,7 +1019,6 @@ def device_policy(request):
     if request.method == 'GET':
         return Response(DevicePolicySerializer(policy).data)
 
-    workspace.ensure_trial_started()
     if workspace.suspended:
         raise ValidationError({
             'detail': (
@@ -1030,11 +1026,11 @@ def device_policy(request):
                 'keep using device rules.'
             )
         })
-    if not (workspace.has_plan_access() or workspace.trial_active):
+    if not workspace.has_plan_access():
         raise ValidationError({
             'detail': (
-                'Device rules are a paid feature. Your free trial ended — '
-                'upgrade to any plan to keep using them.'
+                'A plan is required to use device rules. '
+                'Select a plan to get started.'
             )
         })
 
@@ -1051,453 +1047,15 @@ def dashboard_activity(request):
     if not workspace:
         return Response({'error': 'No workspace found'}, status=status.HTTP_404_NOT_FOUND)
 
-    clicks = ClickLog.objects.select_related('link').filter(link__workspace=workspace).order_by('-created_at')[:50]
-    serializer = ClickLogSerializer(clicks, many=True)
+    events = TrackerEvent.objects.filter(workspace=workspace).order_by('-created_at')[:50]
+    serializer = TrackerEventSerializer(events, many=True)
     return Response(serializer.data)
-
-
-class TrackingLinkPagination(PageNumberPagination):
-    page_size = 20
-    page_size_query_param = 'size'
-    max_page_size = 100
-
-
-class TrackingLinkViewSet(viewsets.ModelViewSet):
-    queryset = TrackingLink.objects.select_related('domain').all()
-    serializer_class = TrackingLinkSerializer
-    pagination_class = TrackingLinkPagination
-    filterset_fields = ['status', 'domain']
-    throttle_classes = []  # Default throttle applies per-view below
-
-    def get_throttles(self):
-        if self.action == 'create':
-            from rest_framework.throttling import ScopedRateThrottle
-            throttle = ScopedRateThrottle()
-            throttle.scope = 'link_create'
-            return [throttle]
-        return super().get_throttles()
-
-    def get_queryset(self):
-        qs = super().get_queryset()
-        search = self.request.query_params.get('search', '')
-        if search:
-            qs = qs.filter(
-                Q(slug__icontains=search) | Q(destination_url__icontains=search)
-            )
-        workspace = get_user_workspace(self.request.user)
-        if workspace:
-            qs = qs.filter(workspace=workspace)
-        # Soft-deleted links stay in the DB (they keep counting toward the plan
-        # limit until the period ends) but are hidden from the app and no longer
-        # serve traffic.
-        return qs.filter(removed_at__isnull=True)
-
-    def perform_destroy(self, instance):
-        instance.removed_at = timezone.now()
-        instance.save(update_fields=['removed_at'])
-
-    def perform_create(self, serializer):
-        workspace = get_user_workspace(self.request.user)
-        if not workspace:
-            raise PermissionError('No workspace found')
-        workspace.ensure_trial_started()
-        if workspace.suspended:
-            raise ValidationError({
-                'detail': (
-                    'Your plan was suspended. Renew it to restore access and '
-                    'keep creating links.'
-                )
-            })
-        if not workspace.can_add_link:
-            if workspace.is_plan_active():
-                raise ValidationError({
-                    'detail': 'You have reached the link limit for your plan. Remove a link or upgrade to add more.'
-                })
-            raise ValidationError({
-                'detail': (
-                    'Your free trial ended. Upgrade to any plan to keep creating links.'
-                    if not workspace.trial_active
-                    else 'Your free trial includes 1 link. Upgrade to create more.'
-                )
-            })
-
-        # --- Abuse prevention checks ---
-
-        # 1. Block product-domain links (ZeroBot model: users must bring own domain)
-        product_domain = getattr(settings, 'PRODUCT_DOMAIN', '')
-        domain_name = serializer.validated_data.get('domain')
-        if product_domain and domain_name:
-            link_domain = getattr(domain_name, 'domain', str(domain_name)).lower().rstrip('.')
-            if link_domain == product_domain.lower():
-                raise ValidationError({
-                    'detail': (
-                        'Tracking links cannot be created on the VeriClick product domain. '
-                        'Please add and verify your own custom domain first.'
-                    )
-                })
-
-        # 2. Destination URL blocklist check
-        dest = serializer.validated_data.get('destination_url', '')
-        if dest:
-            normalized_dest = dest.rstrip('/').lower()
-            if BlockedDestination.objects.filter(url__iexact=normalized_dest).exists():
-                raise ValidationError({
-                    'detail': 'This destination URL has been flagged and cannot be used.'
-                })
-
-        # 3. Google Safe Browsing check (non-blocking warning logged, not blocking)
-        # Implemented in Wave 2 — for now we check the blocklist only.
-
-        link = serializer.save(workspace=workspace)
-
-        # Log the initial destination
-        DestinationChangeLog.objects.create(
-            link=link,
-            old_destination='',
-            new_destination=link.destination_url,
-            changed_by=self.request.user if self.request.user.is_authenticated else None,
-            ip_address=self._get_client_ip(),
-            user_agent=self.request.META.get('HTTP_USER_AGENT', ''),
-        )
-
-    def perform_update(self, serializer):
-        old_dest = serializer.instance.destination_url
-        new_dest = serializer.validated_data.get('destination_url', old_dest)
-
-        # Block product-domain links on edit too
-        product_domain = getattr(settings, 'PRODUCT_DOMAIN', '')
-        domain_name = serializer.validated_data.get('domain')
-        if product_domain and domain_name:
-            link_domain = getattr(domain_name, 'domain', str(domain_name)).lower().rstrip('.')
-            if link_domain == product_domain.lower():
-                raise ValidationError({
-                    'detail': (
-                        'Tracking links cannot be created on the VeriClick product domain. '
-                        'Please add and verify your own custom domain first.'
-                    )
-                })
-
-        # Destination URL blocklist check on edit
-        if new_dest:
-            normalized_dest = new_dest.rstrip('/').lower()
-            if BlockedDestination.objects.filter(url__iexact=normalized_dest).exists():
-                raise ValidationError({
-                    'detail': 'This destination URL has been flagged and cannot be used.'
-                })
-
-        link = serializer.save()
-
-        # Log destination changes
-        if old_dest != new_dest:
-            DestinationChangeLog.objects.create(
-                link=link,
-                old_destination=old_dest,
-                new_destination=new_dest,
-                changed_by=self.request.user if self.request.user.is_authenticated else None,
-                ip_address=self._get_client_ip(),
-                user_agent=self.request.META.get('HTTP_USER_AGENT', ''),
-            )
-
-    def _get_client_ip(self):
-        ip = self.request.META.get('REMOTE_ADDR', '127.0.0.1')
-        forwarded = self.request.META.get('HTTP_X_FORWARDED_FOR')
-        if forwarded:
-            ip = forwarded.split(',')[0].strip()
-        return ip
-
-
-class DomainRegistryViewSet(viewsets.ModelViewSet):
-    queryset = DomainRegistry.objects.all()
-    serializer_class = DomainRegistrySerializer
-
-    def list(self, request, *args, **kwargs):
-        # Health checks run asynchronously so the list never blocks on DNS
-        # lookups; the page shows the last-known status immediately.
-        workspace = get_user_workspace(self.request.user)
-        if workspace:
-            refresh_stale_domains_async(workspace)
-        return super().list(request, *args, **kwargs)
-
-    def get_queryset(self):
-        qs = super().get_queryset()
-        workspace = get_user_workspace(self.request.user)
-        if workspace:
-            qs = qs.filter(workspace=workspace)
-        # Removed (soft-deleted) domains stay in the DB so they keep counting
-        # toward the plan limit until the period ends, but they are hidden from
-        # the app and can no longer be acted on.
-        return qs.filter(removed_at__isnull=True).annotate(
-            links_count=Count('links', filter=Q(links__removed_at__isnull=True))
-        ).order_by('-created_at')
-
-    def update(self, request, *args, **kwargs):
-        # Renaming a domain onto a name that exists anywhere (another workspace
-        # or our own removed row) would hit the global unique constraint and
-        # surface as a 500. Fail with a friendly message instead. Resurrection
-        # on rename is intentionally NOT offered: the add flow covers that.
-        instance = self.get_object()
-        new_name = str(request.data.get('domain') or '').strip()
-        if new_name:
-            dup = (
-                DomainRegistry.objects.exclude(pk=instance.pk)
-                .filter(domain__iexact=new_name)
-                .first()
-            )
-            if dup is not None:
-                raise ValidationError({
-                    'detail': 'That domain is already registered by this or another account.'
-                })
-        partial = kwargs.pop('partial', False)
-        serializer = self.get_serializer(instance, data=request.data, partial=partial)
-        serializer.is_valid(raise_exception=True)
-        self.perform_update(serializer)
-        if getattr(instance, '_prefetched_objects_cache', None):
-            instance._prefetched_objects_cache = {}
-        return Response(serializer.data)
-
-    def perform_create(self, serializer):
-        workspace = get_user_workspace(self.request.user)
-        if not workspace:
-            raise ValidationError({'detail': 'No workspace found for this account.'})
-        workspace.ensure_trial_started()
-        if workspace.suspended:
-            raise ValidationError({
-                'detail': (
-                    'Your plan was suspended. Renew it to restore access and '
-                    'keep adding domains.'
-                )
-            })
-
-        domain_name = (serializer.validated_data.get('domain') or '').strip()
-        existing = (
-            DomainRegistry.objects.select_related('workspace')
-            .filter(domain__iexact=domain_name)
-            .first()
-        )
-        if existing is not None:
-            if existing.workspace_id != workspace.id:
-                raise ValidationError({
-                    'detail': (
-                        'This domain is already registered by another account. '
-                        'Register a different domain.'
-                    )
-                })
-            if existing.removed_at is None:
-                raise ValidationError({
-                    'detail': (
-                        f'"{existing.domain}" is already in your Domain Registry. '
-                        'Open the Domains page to manage it.'
-                    )
-                })
-            # Reuse the previously-removed domain row (the domain column is
-            # globally unique) and authorize it instantly (v2.0.0). This keeps
-            # the "remove and re-add freely" promise without consuming a new
-            # plan slot — the row already existed — so the limit checks below
-            # do not apply to it. Its links were deleted along with the domain,
-            # so a re-added domain starts fresh: purge the soft-deleted links
-            # now, which also frees their slugs for new links.
-            existing.links.filter(removed_at__isnull=False).delete()
-            existing.removed_at = None
-            existing.verified = True
-            existing.save(update_fields=['removed_at', 'verified'])
-            domain = existing
-            # Point the serializer at the restored row so the 201 response
-            # reflects real state (health status, links count, ...).
-            serializer.instance = domain
-        else:
-            if not workspace.can_add_domain:
-                if workspace.is_plan_active():
-                    limit = workspace.effective_domain_limit
-                    raise ValidationError({
-                        'detail': (
-                            f'You have reached the {limit}-domain limit for your plan. '
-                            'Remove a domain or upgrade to a higher plan to add more.'
-                        )
-                    })
-                raise ValidationError({
-                    'detail': (
-                        'Your free trial ended. Upgrade to any plan to keep adding domains.'
-                        if not workspace.trial_active
-                        else 'Your free trial includes 1 domain. Upgrade to add more.'
-                    )
-                })
-            domain = serializer.save(workspace=workspace)
-            # Instant authorization (v2.0.0): registering the domain from the
-            # account is proof enough of ownership — no TXT record needed. The
-            # domain is authorized the moment it exists, so links can go live as
-            # soon as DNS points at us.
-            domain.verified = True
-            domain.save(update_fields=['verified'])
-        try:
-            domain.run_health_check()
-        except Exception:
-            # A health check must never fail the create request.
-            domain.health_status = DomainRegistry.HealthStatus.DEGRADED
-            domain.last_checked = timezone.now()
-            domain.save(update_fields=['health_status', 'last_checked'])
-
-    def perform_destroy(self, instance):
-        # Soft delete: a verified domain (and its links) keep counting toward
-        # the plan limit until the current period ends, so users can't churn
-        # domains to dodge their limit. Unverified domains (e.g. a typo) never
-        # counted, so removing one costs nothing. Links are soft-deleted along
-        # with the domain and stop serving.
-        stamp = timezone.now()
-        instance.links.update(removed_at=stamp)
-        instance.removed_at = stamp
-        instance.save(update_fields=['removed_at'])
-
-    @action(detail=True, methods=['post'])
-    def recheck(self, request, pk=None):
-        domain = self.get_object()
-        domain.run_health_check()
-        return Response({
-            'status': 'ok',
-            'health_status': domain.health_status,
-            'points_to_server': domain.points_to_server,
-            'health_detail': domain.health_detail,
-            'last_checked': domain.last_checked,
-        })
-
-    @action(detail=True, methods=['post'])
-    def verify(self, request, pk=None):
-        # Legacy ownership-verification endpoint, kept for compatibility. With
-        # instant authorization a domain is already verified (authorized) from
-        # the moment it's registered, so this is a no-op that always reports
-        # success.
-        domain = self.get_object()
-        domain.verified = True
-        domain.save(update_fields=['verified'])
-        return Response({
-            'status': 'ok',
-            'verified': True,
-            'points_to_server': domain.points_to_server,
-            'verificationRecord': domain.verification_record,
-        })
-
-
-@api_view(['GET'])
-@permission_classes([AllowAny])
-def redirect_click(request, slug):
-    link = get_object_or_404(
-        TrackingLink, slug=slug, status=TrackingLink.Status.ACTIVE,
-        removed_at__isnull=True,
-    )
-
-    ip = request.META.get('REMOTE_ADDR', '127.0.0.1')
-    forwarded = request.META.get('HTTP_X_FORWARDED_FOR')
-    if forwarded:
-        ip = forwarded.split(',')[0].strip()
-    user_agent = request.META.get('HTTP_USER_AGENT', '')
-    workspace = link.workspace
-
-    if workspace.plan_status == 'suspended':
-        # Suspended workspaces no longer pass traffic through. Links return
-        # 410 Gone so visitors know the link is inactive and no abuse can
-        # originate from a suspended account's links. The workspace owner is
-        # told to renew to restore their links.
-        return HttpResponse(
-            '<!DOCTYPE html><html><head><title>Link inactive</title></head>'
-            '<body style="font-family:system-ui,sans-serif;text-align:center;padding:60px 20px;">'
-            '<h1 style="font-size:18px;color:#333;">This link is no longer active</h1>'
-            '<p style="color:#666;">The workspace that owned this link has been suspended. '
-            'Please contact the link owner.</p></body></html>',
-            status=410,
-            content_type='text/html',
-        )
-
-    result = classify_request(link, ip, user_agent, workspace)
-    device = result['device']
-    location = result['location']
-
-    ClickLog.objects.create(
-        link=link,
-        ip=ip,
-        country=location['country'],
-        country_code=location['country_code'],
-        region=location['region'],
-        city=location['city'],
-        device_class=device['device_class'],
-        os_family=device['os_family'],
-        browser=device['browser'],
-        user_agent=user_agent,
-        is_bot=result['is_bot'],
-        reason=result['reason'],
-        decision=result['decision'],
-        matched_rule=result['matched_rule'],
-    )
-
-    if result['is_bot']:
-        TrackingLink.objects.filter(id=link.id).update(bot_clicks=F('bot_clicks') + 1)
-    TrackingLink.objects.filter(id=link.id).update(total_clicks=F('total_clicks') + 1)
-
-    if result['decision'] in ('blocked', 'challenged'):
-        # Suspicious traffic is handled per this link's bot policy, but the
-        # hard stops (403 / 404) are reserved for traffic that is demonstrably
-        # automated: a UA parsed as a bot, or caught by the UA heuristics. A
-        # person blocked by a geo/device/IP-rule block is still a person — their
-        # browser should land somewhere neutral (the safe page), never on a
-        # hard error page.
-        is_ua_bot = result['device']['is_bot'] or result['reason'] == 'Suspicious UA'
-        if is_ua_bot and link.bot_action == TrackingLink.BotAction.BLOCK:
-            return HttpResponse(status=403)
-        if is_ua_bot and link.bot_action == TrackingLink.BotAction.NOT_FOUND:
-            return HttpResponse(status=404)
-        safe = link.safe_url or get_safe_destination(workspace, request)
-        return HttpResponseRedirect(redirect_to=_merge_query_params(safe, request.query_params))
-
-    return HttpResponseRedirect(redirect_to=_merge_query_params(link.destination_url, request.query_params))
-
-
-@api_view(['GET'])
-@permission_classes([AllowAny])
-def neutral_page(request):
-    # Built-in safe destination: suspicious/automated traffic is bounced to the
-    # configured default rather than shown an in-house page. Workspaces can
-    # override this entirely by setting their own safe_destination.
-    return HttpResponseRedirect(redirect_to=getattr(settings, 'NEUTRAL_DEFAULT_DESTINATION', 'https://google.com'))
 
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def abuse_report(request):
-    """Public abuse-reporting endpoint. Anyone can report a link or workspace.
-    Reports are stored for admin review; the reporter is thanked via a generic
-    response. No data is exposed about the link or workspace."""
-    slug = request.data.get('slug', '').strip()
-    destination_url = request.data.get('destination_url', '').strip()
-    reporter_email = request.data.get('reporter_email', '').strip()
-    reason = request.data.get('reason', '').strip()
-
-    if not slug and not destination_url:
-        return Response(
-            {'errors': [{'field': 'slug', 'detail': 'Provide a link slug or destination URL to report.'}]},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    link = None
-    workspace = None
-    if slug:
-        try:
-            link = TrackingLink.objects.select_related('workspace').get(slug=slug)
-            workspace = link.workspace
-        except TrackingLink.DoesNotExist:
-            pass
-
-    AbuseReport.objects.create(
-        link=link,
-        workspace=workspace,
-        destination_url=destination_url or (link.destination_url if link else ''),
-        reporter_email=reporter_email,
-        reason=reason,
-    )
-
-    logger.warning(
-        'Abuse report received: slug=%s dest=%s reporter=%s reason=%s',
-        slug, destination_url, reporter_email, reason[:200],
-    )
-
-    return Response({'detail': 'Report received. Thank you.'}, status=status.HTTP_201_CREATED)
+    return Response({'status': 'ok'})
 
 
 @api_view(['POST'])
@@ -1567,7 +1125,6 @@ class IPRuleViewSet(viewsets.ModelViewSet):
         workspace = get_user_workspace(self.request.user)
         if not workspace:
             raise PermissionError('No workspace found')
-        workspace.ensure_trial_started()
         if workspace.suspended:
             raise ValidationError({
                 'detail': (
@@ -1575,11 +1132,11 @@ class IPRuleViewSet(viewsets.ModelViewSet):
                     'keep using IP rules.'
                 )
             })
-        if not (workspace.has_plan_access() or workspace.trial_active):
+        if not workspace.has_plan_access():
             raise ValidationError({
                 'detail': (
-                    'IP rules are a paid feature. Your free trial ended — '
-                    'upgrade to any plan to keep using them.'
+                    'A plan is required to use IP rules. '
+                    'Select a plan to get started.'
                 )
             })
         serializer.save(workspace=workspace, created_by=self.request.user)
@@ -1591,8 +1148,8 @@ class IPRuleViewSet(viewsets.ModelViewSet):
             return Response({'error': 'No workspace found'}, status=status.HTTP_404_NOT_FOUND)
 
         try:
-            click = ClickLog.objects.select_related('link').get(id=pk, link__workspace=workspace)
-        except ClickLog.DoesNotExist:
+            event = TrackerEvent.objects.get(id=pk, workspace=workspace)
+        except TrackerEvent.DoesNotExist:
             return Response(
                 {'errors': [{'field': 'id', 'detail': 'Blocked entry not found'}]},
                 status=status.HTTP_404_NOT_FOUND,
@@ -1600,7 +1157,7 @@ class IPRuleViewSet(viewsets.ModelViewSet):
 
         rule, created = IPRule.objects.get_or_create(
             workspace=workspace,
-            ip_or_cidr=click.ip,
+            ip_or_cidr=event.ip,
             action=IPRule.Action.ALLOW,
             defaults={
                 'reason': 'Whitelisted from blocked list',
@@ -1629,7 +1186,6 @@ class CountryRuleViewSet(viewsets.ModelViewSet):
         workspace = get_user_workspace(self.request.user)
         if not workspace:
             raise PermissionError('No workspace found')
-        workspace.ensure_trial_started()
         if workspace.suspended:
             raise ValidationError({
                 'detail': (
@@ -1637,11 +1193,11 @@ class CountryRuleViewSet(viewsets.ModelViewSet):
                     'keep using country rules.'
                 )
             })
-        if not (workspace.has_plan_access() or workspace.trial_active):
+        if not workspace.has_plan_access():
             raise ValidationError({
                 'detail': (
-                    'Country rules are a paid feature. Your free trial ended — '
-                    'upgrade to any plan to keep using them.'
+                    'A plan is required to use country rules. '
+                    'Select a plan to get started.'
                 )
             })
         serializer = self.get_serializer(data=request.data)

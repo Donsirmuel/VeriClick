@@ -1,0 +1,29 @@
+Subject: Follow-up: Unsuspension Request for getvericlick.site
+
+To: abuse@radix.support
+
+Dear Mr. Somarajan / Radix Abuse Team,
+
+I am following up on my unsuspension request for getvericlick.site submitted via your portal at https://abuse.radix.website/unsuspension.
+
+Domain: getvericlick.site
+Registrant: samuelolaonipekun050@gmail.com
+Reported phishing URL: https://getvericlick.site/r/44wkekw/
+
+I want to confirm that all required steps have been completed:
+
+1. The phishing URL has been permanently removed (returns 410 Gone).
+2. The /r/* path has been completely removed from our web server configuration. The domain no longer serves any tracked links.
+3. All existing product-domain links have been disabled and users notified.
+4. A full suite of security measures has been implemented including destination URL blocklists, Google Safe Browsing integration, abuse reporting, rate limiting, daily re-scanning, TLS fingerprinting, and a behavioral scoring model.
+
+The registrar (Namecheap) has confirmed they will lift their clientHold once the serverHold is removed by the Registry.
+
+I respectfully request that the serverHold be lifted at your earliest convenience. I am happy to provide any additional information or documentation you may need.
+
+Thank you for your time and consideration.
+
+Best regards,
+Samuel Olaonipekun
+samuelolaonipekun050@gmail.com
+MAILIONDEV TECHNOLOGY LTD (RC 9233525)

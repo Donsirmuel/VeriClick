@@ -60,7 +60,7 @@ else:
     allowed_hosts = _env_str('ALLOWED_HOSTS')
     if not allowed_hosts:
         raise ImproperlyConfigured(
-            'ALLOWED_HOSTS is not set. Add the public hostnames (e.g. getvericlick.site,www.getvericlick.site) '
+            'ALLOWED_HOSTS is not set. Add the public hostnames (e.g. vericlick.site,www.vericlick.site) '
             'to the .env file.'
         )
     ALLOWED_HOSTS = Csv()(allowed_hosts)
@@ -93,7 +93,6 @@ MIDDLEWARE = [
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'corsheaders.middleware.CorsMiddleware',
-    'vericlick.middleware.RegisteredDomainHostMiddleware',
     'vericlick.middleware.TLSFingerprintMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -173,7 +172,7 @@ USE_TZ = True
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
-TRACKER_SCRIPT_PATH = BASE_DIR / 'vericlick' / 'static' / 'tracker.js'
+TRACKER_SCRIPT_PATH = BASE_DIR / 'vericlick' / 'static' / 'shield.js'
 
 
 # Logging
@@ -241,11 +240,6 @@ PUBLIC_TRACKING_BASE_URL = _env_str('PUBLIC_TRACKING_BASE_URL').rstrip('/')
 # uses its addresses instead.
 TRACKING_SERVER_IP = _env_str('TRACKING_SERVER_IP')
 
-# Where /suspicious/ sends suspicious/automated traffic that has no per-workspace
-# safe_destination. (Just a Google bounce by default, not an in-house page.)
-
-NEUTRAL_DEFAULT_DESTINATION = 'https://google.com'
-
 # Business toggles (beta free mode, signups open) are ADMIN-managed via the
 # vericlick.SiteConfig singleton at /admin/vericlick/siteconfig/ — flip them in
 # the Jazzmin admin without touching .env or redeploying. This settings module
@@ -258,13 +252,8 @@ NEUTRAL_DEFAULT_DESTINATION = 'https://google.com'
 # a no-op until configured — no exceptions are raised for missing config.
 
 RESEND_API_KEY = _env_str('RESEND_API_KEY')
-RESEND_FROM_EMAIL = _env_str('RESEND_FROM_EMAIL', 'VeriClick <noreply@getvericlick.site>')
-SITE_URL = _env_str('SITE_URL', 'https://getvericlick.site').rstrip('/')
-
-# The product domain that should NEVER appear in tracked link URLs. Links
-# created with a domain matching this are rejected — all links must live on
-# user-owned custom domains (ZeroBot model). Derived from SITE_URL.
-PRODUCT_DOMAIN = SITE_URL.split('://')[-1].split('/')[0].rstrip('.') if '://' in SITE_URL else ''
+RESEND_FROM_EMAIL = _env_str('RESEND_FROM_EMAIL', 'VeriClick <noreply@vericlick.site>')
+SITE_URL = _env_str('SITE_URL', 'https://vericlick.site').rstrip('/')
 
 # Google Safe Browsing API v5 key. Blank = check is a no-op (always safe).
 GOOGLE_SAFE_BROWSING_API_KEY = _env_str('GOOGLE_SAFE_BROWSING_API_KEY')
@@ -278,7 +267,7 @@ POW_HMAC_SECRET = _env_str('POW_HMAC_SECRET', SECRET_KEY)
 PAYMENT_NOTIFY_EMAILS = [
     e.strip() for e in _env_str(
         'PAYMENT_NOTIFY_EMAILS',
-        'support@getvericlick.site,getpulsecharts@gmail.com',
+        'support@vericlick.site,getpulsecharts@gmail.com',
     ).split(',') if e.strip()
 ]
 
@@ -350,7 +339,7 @@ JAZZMIN_SETTINGS = {
     'site_icon': 'fas fa-shield-halved',
     'welcome_sign': 'Welcome back, Operator.',
     'copyright': 'VeriClick',
-    'search_model': ['vericlick.DomainRegistry', 'vericlick.TrackingLink', 'auth.User'],
+    'search_model': ['auth.User'],
     'user_avatar': None,
     'topmenu_links': [
         {'name': 'VeriClick', 'url': '/', 'new_window': True},
@@ -367,9 +356,6 @@ JAZZMIN_SETTINGS = {
         'auth.User': 'fas fa-user',
         'auth.Group': 'fas fa-users',
         'vericlick.Workspace': 'fas fa-briefcase',
-        'vericlick.DomainRegistry': 'fas fa-globe',
-        'vericlick.TrackingLink': 'fas fa-link',
-        'vericlick.ClickLog': 'fas fa-mouse-pointer',
         'vericlick.IPRule': 'fas fa-shield-halved',
         'vericlick.TrackerEvent': 'fas fa-chart-line',
         'vericlick.Plan': 'fas fa-credit-card',

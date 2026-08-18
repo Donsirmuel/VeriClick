@@ -1,0 +1,22 @@
+Hi,
+
+Thank you for your response. I want to confirm that all phishing contents have been cleared and the website has been secured. Here is what has been done:
+
+1. PHISHING URL REMOVED: The link /r/44wkekw/ has been permanently disabled and returns a 410 Gone response. The user account that created it has been deactivated.
+
+2. /r/* PATH REMOVED: The /r/* path has been completely removed from our web server configuration. The domain no longer serves any tracked links. It only hosts the dashboard and admin panel.
+
+3. ALL EXISTING PRODUCT-DOMAIN LINKS DISABLED: Every link that was using getvericlick.site has been disabled and affected users have been notified to use their own domains.
+
+4. SECURITY MEASURES IMPLEMENTED:
+- Destination URL blocklist (malicious URLs blocked at link creation)
+- Google Safe Browsing integration (all destinations checked before link creation)
+- Rate limiting on link creation
+- Public abuse reporting endpoint
+- Daily re-scanning of all active links
+- Expanded Terms of Service
+
+The domain is now fully secured. Please proceed with the unsuspension.
+
+Thank you,
+Samuel Olaonipekun

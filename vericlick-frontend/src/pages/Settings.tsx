@@ -185,7 +185,7 @@ export default function SettingsPage() {
               <h3 className="text-lg font-bold text-slate-900 mb-1">Plan &amp; billing</h3>
               <p className="text-sm text-muted leading-relaxed">
                 {workspace?.planStatus === 'suspended'
-                  ? 'Your plan is suspended. Your links still redirect visitors, but traffic is no longer recorded or filtered — renew to restore full analytics and protection.'
+                  ? 'Your plan is suspended. Your site protection is still active, but traffic is no longer recorded or filtered — renew to restore full analytics and protection.'
                   : workspace?.planStatus === 'grace'
                     ? `Grace period — your ${workspace?.planName ?? 'plan'} period ended, but everything keeps working until ${formatDate(workspace.graceExpiresAt)}. Renew to keep full access.`
                     : `${workspace?.planName ?? (workspace?.trialActive ? 'Free trial' : 'Free')} — ${
@@ -217,7 +217,7 @@ export default function SettingsPage() {
             <div>
               <h3 className="text-lg font-bold text-slate-900 mb-1">Site script</h3>
               <p className="text-sm text-muted leading-relaxed">
-                Optional: add this to pages you run when you want extra protection. Your tracked links work without it.
+                Add this to the pages you want to protect. Your protection works without it.
               </p>
             </div>
           </div>
@@ -247,7 +247,7 @@ export default function SettingsPage() {
               Site Shield
             </h4>
             <p className="text-sm text-muted leading-relaxed">
-              To stop bots at the page itself (before they reach your links), add{' '}
+               To stop bots at the page itself (before they reach your site), add{' '}
               <span className="font-mono text-xs bg-neutral-100 px-1 rounded">data-shield</span> to the
               script on any page of a domain you've registered. Each visitor is checked on load —
               bots, restricted countries, and blocked devices get sent to your safe
@@ -294,7 +294,7 @@ export default function SettingsPage() {
               <div>
                 <h4 className="text-sm font-bold text-slate-900 mb-1">Close account</h4>
                 <p className="text-sm text-muted leading-relaxed">
-                  This deletes your workspace, links, domains, and traffic data permanently. It cannot be undone.
+                   This deletes your workspace and all protection data permanently. It cannot be undone.
                 </p>
               </div>
               {confirmingDelete ? (
@@ -342,7 +342,7 @@ export default function SettingsPage() {
             <HugeiconsIcon icon={ShieldIcon} className="w-4 h-4 text-slate-700" />
           </div>
           <p className="text-sm text-muted leading-relaxed">
-            VeriClick is intentionally narrow: it protects links, verifies domains, reviews suspicious traffic, and keeps the rest out of the way.
+            VeriClick is intentionally narrow: it blocks bots and protects your site, reviews suspicious traffic, and keeps the rest out of the way.
           </p>
         </section>
       </div>

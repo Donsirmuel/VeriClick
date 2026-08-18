@@ -301,34 +301,4 @@ def send_plan_suspended_email(user, workspace, plan, grace_ended_at):
     return send_email(user.email, subject, _layout(body))
 
 
-def send_domain_migration_email(user, workspace, disabled_count):
-    """Notifies a user that their links on the shared product domain have been
-    disabled and they need to add a custom domain to restore them."""
-    subject = 'Action needed: Add a custom domain to your VeriClick links'
-    body = f"""
-<p style="color:#a3a3a3;font-size:15px;">Hi {user.first_name or user.username},</p>
-<p style="color:#d4d4d4;font-size:15px;line-height:1.6;">
-  We've upgraded how VeriClick handles link hosting. All tracked links now
-  require your own custom domain instead of running on the shared VeriClick domain.
-</p>
-<p style="color:#d4d4d4;font-size:15px;line-height:1.6;">
-  <strong style="color:#ffffff;">{disabled_count} link(s)</strong> in your workspace
-  <strong style="color:#ffffff;">{workspace.name}</strong> have been temporarily
-  disabled until you add and verify a custom domain.
-</p>
-<p style="color:#d4d4d4;font-size:15px;line-height:1.6;">
-  This protects you and your visitors: your links will always resolve on a domain
-  you control, not a shared platform domain.
-</p>
-<div style="text-align:center;margin:32px 0;">
-  <a href="{settings.SITE_URL}/app/domains"
-     style="background-color:#ffffff;color:#0a0a0a;padding:14px 28px;border-radius:10px;text-decoration:none;font-weight:bold;font-size:14px;">
-    Add your domain
-  </a>
-</div>
-<p style="color:#525252;font-size:13px;margin-bottom:0;">
-  If you need help setting up your domain, reply to this email or visit our
-  <a href="{settings.SITE_URL}/help" style="color:#a3a3a3;">help page</a>.
-</p>
-"""
-    return send_email(user.email, subject, _layout(body))
+

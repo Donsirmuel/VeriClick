@@ -73,7 +73,7 @@ export default function Login() {
               Verify every click.<br />Block every bot.
             </h2>
             <p className="text-neutral-400 text-lg leading-relaxed max-w-md">
-              VeriClick checks every click against your rules before it reaches your page. Start free — 1 domain, 1 link for 7 days.
+              VeriClick checks every visitor against your rules before they reach your page. Start free for 7 days.
             </p>
           </div>
 
@@ -125,7 +125,7 @@ export default function Login() {
               <span aria-hidden>←</span> Back to home
             </Link>
             <h1 className="text-3xl font-bold text-white mb-2">Welcome back</h1>
-            <p className="text-neutral-400">Sign in to your workspace to manage your links and traffic.</p>
+            <p className="text-neutral-400">Sign in to your workspace to manage your site protection and traffic.</p>
           </div>
 
           <div className="bg-neutral-950 border border-neutral-800 rounded-2xl p-6 sm:p-8">

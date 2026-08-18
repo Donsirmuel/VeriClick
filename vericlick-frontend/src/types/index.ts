@@ -1,45 +1,19 @@
-export type HealthStatus = 'healthy' | 'degraded' | 'blacklisted'
-export type LinkStatus = 'active' | 'paused' | 'disabled'
 export type TimeRange = '7d' | '30d' | '90d'
-export type DiagnosisLevel = 'ok' | 'warn' | 'error'
 export type BillingMode = 'subscription' | 'period'
 export type PaymentMethod = 'card' | 'crypto' | 'bank_transfer' | 'mobile_money'
 export type CountryRuleAction = 'allow' | 'deny'
 export type BotAction = 'safe' | 'not_found' | 'block'
 export type DeviceClass = 'mobile' | 'tablet' | 'desktop' | 'bot' | 'other'
 
-export interface DomainDiagnosisFinding {
-  key: string
-  level: DiagnosisLevel
-  title: string
-  message: string
-  fix?: string
-}
-
-export interface DomainDiagnosis {
-  generatedAt: string
-  trackingHost: string
-  expectedIps: string[]
-  verified: boolean
-  pointsToUs: boolean
-  apexResolves: boolean
-  ready: boolean
-  findings: DomainDiagnosisFinding[]
-}
-
 export interface DashboardStats {
-  totalClicks24h: number
+  totalVisits24h: number
   clicksTrend: number | null
-  botTrafficBlocked: number
+  botsBlocked: number
   blocked: number
-  challenged: number
   allowed: number
   botTrafficPercentage: number
-  activeLinks: number
-  domainsHealthy: number
-  domainsDegraded: number
-  domainsBlacklisted: number
-  lastDomainScan: string | null
+  protectionMode: string
+  botAction: string
 }
 
 export interface TrafficData {
@@ -51,72 +25,14 @@ export interface TrafficData {
 export interface ActivityEntry {
   id: string
   ip: string
-  country: string
-  countryCode: string
-  region: string
-  city: string
-  device: string
-  deviceClass: string
-  osFamily: string
-  browser: string
   reason: string | null
   reasonLabel: string
-  decision: 'allowed' | 'blocked' | 'challenged'
-  time: string
-  slug: string
+  verdict: string
+  pageUrl: string
+  referrer: string
   isBot: boolean
-}
-
-export interface TrackingLink {
-  id: string
-  slug: string
-  destinationUrl: string
-  domain: string | null
-  domainHealth: HealthStatus | null
-  trackingDomainReady: boolean | null
-  trackingUrl: string
-  totalClicks: number
-  botClicks: number
-  humanClicks: number
-  status: LinkStatus
-  allowedDevices: DeviceClass[]
-  allowedCountries: string[]
-  botAction: BotAction
-  safeUrl: string
-  createdAt: string
-}
-
-export interface LinkCreateInput {
-  slug: string
-  destinationUrl: string
-  domain?: string | null
-  status?: LinkStatus
-  allowedDevices?: DeviceClass[]
-  allowedCountries?: string[]
-  botAction?: BotAction
-  safeUrl?: string
-}
-
-export interface Domain {
-  id: string
-  domain: string
-  healthStatus: HealthStatus
-  verified: boolean
-  pointsToServer: boolean
-  verificationToken: string
-  verificationRecord: string
-  lastChecked: string | null
-  linksCount: number
-  ready: boolean
-  healthDetail?: DomainDiagnosis | null
-  dnsSetup: {
-    label: string
-    host: string
-    target: string
-    trackingHost: string
-    sentence: string
-    note?: string
-  }
+  botScore: number
+  botVerdict: string
   createdAt: string
 }
 
@@ -125,19 +41,12 @@ export interface Workspace {
   name: string
   trackerSecret: string
   safeDestination: string
-  lastDomainScanAt: string | null
   plan: string | null
   planName: string | null
   planBillingMode: BillingMode | null
   planExpiresAt: string | null
   planStatus: 'active' | 'grace' | 'suspended' | 'none' | null
   graceExpiresAt: string | null
-  domainLimit: number | null
-  domainsUsed: number
-  canAddDomain: boolean
-  linkLimit: number | null
-  linksUsed: number
-  canAddLink: boolean
   trialExpiresAt: string | null
   trialActive: boolean
 }
@@ -146,7 +55,6 @@ export interface Plan {
   code: string
   name: string
   monthlyPrice: number
-  domainLimit: number | null
   features: string[]
   sortOrder: number
 }
@@ -247,15 +155,9 @@ export interface BlockedIPEntry {
   reasonLabel: string
   decision: 'blocked'
   isBot: boolean
-  matchedRule: string
-  slug: string
+  pageUrl: string
   country: string
-  countryCode: string
-  region: string
-  city: string
-  deviceClass: string
-  osFamily: string
-  browser: string
+  verdict: string
   createdAt: string
 }
 
@@ -297,8 +199,18 @@ export interface BreakdownRow {
   blocked: number
 }
 
-export interface ShieldEvaluateResponse {
-  verdict: 'allowed' | 'blocked'
+export interface ShieldConfig {
+  id: string
+  protectionMode: 'strict' | 'balanced' | 'monitor'
+  botAction: 'block' | 'honeypot' | 'log'
+  protectedPaths: string[]
+  blockedPaths: string[]
+  rateLimitPerHour: number
+  updatedAt: string
+}
+
+export interface ShieldVerifyResponse {
+  verdict: 'allow' | 'block' | 'challenge'
   isBot: boolean
   reason: string
   reasonLabel: string

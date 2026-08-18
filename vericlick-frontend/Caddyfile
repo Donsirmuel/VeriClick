@@ -1,41 +1,15 @@
 # VeriClick frontend + reverse proxy (Caddy).
 #
-# TWO layers of HTTPS:
-#
-# 1. Static product domains (getvericlick.site, etc.) — listed in SITE_ADDRESSES,
-#    certificates issued automatically on boot via Let's Encrypt.
-#
-# 2. Customer-owned custom tracking domains (the core product feature). Rather
-#    than hard-coding every customer domain into this file, a dedicated site
-#    block listens on :443 for ANY host and uses Caddy ON-DEMAND TLS: when a
-#    visitor lands on a host without a certificate, Caddy asks our backend
-#    (/api/internal/tls-allowed/) whether the domain is a registered AND
-#    verified VeriClick domain. Only then does it mint a certificate. This
-#    means a customer can point their own domain at this server and their
-#    tracked links just work — no per-domain config, no redeploys.
-#
-# Automatic HTTPS via Let's Encrypt: as long as a domain's A/AAAA records
-# point at this server and ports 80/443 are open, Caddy obtains and renews
-# the certificates on its own — nothing to manage.
+# Product domain serves the SPA + API + shield endpoints.
+# No customer domains, no on-demand TLS, no /r/* redirects.
+# The script model means customers embed shield.js from their own domain.
 
 {
-	# Always issue real (production) certificates. Without this, Caddy can fall
-	# back to the Let's Encrypt STAGING CA, which browsers won't trust.
 	acme_ca https://acme-v02.api.letsencrypt.org/directory
-
-	# On-demand TLS gate. Caddy sends GET http://backend:8000/api/internal/tls-allowed/?domain=<host>
-	# before issuing a certificate for an unknown host and only proceeds on a
-	# 200. `burst` throttles rapid-fire requests to protect the Let's Encrypt
-	# quota. (The `interval` option was removed in newer Caddy versions.)
-	on_demand_tls {
-		ask http://backend:8000/api/internal/tls-allowed/
-	}
-
-	# Layer 3: JA4 TLS fingerprinting plugin
 	order ja3_ja4 before reverse_proxy
 }
 
-# ---- Static product domains (SPA + product API + admin) ----
+# ---- Static product domain (SPA + API + admin) ----
 {$SITE_ADDRESSES} {
 	encode gzip
 
@@ -58,13 +32,6 @@
 	handle /static/* {
 		reverse_proxy backend:8000
 	}
-	# /r/* intentionally NOT served on the product domain. All tracked links
-	# must live on user-owned custom domains (ZeroBot model). Serving /r/*
-	# here would make the product domain appear in customer-facing URLs,
-	# which is a phishing risk. See NAMECHEAP_RESPONSE.md (NC-GLI-5245).
-	handle /suspicious* {
-		reverse_proxy backend:8000
-	}
 	handle /robots.txt {
 		reverse_proxy backend:8000
 	}
@@ -80,40 +47,7 @@
 	}
 }
 
-# ---- Catch-all for customer custom domains (on-demand TLS) ----
-#
-# Accepts ANY host on port 443. Only tracked-link redirection (/r/*) and the
-# suspicious-traffic diverter (/suspicious*) are proxied to Django; everything
-# else is a 404 so a random domain pointed at this server can't expose the SPA
-# or admin. Certificates are minted on first HTTPS visit — the first request is
-# slower, subsequent ones use the cached cert.
-https:// {
-	encode gzip
-
-	tls {
-		on_demand
-	}
-
-	# Layer 3: JA4 TLS fingerprinting for customer domains
-	ja3_ja4
-
-	handle /r/* {
-		reverse_proxy backend:8000 {
-			header_up X-JA4 {tls.ja4}
-			header_up X-JA3 {tls.ja3}
-		}
-	}
-	handle /suspicious* {
-		reverse_proxy backend:8000
-	}
-	handle {
-		respond "Not found" 404
-	}
-}
-
 # ---- Port 80: redirect to HTTPS, keeping ACME http-01 challenges working ----
-# Caddy serves /.well-known/acme-challenge/* automatically; everything else on
-# any host goes to https.
 :80 {
 	redir https://{host}{uri} permanent
 }

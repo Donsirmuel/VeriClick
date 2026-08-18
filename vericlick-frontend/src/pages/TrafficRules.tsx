@@ -64,7 +64,7 @@ export default function TrafficRulesPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Traffic Rules</h1>
           <ReadMore className="max-w-3xl mt-1" lines={2}>
-            Set the audience rules VeriClick applies to every tracked link: which IPs,
+            Set the audience rules VeriClick applies to your site: which IPs,
             countries, and devices can get through — and which get diverted to your safe
             destination. Rules are checked in this order: IP allow → IP deny → country →
             device/OS. An allow rule for an IP or country always wins.
@@ -203,13 +203,13 @@ function IpTab({ canManage }: { canManage: boolean }) {
     <div>
       <div className="flex items-center justify-between mb-4">
         <p className="text-sm text-muted max-w-2xl">
-          Allow specific IPs through or block suspicious addresses before they reach your links.
+          Allow specific IPs through or block suspicious addresses before they reach your site.
           <HelpTooltip text="An IP address is like a computer's home address on the internet. Allow rules let specific IPs through and are checked first — they always win, so whitelisted IPs are never flagged again. Deny rules block traffic next. After that, automated bot detection and rate limits apply. You can use CIDR ranges like 192.168.1.0/24 to cover many addresses at once." side="bottom" />
         </p>
         <button
           onClick={openCreate}
           disabled={!canManage}
-          title={canManage ? undefined : 'Traffic rules are a paid feature. Your free trial ended — upgrade to continue.'}
+          title={canManage ? undefined : 'A plan is required to manage traffic rules. Choose a plan to get started.'}
           className="bg-black hover:bg-neutral-800 disabled:bg-neutral-300 disabled:cursor-not-allowed text-white px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-sm shrink-0"
         >
           <HugeiconsIcon icon={PlusSignIcon} className="w-4 h-4" />
@@ -285,7 +285,7 @@ function IpTab({ canManage }: { canManage: boolean }) {
           <EmptyState
             icon={ShieldIcon}
             title="No IP rules yet"
-            description="Create rules to allow trusted IPs through or block suspicious traffic before it reaches your links."
+            description="Create rules to allow trusted IPs through or block suspicious traffic before it reaches your site."
             action={canManage ? { label: 'Add your first rule', onClick: openCreate } : undefined}
           />
         </div>
@@ -497,7 +497,7 @@ function CountriesTab({ canManage, queryClient }: { canManage: boolean; queryCli
         <button
           onClick={openCreate}
           disabled={!canManage}
-          title={canManage ? undefined : 'Traffic rules are a paid feature. Your free trial ended — upgrade to continue.'}
+          title={canManage ? undefined : 'A plan is required to manage traffic rules. Choose a plan to get started.'}
           className="bg-black hover:bg-neutral-800 disabled:bg-neutral-300 disabled:cursor-not-allowed text-white px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-sm shrink-0"
         >
           <HugeiconsIcon icon={PlusSignIcon} className="w-4 h-4" />
@@ -576,7 +576,7 @@ function CountriesTab({ canManage, queryClient }: { canManage: boolean; queryCli
           <EmptyState
             icon={Globe02Icon}
             title="No country rules yet"
-            description="Deny or allow entire countries to control exactly which audiences can reach your links."
+            description="Deny or allow entire countries to control exactly which visitors can reach your site."
             action={canManage ? { label: 'Add your first rule', onClick: openCreate } : undefined}
           />
         </div>
@@ -715,7 +715,7 @@ function DevicesTab({ canManage, queryClient }: { canManage: boolean; queryClien
           <div className="bg-white border border-neutral-200 rounded-2xl p-6 shadow-sm">
             <h3 className="text-lg font-bold text-slate-900 mb-1">Allowed device types</h3>
             <p className="text-sm text-muted mb-4">
-              When set, only these device types can reach your links. Leave all unchecked to allow every device.
+              When set, only these device types can reach your site. Leave all unchecked to allow every device.
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {DEVICE_CLASSES.map(({ value, label, desc }) => (
@@ -780,7 +780,7 @@ function DevicesTab({ canManage, queryClient }: { canManage: boolean; queryClien
             <button
               onClick={save}
               disabled={!canManage || !dirty || saveMutation.isPending}
-              title={canManage ? undefined : 'Traffic rules are a paid feature. Your free trial ended — upgrade to continue.'}
+              title={canManage ? undefined : 'A plan is required to manage traffic rules. Choose a plan to get started.'}
               className="bg-black hover:bg-neutral-800 disabled:bg-neutral-300 disabled:cursor-not-allowed text-white px-6 py-2.5 rounded-xl text-sm font-bold transition-all disabled:opacity-50"
             >
               {saveMutation.isPending ? 'Saving…' : 'Save device rules'}

@@ -5,28 +5,24 @@ import { Globe02Icon, LinkSquare02Icon, ShieldIcon, DashboardSquare01Icon, Arrow
 const sections = [
   {
     icon: Globe02Icon,
-    title: 'Domains',
+    title: 'Script Installation',
     body: (
       <>
-        Your links live on a domain — the web address people type (like{' '}
-        <span className="font-mono text-xs bg-neutral-100 px-1 rounded">your-domain.com</span>). Add your domain first.
-        To make it work with VeriClick you do two quick things, and the app walks you through both:
-        <ol className="list-decimal pl-5 mt-2 space-y-1">
-          <li><strong>Verify you own it</strong> — add a small text record (a TXT record) at your domain provider. This is how VeriClick proves you really control the domain.</li>
-          <li><strong>Point it at VeriClick</strong> — add one short record (an A or CNAME record). Your links then use your own brand instead of the VeriClick URL.</li>
-        </ol>
-        Not sure where to do this? The <strong>Domains</strong> page shows the exact record to add and a “copy” button for each value. Until step 2 is done, your links still work — they just use the VeriClick URL.
+        Your site is protected by a single <strong>&lt;script&gt;</strong> tag — no custom domains, no DNS changes.
+        Copy the script tag from the <strong>Install</strong> page and paste it in your site's{' '}
+        <span className="font-mono text-xs bg-neutral-100 px-1 rounded">&lt;head&gt;</span>.
+        That's it — VeriClick starts collecting visitor signals and blocking bots automatically.
       </>
     ),
   },
   {
     icon: LinkSquare02Icon,
-    title: 'Links',
+    title: 'Bot Detection',
     body: (
       <>
-        Each link has a short code called a <strong>slug</strong> (e.g. summer23). When someone visits your-domain.com/r/summer23,
-        VeriClick checks if they are a bot or a real person before sending them to your destination page. Flagged visitors
-        are sent to your page for blocked visitors instead of your real page.
+        The script collects device signals — browser fingerprint, mouse movement, click timing, and more — and sends them
+        for analysis on every page load. Visitors flagged as bots are shown a challenge page instead of your real content.
+        Legitimate visitors pass through with no friction.
       </>
     ),
   },
@@ -36,7 +32,7 @@ const sections = [
     body: (
       <>
         Every computer has a unique number on the internet called an <strong>IP address</strong>. IP Rules let you allow
-        or block specific addresses from reaching your links. <strong>Allow</strong> rules are checked first and always win,
+        or block specific addresses from reaching your site. <strong>Allow</strong> rules are checked first and always win,
         so whitelisted addresses are never flagged again. <strong>Deny</strong> rules are checked next, followed by automatic
         bot detection and rate limits.
       </>
@@ -45,7 +41,7 @@ const sections = [
   {
     icon: DashboardSquare01Icon,
     title: 'Dashboard',
-    body: 'Shows your traffic, recent activity, and how many bots have been detected and blocked. The numbers update automatically as visitors click your links.',
+    body: 'Shows your traffic, recent activity, and how many bots have been detected and blocked. The numbers update automatically as visitors interact with your site.',
   },
   {
     icon: UserIcon,
@@ -53,7 +49,7 @@ const sections = [
     body: (
       <>
         Your login email is shown in <strong>Settings → Account</strong>. You can close your account there too — it removes
-        your workspace, links, domains, and traffic data permanently. It asks you to type DELETE to confirm, so it can’t
+        your workspace, sites, and traffic data permanently. It asks you to type DELETE to confirm, so it can't
         happen by accident.
       </>
     ),
@@ -66,7 +62,7 @@ export default function HelpPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-8">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Help & Docs</h1>
-          <p className="text-sm text-muted mt-1">Everything you need to get started with VeriClick.</p>
+          <p className="text-sm text-muted mt-1">Everything you need to protect your website with VeriClick.</p>
         </div>
       </div>
 
@@ -92,26 +88,18 @@ export default function HelpPage() {
         <ol className="space-y-3 text-sm text-neutral-300 leading-relaxed">
           <li className="flex gap-3">
             <span className="w-6 h-6 rounded-full bg-white text-black text-xs font-bold flex items-center justify-center shrink-0">1</span>
-            <span>Go to <strong>Domains</strong> and add your domain</span>
+            <span>Go to <strong>Install</strong> and copy the script tag</span>
           </li>
           <li className="flex gap-3">
             <span className="w-6 h-6 rounded-full bg-white text-black text-xs font-bold flex items-center justify-center shrink-0">2</span>
-            <span>Verify you own it — add the text record (TXT) the app shows you, then press <strong>Verify ownership</strong></span>
+            <span>Paste it in your site's <strong>&lt;head&gt;</strong> and deploy</span>
           </li>
           <li className="flex gap-3">
             <span className="w-6 h-6 rounded-full bg-white text-black text-xs font-bold flex items-center justify-center shrink-0">3</span>
-            <span>Point your domain at VeriClick — one short record, and the app shows you exactly what to add</span>
+            <span>VeriClick starts collecting visitor signals automatically</span>
           </li>
           <li className="flex gap-3">
             <span className="w-6 h-6 rounded-full bg-white text-black text-xs font-bold flex items-center justify-center shrink-0">4</span>
-            <span>Go to <strong>Links</strong> and create your first link</span>
-          </li>
-          <li className="flex gap-3">
-            <span className="w-6 h-6 rounded-full bg-white text-black text-xs font-bold flex items-center justify-center shrink-0">5</span>
-            <span>Share the link — VeriClick handles the rest</span>
-          </li>
-          <li className="flex gap-3">
-            <span className="w-6 h-6 rounded-full bg-white text-black text-xs font-bold flex items-center justify-center shrink-0">6</span>
             <span>Check the <strong>Dashboard</strong> to see traffic and blocked bots</span>
           </li>
         </ol>

@@ -10,62 +10,20 @@ import { fetchPricing, validateDiscountCode } from '@/api/pricing'
 import type { Plan } from '@/types'
 
 const COMMON_FEATURES = [
-  'Unlimited tracked links',
-  'Bot detection and rate limiting on every click',
+  'Unlimited page protection',
+  'Bot detection and rate limiting on every request',
   'IP allow/deny rules with whitelisting',
-  'Domain health checks (automatic, in-app)',
-  'DNS TXT domain ownership verification',
+  'Real-time bot detection and site health monitoring',
+  'Single script tag — no DNS records needed',
   'Dashboard with traffic chart and activity feed',
 ]
 
 const HIGHLIGHTS = [
-  { icon: LinkSquare02Icon, title: 'Tracked links', desc: 'Short links for any destination, with a human/bot breakdown for every click.' },
-  { icon: ShieldIcon, title: 'Click verification', desc: 'Every request is checked against IP rules, bot signatures, and rate limits before it reaches your page.' },
-  { icon: Globe02Icon, title: 'Domain health + ownership', desc: 'Domains are health-checked automatically and ownership is proven with a DNS TXT record.' },
-  { icon: Chart03Icon, title: 'Live dashboard', desc: 'Traffic chart, activity feed, domain health, and a blocked-IP review queue — all explained in plain language.' },
+  { icon: ShieldIcon, title: 'Protected pages', desc: 'Paste a single script tag into your site and every page is covered — no per-link setup required.' },
+  { icon: LinkSquare02Icon, title: 'Bot detection', desc: 'Every request is checked against IP rules, bot signatures, and rate limits before it reaches your page.' },
+  { icon: Globe02Icon, title: 'Real-time bot detection', desc: 'Your site is monitored in real time for suspicious traffic patterns and malicious bots.' },
+  { icon: Chart03Icon, title: 'Live dashboard', desc: 'Traffic chart, activity feed, site health, and a blocked-IP review queue — all explained in plain language.' },
 ]
-
-const FREE_FEATURES = [
-  '1 verified domain',
-  '1 tracked link on your own domain',
-  'Full protection engine — bot detection, IP rules, rate limits',
-  '7-day trial, no credit card required',
-]
-
-function FreeTierCard() {
-  return (
-    <div className="relative flex flex-col lg:flex-row lg:items-center lg:justify-between gap-8 bg-neutral-950 border border-dashed border-neutral-600 rounded-3xl p-6 sm:p-8 mb-8">
-      <div className="flex-1">
-        <div className="flex items-center gap-2 mb-3">
-          <h3 className="text-xl font-bold">Free trial</h3>
-          <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-300 bg-neutral-800/70 px-2 py-0.5 rounded-full">7 days</span>
-        </div>
-        <div className="text-4xl font-bold mb-5">
-          $0
-          <span className="text-base text-neutral-500 font-normal">/month</span>
-        </div>
-        <ul className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5 text-sm text-neutral-300">
-          {FREE_FEATURES.map((f) => (
-            <li key={f} className="flex items-start gap-2.5">
-              <HugeiconsIcon icon={CheckmarkCircle02Icon} className="w-4 h-4 text-neutral-400 shrink-0 mt-0.5" />
-              {f}
-            </li>
-          ))}
-        </ul>
-      </div>
-      <div className="shrink-0 flex flex-col items-start lg:items-center gap-3">
-        <Link
-          to="/auth/register"
-          className="inline-flex items-center justify-center gap-2 border border-neutral-600 hover:border-neutral-400 text-white px-6 py-3.5 rounded-xl text-sm font-bold transition-all"
-        >
-          Start free trial
-          <HugeiconsIcon icon={ArrowRight01Icon} className="w-4 h-4" />
-        </Link>
-        <p className="text-xs text-neutral-500">1 domain, 1 link, full protection engine.</p>
-      </div>
-    </div>
-  )
-}
 
 function PlanCard({ plan, popular }: { plan: Plan; popular?: boolean }) {
   return (
@@ -88,14 +46,14 @@ function PlanCard({ plan, popular }: { plan: Plan; popular?: boolean }) {
       </div>
       <div className="grid grid-cols-2 gap-2 mb-6">
         <div className="rounded-xl bg-neutral-800/50 border border-neutral-700/60 px-4 py-3">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 mb-1">Domains</div>
+          <div className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 mb-1">Sites</div>
           <div className="flex items-center gap-1.5 text-sm font-bold text-white">
             <HugeiconsIcon icon={Globe02Icon} className="w-4 h-4" />
-            {plan.domainLimit}
+            Unlimited
           </div>
         </div>
         <div className="rounded-xl bg-neutral-800/50 border border-neutral-700/60 px-4 py-3">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 mb-1">Links</div>
+          <div className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 mb-1">Pages</div>
           <div className="flex items-center gap-1.5 text-sm font-bold text-white">
             <HugeiconsIcon icon={LinkSquare02Icon} className="w-4 h-4" />
             Unlimited
@@ -136,17 +94,16 @@ function LimitsBand({ plans }: { plans: Plan[] }) {
     <div className="mb-8 bg-neutral-950 border border-neutral-800 rounded-3xl p-6 sm:p-8">
       <div className="flex items-center gap-2 mb-1">
         <HugeiconsIcon icon={Globe02Icon} className="w-4 h-4 text-neutral-300" />
-        <h3 className="text-sm font-bold">Domain &amp; link limits</h3>
+        <h3 className="text-sm font-bold">Plan features</h3>
       </div>
       <p className="text-xs text-neutral-400 mb-6">
-        Your plan only sets how many domains you can track — links are never the thing that changes.
+        Your plan sets how many sites you can protect — protected pages are always unlimited.
       </p>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[560px] text-sm">
           <thead>
             <tr className="border-b border-neutral-800 text-neutral-400">
               <th className="text-left pb-3 pr-6 font-semibold">Limit</th>
-              <th className="text-left pb-3 pr-6 font-semibold">Free trial</th>
               {plans.map((p) => (
                 <th key={p.code} className="text-left pb-3 font-bold text-white">{p.name}</th>
               ))}
@@ -154,15 +111,13 @@ function LimitsBand({ plans }: { plans: Plan[] }) {
           </thead>
           <tbody>
             <tr className="border-b border-neutral-900">
-              <td className="py-3 pr-6 text-neutral-400">Tracked domains</td>
-              <td className="py-3 pr-6 text-neutral-300">1</td>
+              <td className="py-3 pr-6 text-neutral-400">Sites protected</td>
               {plans.map((p) => (
-                <td key={p.code} className="py-3 font-bold text-white">{p.domainLimit}</td>
+                <td key={p.code} className="py-3 font-bold text-white">Unlimited</td>
               ))}
             </tr>
             <tr>
-              <td className="py-3 pr-6 text-neutral-400">Tracked links</td>
-              <td className="py-3 pr-6 text-neutral-300">1</td>
+              <td className="py-3 pr-6 text-neutral-400">Protected pages</td>
               {plans.map((p) => (
                 <td key={p.code} className="py-3 font-bold text-white">Unlimited</td>
               ))}
@@ -217,8 +172,7 @@ export default function Pricing() {
             Simple plans.<br />Clear pricing.
           </h1>
           <p className="text-lg text-neutral-400 max-w-2xl mx-auto mb-4 leading-relaxed">
-            Start with a free 7-day trial — 1 domain and 1 link, no credit card required. Then pick
-            the plan that fits your domain count; tracked links are unlimited on every paid plan.
+            Pick the plan that fits your needs — protected pages are unlimited on every plan.
           </p>
         </div>
       </section>
@@ -240,7 +194,6 @@ export default function Pricing() {
           )}
           {!isLoading && !isError && (
           <>
-            <FreeTierCard />
             <LimitsBand plans={plans} />
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {plans.map((plan) => (
@@ -251,8 +204,8 @@ export default function Pricing() {
           )}
 
           <p className="text-center text-sm text-neutral-500 mt-8">
-            The only difference between plans is the number of domains — Basic 5, Plus 10, Pro 20.
-            Tracked links are unlimited on every paid plan, and every tier runs the full protection engine.
+            The only difference between plans is the number of sites — Basic 5, Plus 10, Pro 20.
+            Protected pages are unlimited on every paid plan, and every tier runs the full protection engine.
           </p>
         </div>
       </section>
@@ -320,13 +273,13 @@ export default function Pricing() {
         <div className="max-w-4xl mx-auto text-center bg-neutral-950 border border-neutral-800 rounded-3xl p-10 md:p-16 relative overflow-hidden">
           <div className="absolute top-1/4 left-1/4 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-white/1 rounded-full blur-[100px] pointer-events-none" />
           <HugeiconsIcon icon={ZapIcon} className="w-8 h-8 mx-auto mb-6" />
-          <h2 className="text-3xl md:text-5xl font-bold mb-4">Set up your first tracked link in minutes</h2>
+          <h2 className="text-3xl md:text-5xl font-bold mb-4">Protect your site in minutes</h2>
           <p className="text-neutral-400 text-lg mb-8 max-w-xl mx-auto">
-            Create your account, add your domain, and start protecting your links today.
+            Create your account, add the script, and start protecting your site today.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link to="/auth/register" className="bg-white hover:bg-neutral-200 text-black px-8 py-4 rounded-xl text-lg font-bold transition-all">
-              Get started free
+              Get started
             </Link>
             <Link to="/contact" className="inline-flex items-center gap-2 border border-neutral-700 hover:border-neutral-500 px-8 py-4 rounded-xl text-lg font-bold transition-colors">
               <HugeiconsIcon icon={Mail01Icon} className="w-5 h-5" />

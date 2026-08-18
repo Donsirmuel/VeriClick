@@ -3,18 +3,18 @@ import { useLocation } from 'react-router-dom'
 
 const NOINDEX_PATHS = ['/auth/', '/app/']
 
-const SITE_URL = (import.meta.env.VITE_SITE_URL ?? 'https://getvericlick.site').replace(/\/+$/, '')
+const SITE_URL = (import.meta.env.VITE_SITE_URL ?? 'https://vericlick.site').replace(/\/+$/, '')
 
 const PAGE_META: Record<string, { title: string; description: string }> = {
   '/': {
     title: 'VeriClick — Protect Your Links From Bots & Suspicious Traffic',
     description:
-      'VeriClick checks every click against your IP rules and bot detection before it reaches your page, and explains exactly why each request was flagged. Start with a free 7-day trial.',
+      'VeriClick checks every click against your IP rules and bot detection before it reaches your page, and explains exactly why each request was flagged. Pick a plan that fits your needs.',
   },
   '/pricing': {
     title: 'Pricing — VeriClick',
     description:
-      'Simple monthly plans for VeriClick link protection: Basic, Plus, and Pro. Start with a free 7-day trial.',
+      'Simple monthly plans for VeriClick link protection: Basic, Plus, and Pro. Pick a plan that fits your needs.',
   },
   '/contact': {
     title: 'Contact — VeriClick',

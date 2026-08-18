@@ -6,16 +6,16 @@ const SECTIONS = [
     title: 'What VeriClick collects',
     body: [
       'Account information: your username and email address, plus the password you choose (stored as a secure hash). If you sign in with Google, we store the email Google provides.',
-      'Workspace data: your workspace name, the domains you register, the tracked links you create, and their destination URLs.',
-      'Click logs: for every click on a tracked link we record the IP address, user agent, and (where available) the country/region/city. This data powers bot detection and the dashboard analytics.',
-      'Tracker events (optional): if you install the optional site script on pages you own, it sends browser signals (language, timezone, screen size, engagement) back to VeriClick.',
+      'Workspace data: your workspace name, the sites you protect, and their protected pages.',
+      'Click logs: for every visit to a protected page we record the IP address, user agent, and (where available) the country/region/city. This data powers bot detection and the dashboard analytics.',
+      'Tracker events (optional): if you install the protection script on pages you own, it sends browser signals (language, timezone, screen size, engagement) back to VeriClick.',
       'IP rules: the allow/deny rules and blocked-IP review records you create in your workspace.',
     ],
   },
   {
     title: 'How your data is used',
     body: [
-      'To provide the service: routing and verifying clicks, detecting bots, and showing your dashboard statistics.',
+      'To provide the service: detecting bots, protecting your site, and showing your dashboard statistics.',
       'To improve the product: aggregated, non-identifying patterns help us make detection more accurate.',
       'To support you: we may use your contact details to respond to support requests.',
     ],
@@ -25,13 +25,13 @@ const SECTIONS = [
     body: [
       'We do not sell your personal data.',
       'We do not run third-party advertising or analytics trackers on the VeriClick site.',
-      'Your tracked links and their destinations are visible only to you and your workspace.',
+      'Your protected sites and their traffic data are visible only to you and your workspace.',
     ],
   },
   {
     title: 'Data retention & deletion',
     body: [
-      'We keep your data for as long as your account is active. If you delete your account, we remove your workspace data (links, domains, rules, and click logs) and your account details.',
+      'We keep your data for as long as your account is active. If you delete your account, we remove your workspace data (protected sites, rules, and traffic logs) and your account details.',
       'Contact us to request account deletion at any time.',
     ],
   },

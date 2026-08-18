@@ -79,11 +79,7 @@ export default function Register() {
           <div className="mt-8 flex items-center gap-6 text-sm text-neutral-500">
             <div className="flex items-center gap-2">
               <div className="w-1.5 h-1.5 rounded-full bg-white" />
-              <span>No credit card required</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-1.5 h-1.5 rounded-full bg-white" />
-              <span>7-day free trial</span>
+              <span>No credit card required to sign up</span>
             </div>
           </div>
         </div>

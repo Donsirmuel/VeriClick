@@ -59,8 +59,8 @@ export default function BlockedIPsPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Blocked IPs</h1>
           <ReadMore className="max-w-2xl mt-1" lines={2}>
-            Recently blocked traffic for your links. These requests were sent to your safe
-            destination instead of your real page. If any are actually humans, whitelist the IP to
+            Recently blocked traffic on your site. These requests were flagged as bots
+            and blocked by the shield. If any are actually humans, whitelist the IP to
             let it through every time.
           </ReadMore>
         </div>
@@ -73,7 +73,7 @@ export default function BlockedIPsPage() {
           </div>
           <input
             type="text"
-            placeholder="Search by IP or slug..."
+            placeholder="Search by IP..."
             className="w-full bg-neutral-50 border border-neutral-200 rounded-xl pl-11 pr-4 py-2.5 text-sm focus:outline-none focus:border-black transition-colors"
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1) }}
@@ -104,8 +104,7 @@ export default function BlockedIPsPage() {
                 <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">IP</th>
                 <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Why it was blocked</th>
                 <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Bot / Human</th>
-                <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Matched Rule</th>
-                <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Slug</th>
+                <th className="text-left px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Page</th>
                 <th className="text-center px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Timestamp</th>
                 <th className="text-right px-6 py-4 text-xs font-bold text-muted uppercase tracking-wider">Actions</th>
               </tr>
@@ -135,10 +134,7 @@ export default function BlockedIPsPage() {
                     </span>
                   </td>
                   <td className="px-6 py-4">
-                    <span className="font-mono text-xs text-muted">{entry.matchedRule || <span className="italic text-neutral-300">—</span>}</span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className="font-mono text-sm">{entry.slug}</span>
+                    <span className="font-mono text-xs text-muted truncate max-w-[200px] block" title={entry.pageUrl}>{entry.pageUrl || <span className="italic text-neutral-300">—</span>}</span>
                   </td>
                   <td className="px-6 py-4 text-center text-sm text-muted whitespace-nowrap">
                     {new Date(entry.createdAt).toLocaleString()}

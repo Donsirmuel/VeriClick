@@ -17,7 +17,7 @@ export function PublicFooter() {
               <span className="text-xl font-bold tracking-tight text-white">VeriClick</span>
             </div>
             <p className="text-neutral-400 leading-relaxed mb-6 text-sm">
-              Link protection for real traffic. VeriClick verifies every click on your tracked links,
+              Website protection for real traffic. VeriClick verifies every visitor on your site,
               blocks bots and suspicious requests, and explains each decision in plain language.
             </p>
             <Link
@@ -54,7 +54,7 @@ export function PublicFooter() {
             <div className="col-span-2 sm:col-span-1">
               <h5 className="font-bold text-white mb-5 text-sm">Support</h5>
               <p className="text-xs text-neutral-500 leading-relaxed mb-4">
-                Start with a free 7-day trial — 1 domain, 1 link. Ask the assistant in the bottom-right or use the contact button.
+                Plans start at a few dollars a month. Ask the assistant in the bottom-right or use the contact button.
               </p>
               <Link
                 to="/contact"

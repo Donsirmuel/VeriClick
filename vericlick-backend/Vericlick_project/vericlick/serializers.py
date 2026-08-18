@@ -1,12 +1,11 @@
-import secrets
-import string
 from django.db.models import Q
 from rest_framework import serializers
 from django.contrib.auth.models import User
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from .models import (
-    Workspace, DomainRegistry, TrackingLink, ClickLog, IPRule, CountryRule,
+    Workspace, IPRule, CountryRule,
     DevicePolicy, TrackerEvent, Plan, DiscountCode, SiteConfig, BillingEvent,
+    ShieldConfig,
 )
 
 
@@ -51,13 +50,6 @@ class EmailOrUsernameTokenObtainPairSerializer(TokenObtainPairSerializer):
             raise
 
 
-def _generate_slug(length=7):
-    alphabet = string.ascii_lowercase + string.digits
-    while True:
-        slug = ''.join(secrets.choice(alphabet) for _ in range(length))
-        if not TrackingLink.objects.filter(slug=slug).exists():
-            return slug
-
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -72,12 +64,6 @@ class WorkspaceSerializer(serializers.ModelSerializer):
     plan_expires_at = serializers.DateTimeField(read_only=True)
     plan_status = serializers.CharField(read_only=True)
     grace_expires_at = serializers.DateTimeField(read_only=True)
-    domain_limit = serializers.SerializerMethodField()
-    domains_used = serializers.SerializerMethodField()
-    can_add_domain = serializers.SerializerMethodField()
-    link_limit = serializers.SerializerMethodField()
-    links_used = serializers.SerializerMethodField()
-    can_add_link = serializers.SerializerMethodField()
     trial_expires_at = serializers.SerializerMethodField()
     trial_active = serializers.SerializerMethodField()
 
@@ -85,18 +71,14 @@ class WorkspaceSerializer(serializers.ModelSerializer):
         model = Workspace
         fields = [
             'id', 'name', 'tracker_secret', 'safe_destination',
-            'created_at', 'last_domain_scan_at', 'plan', 'plan_name',
+            'created_at', 'plan', 'plan_name',
             'plan_billing_mode', 'plan_expires_at', 'plan_status', 'grace_expires_at',
-            'domain_limit', 'domains_used', 'can_add_domain',
-            'link_limit', 'links_used', 'can_add_link',
             'trial_expires_at', 'trial_active',
         ]
         read_only_fields = [
-            'id', 'tracker_secret', 'created_at', 'last_domain_scan_at',
+            'id', 'tracker_secret', 'created_at',
             'plan', 'plan_name', 'plan_billing_mode', 'plan_expires_at',
             'plan_status', 'grace_expires_at',
-            'domain_limit', 'domains_used', 'can_add_domain',
-            'link_limit', 'links_used', 'can_add_link',
             'trial_expires_at', 'trial_active',
         ]
 
@@ -107,24 +89,6 @@ class WorkspaceSerializer(serializers.ModelSerializer):
     def get_plan_name(self, obj):
         active = obj.active_plan
         return active.name if active else None
-
-    def get_domain_limit(self, obj):
-        return obj.effective_domain_limit
-
-    def get_domains_used(self, obj):
-        return obj.domains_in_use()
-
-    def get_can_add_domain(self, obj):
-        return obj.can_add_domain
-
-    def get_link_limit(self, obj):
-        return obj.effective_link_limit
-
-    def get_links_used(self, obj):
-        return obj.links_in_use()
-
-    def get_can_add_link(self, obj):
-        return obj.can_add_link
 
     def get_trial_expires_at(self, obj):
         return obj.trial_expires_at
@@ -138,7 +102,7 @@ class PlanSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Plan
-        fields = ['code', 'name', 'monthly_price', 'domain_limit', 'features', 'sort_order']
+        fields = ['code', 'name', 'monthly_price', 'features', 'sort_order']
 
 
 class DiscountCodeSerializer(serializers.ModelSerializer):
@@ -177,182 +141,6 @@ class RegisterSerializer(serializers.ModelSerializer):
             is_active=False,
         )
         return user
-
-
-class DomainRegistrySerializer(serializers.ModelSerializer):
-    links_count = serializers.SerializerMethodField()
-    verification_record = serializers.CharField(read_only=True)
-    # Readiness = verified ownership AND resolving to our server. Cheap and
-    # always current because points_to_server is refreshed by run_health_check.
-    # The apex itself is NOT required to resolve (e.g. a root domain with no A
-    # record still serves its links on t.<domain>); only the tracking host has
-    # to reach us.
-    ready = serializers.SerializerMethodField()
-    # Plain-language guidance for the DNS step that makes a domain really
-    # serve tracking: what to add (A vs CNAME) and to what value. This is the
-    # exact record a user must create at their DNS provider after verifying
-    # ownership, and is derived from TRACKING_SERVER_IP / PUBLIC_TRACKING_BASE_URL.
-    dns_setup = serializers.SerializerMethodField()
-
-    class Meta:
-        model = DomainRegistry
-        fields = [
-            'id', 'domain', 'health_status', 'verified', 'points_to_server',
-            'verification_token', 'verification_record', 'last_checked',
-            'health_detail', 'links_count', 'ready', 'dns_setup', 'created_at',
-        ]
-        read_only_fields = [
-            'id', 'health_status', 'verified', 'points_to_server',
-            'verification_token', 'verification_record', 'last_checked',
-            'health_detail', 'links_count', 'ready', 'dns_setup', 'created_at',
-        ]
-        extra_kwargs = {
-            # Drop the auto UniqueValidator: the domain column is globally
-            # unique at the DB level, but the view must decide whether a match
-            # is an error (active domain) or a resurrection (previously-removed
-            # domain of the same workspace). Doing that inside perform_create
-            # requires the request to get here in the first place.
-            'domain': {'validators': []},
-        }
-
-    def get_dns_setup(self, obj):
-        from django.conf import settings as django_settings
-
-        # DNS guidance is intentionally simple and uniform: a single CNAME
-        # record pointing the subdomain's label at our public tracker host
-        # (e.g. Name "t" -> Value "getvericlick.site"). No A/ALIAS/IP variants to
-        # explain — one record, one copy.
-        base = getattr(django_settings, 'PUBLIC_TRACKING_BASE_URL', '').strip().rstrip('/')
-        target = '/'.join(base.split('://')[-1].split('/')[:1]) if base else ''
-
-        domain = (obj.domain or '').strip().lower().rstrip('.')
-        labels = [part for part in domain.split('.') if part]
-
-        # Apex domains (2 labels, e.g. example.com) can't use a CNAME, so their
-        # tracked links live on the standard `t.` subdomain instead (e.g.
-        # t.example.com). The user still registers the apex: no second domain
-        # entry, no ALIAS/A chase — just one CNAME whose Name is `t`.
-        if len(labels) <= 2:
-            tracking = f't.{domain}'
-            return {
-                'label': 'CNAME',
-                'host': 't',
-                'target': target,
-                'trackingHost': tracking,
-                'sentence': 'Add a CNAME record with Name "t" and the value on the right.',
-                'note': (f'Your links run on a subdomain of this domain: {tracking}. '
-                         f'The root (apex) {domain} can\'t use a CNAME, so "t" quietly '
-                         f'points {tracking} to VeriClick. No other records change.'),
-            }
-
-        # Subdomain: host is the first label (e.g. "t" for t.example.com).
-        host = labels[0]
-        return {
-            'label': 'CNAME',
-            'host': host,
-            'target': target,
-            'trackingHost': domain,
-            'sentence': f'Add a CNAME record with Name "{host}" and the value on the right.',
-            'note': f'If the box asks for a full hostname, use {domain} instead of just "{host}".',
-        }
-
-    def get_links_count(self, obj):
-        # Prefer the annotated count added by the viewset queryset to avoid an
-        # N+1 query when listing many domains; fall back to a live count for
-        # single-object serialization paths.
-        annotated = getattr(obj, 'links_count', None)
-        if annotated is not None:
-            return annotated
-        return obj.links.filter(removed_at__isnull=True).count()
-
-    def get_ready(self, obj):
-        # Instant authorization: registering a domain from the account proves
-        # ownership, so a domain is "ready for branded links" the moment its
-        # tracking host points at VeriClick. No separate verified flag gates
-        # serving anymore.
-        return bool(
-            obj.points_to_server
-            and obj.removed_at is None
-        )
-
-    def validate_domain(self, value):
-        value = (value or '').strip().lower()
-        if not value:
-            raise serializers.ValidationError('Enter a domain name.')
-        if '://' in value:
-            raise serializers.ValidationError('Enter just the domain, without http:// or https://.')
-        if any(ch.isspace() for ch in value):
-            raise serializers.ValidationError('Domain name cannot contain spaces.')
-        return value.rstrip('/')
-
-
-class TrackingLinkSerializer(serializers.ModelSerializer):
-    domain_health = serializers.CharField(
-        source='domain.health_status', read_only=True, default=None
-    )
-    # Explains why a tracked link is (or isn't) running on its custom domain.
-    # tracking_domain_ready = True when the link's domain points at this server
-    # so the branded URL is live. Ownership is implied by registration (instant
-    # authorization), so only the tracking host reaching us matters.
-    tracking_domain_ready = serializers.SerializerMethodField()
-    domain = serializers.SlugRelatedField(
-        slug_field='domain', queryset=DomainRegistry.objects.all(), allow_null=True, required=False,
-    )
-    slug = serializers.CharField(required=False, allow_blank=True, max_length=100)
-    tracking_url = serializers.SerializerMethodField()
-    human_clicks = serializers.SerializerMethodField()
-
-    class Meta:
-        model = TrackingLink
-        fields = [
-            'id', 'slug', 'destination_url', 'domain', 'domain_health',
-            'tracking_domain_ready', 'tracking_url', 'total_clicks', 'bot_clicks',
-            'human_clicks', 'status', 'allowed_devices', 'allowed_countries',
-            'bot_action', 'safe_url', 'created_at', 'updated_at',
-        ]
-        read_only_fields = [
-            'id', 'tracking_url', 'total_clicks', 'bot_clicks', 'human_clicks',
-            'created_at', 'updated_at',
-        ]
-
-    def get_tracking_domain_ready(self, obj):
-        domain = obj.domain
-        if not domain:
-            return None
-        return bool(
-            domain.removed_at is None
-            and domain.points_to_server
-        )
-
-    def get_tracking_url(self, obj):
-        from .services import get_public_tracking_url
-        return get_public_tracking_url(obj, self.context.get('request'))
-
-    def get_human_clicks(self, obj):
-        return max(obj.total_clicks - obj.bot_clicks, 0)
-
-    def create(self, validated_data):
-        if not validated_data.get('slug'):
-            validated_data['slug'] = _generate_slug()
-        return super().create(validated_data)
-
-
-class ClickLogSerializer(serializers.ModelSerializer):
-    slug = serializers.CharField(source='link.slug', read_only=True)
-    time = serializers.DateTimeField(source='created_at', read_only=True)
-    reason_label = serializers.SerializerMethodField()
-
-    class Meta:
-        model = ClickLog
-        fields = [
-            'id', 'ip', 'country', 'country_code', 'region', 'city', 'device',
-            'device_class', 'os_family', 'browser', 'reason',
-            'reason_label', 'is_bot', 'decision', 'matched_rule', 'slug', 'time', 'created_at',
-        ]
-
-    def get_reason_label(self, obj):
-        from .services import reason_label
-        return reason_label(obj.decision, obj.reason, obj.matched_rule)
 
 
 class IPRuleSerializer(serializers.ModelSerializer):
@@ -423,20 +211,44 @@ class TrackerEventSerializer(serializers.ModelSerializer):
 
 
 class BlockedIPSerializer(serializers.ModelSerializer):
-    slug = serializers.CharField(source='link.slug', read_only=True)
     reason_label = serializers.SerializerMethodField()
 
     class Meta:
-        model = ClickLog
+        model = TrackerEvent
         fields = [
-            'id', 'ip', 'reason', 'reason_label', 'decision', 'is_bot',
-            'matched_rule', 'slug', 'country', 'country_code', 'region', 'city',
-            'device_class', 'os_family', 'browser', 'created_at',
+            'id', 'ip', 'reason', 'reason_label', 'is_bot',
+            'page_url', 'country', 'verdict', 'created_at',
         ]
 
     def get_reason_label(self, obj):
         from .services import reason_label
-        return reason_label(obj.decision, obj.reason, obj.matched_rule)
+        verdict = 'blocked' if obj.verdict == 'blocked' else 'allowed'
+        return reason_label(verdict, obj.reason, '')
+
+
+class ShieldConfigSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ShieldConfig
+        fields = [
+            'id', 'protection_mode', 'bot_action', 'protected_paths',
+            'blocked_paths', 'rate_limit_per_hour', 'updated_at',
+        ]
+        read_only_fields = ['id', 'updated_at']
+
+    def validate_protected_paths(self, value):
+        value = list(value or [])
+        return [str(p) for p in value]
+
+    def validate_blocked_paths(self, value):
+        value = list(value or [])
+        return [str(p) for p in value]
+
+    def validate_rate_limit_per_hour(self, value):
+        if value < 10:
+            raise serializers.ValidationError('Rate limit must be at least 10 per hour.')
+        if value > 10000:
+            raise serializers.ValidationError('Rate limit cannot exceed 10,000 per hour.')
+        return value
 
 
 def mask_reference_id(value):

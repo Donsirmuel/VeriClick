@@ -1,7 +1,7 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useQuery } from '@tanstack/react-query'
-import { DashboardSquare01Icon, LinkSquare02Icon, Globe02Icon, Settings01Icon, Logout01Icon, HelpCircleIcon, ChevronRightIcon, ShieldIcon, BlockedIcon, Wallet01Icon, Cancel01Icon } from '@hugeicons/core-free-icons'
+import { DashboardSquare01Icon, Shield02Icon, ShieldIcon, Settings01Icon, Logout01Icon, HelpCircleIcon, ChevronRightIcon, BlockedIcon, Wallet01Icon, Cancel01Icon, CodeIcon } from '@hugeicons/core-free-icons'
 import { cn } from '@/lib/utils'
 import { Logo } from '@/components/Logo'
 import { fetchWorkspace } from '@/api/workspace'
@@ -78,17 +78,17 @@ export function Sidebar({ onClose }: { onClose: () => void }) {
           onClick={onClose}
         />
         <NavItem 
-          to="/app/links" 
-          icon={LinkSquare02Icon} 
-          label="Links" 
-          active={location.pathname === '/app/links'} 
+          to="/app/install" 
+          icon={CodeIcon} 
+          label="Install" 
+          active={location.pathname === '/app/install'} 
           onClick={onClose}
         />
         <NavItem 
-          to="/app/domains" 
-          icon={Globe02Icon} 
-          label="Domains" 
-          active={location.pathname === '/app/domains'} 
+          to="/app/shield" 
+          icon={Shield02Icon} 
+          label="Shield" 
+          active={location.pathname === '/app/shield'} 
           onClick={onClose}
         />
         <NavItem 
@@ -132,18 +132,11 @@ export function Sidebar({ onClose }: { onClose: () => void }) {
           </div>
           <div className="flex items-center justify-between text-sm font-bold text-white mb-1">
             <span>{workspace?.planName ?? 'No plan'}</span>
-            {workspace?.domainLimit && (
-              <span className={`text-[11px] font-bold ${
-                workspace.canAddDomain ? 'text-neutral-400' : 'text-warning'
-              }`}>
-                {workspace.domainsUsed}/{workspace.domainLimit} domains
-              </span>
-            )}
           </div>
           <p className="text-[11px] text-neutral-400 leading-relaxed">
-            {workspace?.domainLimit
-              ? `${workspace.domainLimit} tracked domains on your plan.`
-              : 'Pick a plan to start adding tracked domains.'}
+            {workspace?.planName
+              ? `${workspace.planName} plan active.`
+              : 'Pick a plan to start protecting your site.'}
           </p>
         </Link>
 

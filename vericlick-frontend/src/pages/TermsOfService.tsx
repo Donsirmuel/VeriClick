@@ -4,27 +4,27 @@ import { PublicFooter } from '@/components/PublicFooter'
 const SECTIONS = [
   {
     title: 'The service',
-    body: 'VeriClick is a link-protection service. It creates tracked links, verifies clicks on those links, diverts suspicious traffic to a safe destination, and provides analytics in a dashboard. It is a product of MAILIONDEV TECHNOLOGY LTD (RC 9233525), referred to below as "VeriClick".',
+    body: 'VeriClick is a website-protection service. It provides website protection and bot detection through a single script tag, diverts suspicious traffic to a safe page, and provides analytics in a dashboard. It is a product of MAILIONDEV TECHNOLOGY LTD (RC 9233525), referred to below as "VeriClick".',
   },
   {
     title: 'Accounts',
-    body: 'You must provide accurate account information and keep your credentials secure. You are responsible for everything that happens under your account, including any links you create and the destinations they point to. One free workspace is created per account.',
+    body: 'You must provide accurate account information and keep your credentials secure. You are responsible for everything that happens under your account, including any sites you protect and the pages they point to. One free workspace is created per account.',
   },
   {
-    title: 'Free trial & plans',
-    body: 'New accounts get a free 7-day trial with 1 domain and 1 link. After the trial, a paid plan is required to keep creating links and domains; your existing tracked links continue to work. Paid plans are billed monthly through our payment provider.',
+    title: 'Plans',
+    body: 'A plan is required to manage site protection. Paid plans are billed monthly through our payment provider.',
   },
   {
     title: 'Acceptable use',
-    body: 'You agree not to use VeriClick to break laws, send malware or phishing content, distribute harmful material, abuse other services, or otherwise use it in a way that harms others. Every tracked link must resolve on a domain you own and control. You may not use VeriClick links to redirect to destinations that violate any applicable law or third-party rights. We may suspend accounts, disable links, and report abuse to hosting providers and law enforcement without prior notice.',
+    body: 'You agree not to use VeriClick to break laws, send malware or phishing content, distribute harmful material, abuse other services, or otherwise use it in a way that harms others. The protection script must be installed only on pages you own and control. You may not use VeriClick to protect pages that violate any applicable law or third-party rights. We may suspend accounts, disable protection, and report abuse to hosting providers and law enforcement without prior notice.',
   },
   {
     title: 'Content responsibility',
-    body: 'You are solely responsible for the content at every destination URL you use with VeriClick. VeriClick does not monitor, review, or endorse destination content. You warrant that you have all rights and permissions necessary to use each destination URL and that such content does not infringe any third-party intellectual property, privacy, or other rights.',
+    body: 'You are solely responsible for the content on every protected page. VeriClick does not monitor, review, or endorse content on protected pages. You warrant that you have all rights and permissions necessary to use each protected page and that its content does not infringe any third-party intellectual property, privacy, or other rights.',
   },
   {
     title: 'Takedowns and enforcement',
-    body: 'We reserve the right to immediately disable any link or suspend any workspace that we reasonably believe is being used for phishing, malware distribution, fraud, or other abuse. We may cooperate with domain registrars, hosting providers, payment processors, and law-enforcement agencies in connection with abuse investigations. No refund is guaranteed for accounts suspended due to abuse.',
+    body: 'We reserve the right to immediately disable protection or suspend any workspace that we reasonably believe is being used for phishing, malware distribution, fraud, or other abuse. We may cooperate with hosting providers, payment processors, and law-enforcement agencies in connection with abuse investigations. No refund is guaranteed for accounts suspended due to abuse.',
   },
   {
     title: 'Indemnification',
@@ -54,7 +54,7 @@ export default function TermsOfService() {
           <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-4">Terms of Service</h1>
           <p className="text-neutral-400 text-lg leading-relaxed">
             The short version: use VeriClick for its intended purpose, keep your account secure,
-            and understand the free trial limits and paid plans.
+            and understand the paid plan requirements.
           </p>
         </div>
 

@@ -5,38 +5,26 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .models import (
-    Workspace, DomainRegistry, TrackingLink, ClickLog, IPRule, CountryRule,
+    Workspace, IPRule, CountryRule,
     DevicePolicy, TrackerEvent, Plan, DiscountCode, SiteConfig, CheckoutIntent,
     BillingEvent, PLAN_PERIOD_DAYS,
-    BlockedDestination, AbuseReport, DestinationChangeLog, UserProfile,
+    BlockedDestination, UserProfile,
+    ShieldConfig,
 )
 
-
-class DomainRegistryInline(admin.TabularInline):
-    model = DomainRegistry
-    extra = 0
-    fields = ('domain', 'health_status', 'verified', 'last_checked')
-    readonly_fields = ('health_status', 'verified', 'last_checked')
-
-
-class TrackingLinkInline(admin.TabularInline):
-    model = TrackingLink
-    extra = 0
-    fields = ('slug', 'domain', 'destination_url', 'status', 'total_clicks', 'bot_clicks')
-    readonly_fields = ('total_clicks', 'bot_clicks')
 
 
 @admin.register(Workspace)
 class WorkspaceAdmin(admin.ModelAdmin):
-    list_display = ('name', 'owner', 'plan', 'plan_status', 'plan_billing_mode', 'plan_expires_at', 'domain_count', 'tracker_secret', 'created_at')
+    list_display = ('name', 'owner', 'plan', 'plan_status', 'plan_billing_mode', 'plan_expires_at', 'tracker_secret', 'created_at')
     # `plan` is editable inline from the list page so an admin can upgrade a
     # workspace (e.g. hand testers a higher tier) without going through checkout.
     list_editable = ('plan',)
     list_select_related = ('owner', 'plan')
     list_filter = ('plan', 'plan_billing_mode', 'created_at')
     search_fields = ('name', 'owner__username', 'owner__email')
-    readonly_fields = ('id', 'tracker_secret', 'created_at', 'last_domain_scan_at', 'plan_started_at', 'plan_billing_mode', 'plan_expires_at', 'plan_status', 'grace_expires_at')
-    inlines = [DomainRegistryInline, TrackingLinkInline]
+    readonly_fields = ('id', 'tracker_secret', 'created_at', 'plan_started_at', 'plan_billing_mode', 'plan_expires_at', 'plan_status', 'grace_expires_at')
+    inlines = []
     autocomplete_fields = ['owner']
     date_hierarchy = 'created_at'
     actions = ['record_manual_payment']
@@ -44,10 +32,6 @@ class WorkspaceAdmin(admin.ModelAdmin):
     @admin.display(description='Status')
     def plan_status(self, obj):
         return obj.plan_status
-
-    @admin.display(description='Domains (verified)')
-    def domain_count(self, obj):
-        return obj.domains_in_use()
 
     @admin.action(description='Record a manual payment…')
     def record_manual_payment(self, request, queryset):
@@ -134,114 +118,6 @@ class WorkspaceAdmin(admin.ModelAdmin):
         return render(request, 'admin/record_manual_payment.html', context)
 
 
-@admin.register(DomainRegistry)
-class DomainRegistryAdmin(admin.ModelAdmin):
-    list_display = ('domain', 'workspace', 'health_status', 'points_to_server', 'verified', 'status_badge', 'last_checked', 'created_at')
-    list_filter = ('health_status', 'points_to_server', 'verified', 'removed_at', 'last_checked')
-    search_fields = ('domain', 'workspace__name', 'workspace__owner__username')
-    readonly_fields = ('id', 'verification_token', 'verification_record', 'health_detail_preview', 'created_at', 'last_checked', 'removed_at')
-    actions = ['recheck_domains', 'restore_domains']
-    date_hierarchy = 'created_at'
-
-    @admin.display(description='Status')
-    def status_badge(self, obj):
-        if obj.removed_at is not None:
-            return 'REMOVED'
-        if obj.verified and obj.points_to_server:
-            return 'READY'
-        if obj.verified:
-            return 'Authorized'
-        return 'Not verified'
-
-    @admin.action(description='Restore selected removed domains (visible to the owner again)')
-    def restore_domains(self, request, queryset):
-        restored = 0
-        for domain in queryset.filter(removed_at__isnull=False):
-            domain.links.filter(removed_at__isnull=False).update(removed_at=None)
-            domain.removed_at = None
-            domain.verified = True
-            domain.save(update_fields=['removed_at', 'verified'])
-            restored += 1
-        self.message_user(
-            request,
-            f'Restored {restored} domain(s). They are visible in the owner\'s app again '
-            f'and authorized. Run "Re-check health" to refresh DNS status.',
-        )
-
-    @admin.action(description='Re-check health (full DNS diagnosis) for selected domains')
-    def recheck_domains(self, request, queryset):
-        checked = 0
-        ready = 0
-        for domain in queryset:
-            try:
-                domain.run_health_check()
-                checked += 1
-                if domain.points_to_server:
-                    ready += 1
-            except Exception:
-                continue
-        self.message_user(
-            request,
-            f'Re-checked {checked} domain(s); {ready} now point at this server. '
-            f'See each domain\'s "Health report" for what\'s wrong and how to fix it.',
-        )
-
-    @admin.display(description='Health report')
-    def health_detail_preview(self, obj):
-        if not obj.health_detail:
-            return 'No diagnosis recorded yet — run "Re-check health" on the list page.'
-        from django.utils.html import format_html, escape
-        lines = []
-        for finding in obj.health_detail.get('findings', []):
-            icon = {'ok': '✅', 'warn': '⚠️', 'error': '❌'}.get(finding.get('level'), '•')
-            lines.append(
-                f'{icon} <b>{escape(finding.get("title", ""))}</b><br>'
-                f'&nbsp;&nbsp;{escape(finding.get("message", ""))}'
-                + (f'<br>&nbsp;&nbsp;<span style="color:#9b6c00">Fix: {escape(finding.get("fix", ""))}</span>' if finding.get('fix') else '')
-            )
-        ready = obj.health_detail.get('ready')
-        status = 'READY for links' if ready else 'NOT ready for links'
-        summary = (
-            f'<b style="color:{("#1a7f37" if ready else "#cf222e")}">{status}</b>'
-            f' · tracking host {escape(obj.health_detail.get("tracking_host", ""))} '
-            f'→ points to us: {"yes" if obj.health_detail.get("points_to_us") else "no"}'
-            f' · checked {escape(obj.health_detail.get("generated_at", ""))}'
-        )
-        return format_html(summary + '<hr>' + '<hr>'.join(lines))
-
-
-@admin.register(TrackingLink)
-class TrackingLinkAdmin(admin.ModelAdmin):
-    list_display = ('slug', 'workspace', 'domain', 'destination_url', 'status', 'removed_at', 'total_clicks', 'bot_clicks', 'created_at')
-    list_filter = ('status', 'removed_at', 'created_at')
-    search_fields = ('slug', 'destination_url', 'workspace__name')
-    readonly_fields = ('id', 'total_clicks', 'bot_clicks', 'created_at', 'updated_at', 'removed_at')
-    autocomplete_fields = ['workspace', 'domain']
-    date_hierarchy = 'created_at'
-    actions = ['disable_links', 'ban_workspace']
-
-    @admin.action(description='Disable selected links')
-    def disable_links(self, request, queryset):
-        updated = queryset.update(status=TrackingLink.Status.DISABLED)
-        self.message_user(request, f'{updated} link(s) disabled.')
-
-    @admin.action(description='Disable links and ban their workspaces')
-    def ban_workspace(self, request, queryset):
-        workspace_ids = set(queryset.values_list('workspace_id', flat=True))
-        updated = queryset.update(status=TrackingLink.Status.DISABLED)
-        Workspace.objects.filter(id__in=workspace_ids).update(plan=None, plan_expires_at=None)
-        self.message_user(request, f'{updated} link(s) disabled, {len(workspace_ids)} workspace(s) banned.')
-
-
-@admin.register(ClickLog)
-class ClickLogAdmin(admin.ModelAdmin):
-    list_display = ('ip', 'link', 'decision', 'is_bot', 'reason', 'matched_rule', 'country', 'city', 'created_at')
-    list_filter = ('decision', 'is_bot', 'reason', 'created_at')
-    search_fields = ('ip', 'link__slug', 'reason', 'matched_rule')
-    readonly_fields = ('id', 'created_at')
-    date_hierarchy = 'created_at'
-
-
 @admin.register(IPRule)
 class IPRuleAdmin(admin.ModelAdmin):
     list_display = ('ip_or_cidr', 'workspace', 'action', 'is_active', 'expires_at', 'created_at')
@@ -288,10 +164,10 @@ class TrackerEventAdmin(admin.ModelAdmin):
 
 @admin.register(Plan)
 class PlanAdmin(admin.ModelAdmin):
-    list_display = ('code', 'name', 'monthly_price', 'domain_limit', 'bachs_product_id', 'bachs_ot_product_id', 'features_preview', 'is_active', 'sort_order')
+    list_display = ('code', 'name', 'monthly_price', 'bachs_product_id', 'bachs_ot_product_id', 'features_preview', 'is_active', 'sort_order')
     list_filter = ('is_active',)
     search_fields = ('code', 'name', 'bachs_product_id', 'bachs_ot_product_id', 'bachs_payment_link')
-    list_editable = ('monthly_price', 'domain_limit', 'bachs_product_id', 'bachs_ot_product_id', 'is_active', 'sort_order')
+    list_editable = ('monthly_price', 'bachs_product_id', 'bachs_ot_product_id', 'is_active', 'sort_order')
 
     @admin.display(description='Features')
     def features_preview(self, obj):
@@ -377,39 +253,10 @@ class BlockedDestinationAdmin(admin.ModelAdmin):
     autocomplete_fields = ['added_by']
 
 
-@admin.register(AbuseReport)
-class AbuseReportAdmin(admin.ModelAdmin):
-    list_display = ('link', 'workspace', 'destination_url', 'reporter_email', 'status', 'created_at')
-    list_filter = ('status', 'created_at')
-    search_fields = ('destination_url', 'reporter_email', 'reason')
-    readonly_fields = ('id', 'created_at')
-    autocomplete_fields = ['link', 'workspace', 'resolved_by']
-    date_hierarchy = 'created_at'
-    actions = ['resolve_reports', 'dismiss_reports']
-
-    @admin.action(description='Mark selected reports as resolved')
-    def resolve_reports(self, request, queryset):
-        updated = queryset.update(
-            status=AbuseReport.Status.RESOLVED,
-            resolved_by=request.user,
-            resolved_at=timezone.now(),
-        )
-        self.message_user(request, f'{updated} report(s) resolved.')
-
-    @admin.action(description='Dismiss selected reports')
-    def dismiss_reports(self, request, queryset):
-        updated = queryset.update(
-            status=AbuseReport.Status.DISMISSED,
-            resolved_by=request.user,
-            resolved_at=timezone.now(),
-        )
-        self.message_user(request, f'{updated} report(s) dismissed.')
-
-
-@admin.register(DestinationChangeLog)
-class DestinationChangeLogAdmin(admin.ModelAdmin):
-    list_display = ('link', 'old_destination', 'new_destination', 'changed_by', 'ip_address', 'created_at')
-    list_filter = ('created_at',)
-    search_fields = ('link__slug', 'new_destination', 'ip_address')
-    readonly_fields = ('id', 'link', 'old_destination', 'new_destination', 'changed_by', 'ip_address', 'user_agent', 'created_at')
-    date_hierarchy = 'created_at'
+@admin.register(ShieldConfig)
+class ShieldConfigAdmin(admin.ModelAdmin):
+    list_display = ('workspace', 'protection_mode', 'bot_action', 'rate_limit_per_hour', 'updated_at')
+    list_filter = ('protection_mode', 'bot_action')
+    search_fields = ('workspace__name', 'workspace__owner__username')
+    autocomplete_fields = ['workspace']
+    readonly_fields = ('created_at', 'updated_at')

@@ -27,8 +27,8 @@ const Settings = lazy(() => import('./pages/Settings'))
 const Billing = lazy(() => import('./pages/Billing'))
 const NotFound = lazy(() => import('./pages/NotFound'))
 const Dashboard = lazy(() => import('./pages/Dashboard'))
-const Links = lazy(() => import('./pages/Links'))
-const Domains = lazy(() => import('./pages/Domains'))
+const Install = lazy(() => import('./pages/Install'))
+const Shield = lazy(() => import('./pages/Shield'))
 const IpRules = lazy(() => import('./pages/TrafficRules'))
 const BlockedIPs = lazy(() => import('./pages/BlockedIPs'))
 const Help = lazy(() => import('./pages/Help'))
@@ -65,8 +65,8 @@ function App() {
           <Route path="/app" element={<DashboardLayout />}>
             <Route index element={<Navigate to="/app/dashboard" replace />} />
             <Route path="dashboard" element={withSuspense(<ErrorBoundary><Dashboard /></ErrorBoundary>)} />
-            <Route path="links" element={withSuspense(<ErrorBoundary><Links /></ErrorBoundary>)} />
-            <Route path="domains" element={withSuspense(<ErrorBoundary><Domains /></ErrorBoundary>)} />
+            <Route path="install" element={withSuspense(<ErrorBoundary><Install /></ErrorBoundary>)} />
+            <Route path="shield" element={withSuspense(<ErrorBoundary><Shield /></ErrorBoundary>)} />
             <Route path="settings" element={withSuspense(<ErrorBoundary><Settings /></ErrorBoundary>)} />
             <Route path="billing" element={withSuspense(<ErrorBoundary><Billing /></ErrorBoundary>)} />
             <Route path="traffic-rules" element={withSuspense(<ErrorBoundary><IpRules /></ErrorBoundary>)} />

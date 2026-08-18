@@ -18,9 +18,9 @@ export interface ChatMessage {
 
 export const QUICK_QUESTIONS = [
   'How does VeriClick work?',
-  'How do I create a link?',
-  'How do I verify my domain?',
-  'How do I point my domain at VeriClick?',
+  'How do I install the script?',
+  'How do I configure my shield?',
+  'How do I set up traffic rules?',
   'How do I delete my account?',
   'How much does it cost?',
   'How can I contact support?',
@@ -30,67 +30,57 @@ const TOPICS: ChatTopic[] = [
   {
     id: 'what-is',
     keywords: ['what is', 'whats', "what's", 'vericlick', 'about', 'product', 'do you do', 'purpose', 'tool'],
-    answer: `VeriClick is a link protector. You create a short tracked link for any destination URL, and every click on it is checked before it reaches your page: IP allow/deny rules first, then bot detection, then rate limits. Humans are routed through; suspicious requests are sent to your page for blocked visitors instead. Every decision is recorded and explained in plain language on your dashboard.`,
+    answer: `VeriClick is a website protection tool. You add a single script tag to your site, and every visitor is checked before they reach your page: IP allow/deny rules first, then bot detection via device signals, then rate limits. Real visitors pass through; suspicious requests are sent to a protected page. Every decision is recorded and explained in plain language on your dashboard.`,
   },
   {
     id: 'how-it-works',
     keywords: ['how', 'works', 'work', 'function', 'mechanism', 'process', 'flow', 'what happens', 'step by step'],
-    answer: `Here's the flow: 1) Create a tracked link pointing at your destination. 2) Share the short link. 3) When someone clicks it, VeriClick checks the request against your IP rules, bot signatures, and rate limits. 4) Real visitors are redirected to your destination; flagged requests are sent to your page for blocked visitors (or a built-in protected page). You see all of it — clicks, verdicts, and reasons — on the dashboard.`,
+    answer: `Here's the flow: 1) Add the VeriClick script tag to your site. 2) Configure your shield (strict, balanced, or monitor mode). 3) When someone visits your site, VeriClick checks the request against your IP rules, bot detection, and rate limits. 4) Real visitors pass through; flagged requests are sent to a protected page. You see all of it — visits, verdicts, and reasons — on the dashboard.`,
   },
   {
-    id: 'create-link',
-    keywords: ['create link', 'create a link', 'add link', 'new link', 'make link', 'tracking link', 'short link', 'shorten', 'destination', 'slug', 'link'],
-    answer: `Go to Links in your workspace and click "Create Link". Paste the destination URL, optionally pick a domain, and VeriClick generates a short slug (or you can set your own). Once created you'll get a tracked URL to share. Any visitor clicking it is verified before being redirected.`,
+    id: 'install-script',
+    keywords: ['install', 'script', 'install script', 'add script', 'script tag', 'embed', 'snippet', 'setup', 'getting started', 'first step'],
+    answer: `Go to the Install page in your dashboard and copy the script tag. Paste it into the <head> section of your website. That's it — VeriClick starts protecting your site immediately. No domain verification or DNS changes needed.`,
   },
   {
-    id: 'domains',
-    keywords: ['domain', 'domain health', 'register domain', 'add domain', 'tracking domain', 'resolves', 'healthy', 'degraded'],
-    answer: `A domain is the web address your tracked links live on. Register it under Domains and it's authorized instantly — no DNS proof needed. One quick step remains before your links use your own brand: point the domain at VeriClick (add one short CNAME record that the app shows you). The Domains page walks you through it with copy buttons. Until that step is done your links still work — they just use the VeriClick URL instead of your own brand.`,
-  },
-  {
-    id: 'verify-domain',
-    keywords: ['verify', 'verification', 'ownership', 'txt', 'dns', 'verification record', 'prove', 'verified badge', 'point', 'instant'],
-    answer: `Ownership is instant with VeriClick: the moment you register a domain from your account it's authorized — there's no TXT record to add anymore. The only remaining step is to point the domain at VeriClick so your links use your own brand: add one short CNAME record shown on the Domains page, then press "Check again". Your links work either way — before pointing they just use the VeriClick URL.`,
+    id: 'configure-shield',
+    keywords: ['shield', 'configure', 'configure shield', 'protection mode', 'strict', 'balanced', 'monitor', 'mode'],
+    answer: `Open the Shield page in your dashboard. Choose between Strict (block all suspicious traffic), Balanced (challenge suspicious visitors), or Monitor (log only, no blocking). Your rules, your site — you can change this anytime.`,
   },
   {
     id: 'ip-rules',
     keywords: ['ip rule', 'ip rules', 'allow', 'deny', 'whitelist', 'blacklist', 'cidr', 'address', 'block ip', 'allowlist', 'denylist', 'rule', 'traffic rules', 'country', 'device'],
-    answer: `Traffic Rules is where you control which audiences reach your links, in three tabs. IP Addresses: Allow rules always win — those IPs are never flagged; Deny rules block matching IPs/CIDR blocks, and can be set to expire. Countries: deny or allow entire countries. Devices: allow only certain device types (mobile/tablet/desktop) or block certain operating systems. Rules are checked IP allow → IP deny → country → device/OS, and you can whitelist an IP straight from the blocked-IPs review queue.`,
-  },
-  {
-    id: 'point-domain',
-    keywords: ['point', 'pointing', 'a record', 'cname', 'name servers', 'nameserver', 'branded url', 'own url', 'custom url', 'dns setup'],
-    answer: `Pointing your domain at VeriClick is the second (and final) step to use your own brand on links. In the Domains page, open the domain and press "Set up DNS" — VeriClick shows you one short record (an A or CNAME record) with the exact Name and Value to add, plus copy buttons. Add it at your domain provider, save, then press "Check again". It can take a few minutes to a few hours to spread. Until it's done, your links still work — they just use the VeriClick URL.`,
+    answer: `Traffic Rules is where you control which visitors reach your site, in three tabs. IP Addresses: Allow rules always win — those IPs are never flagged; Deny rules block matching IPs/CIDR blocks, and can be set to expire. Countries: deny or allow entire countries. Devices: allow only certain device types (mobile/tablet/desktop) or block certain operating systems. Rules are checked IP allow → IP deny → country → device/OS, and you can whitelist an IP straight from the blocked-IPs review queue.`,
   },
   {
     id: 'blocked-ips',
     keywords: ['blocked', 'blocked ip', 'blocked ip address', 'review', 'queue', 'whitelist', 'why blocked', 'why was', 'reason'],
-    answer: `The Blocked IPs page is a review queue of requests VeriClick stopped. Each entry shows the IP, location, the link it hit, and a plain-language reason (for example "Request looked automated" or "Blocked by a deny rule you created"). If a block looks wrong, you can whitelist that IP in one click.`,
+    answer: `The Blocked IPs page is a review queue of requests VeriClick stopped. Each entry shows the IP, location, the page they tried to visit, and a plain-language reason (for example "Request looked automated" or "Blocked by a deny rule you created"). If a block looks wrong, you can whitelist that IP in one click.`,
   },
   {
     id: 'safe-destination',
     keywords: ['safe', 'destination', 'safe destination', 'safe page', 'divert', 'redirect', 'suspicious', 'protected page', 'neutral page'],
-    answer: `When VeriClick flags a request it never sends it to your real page and never returns a 403 — it redirects to the "page for blocked visitors" you set in Settings (Workspace). Leave it blank and VeriClick uses its own built-in "This link is protected" page instead. This keeps bots away from your real content while humans are unaffected.`,
+    answer: `When VeriClick flags a request it never sends it to your real page and never returns a 403 — it redirects to the "page for blocked visitors" you set in Settings (Workspace). Leave it blank and VeriClick uses its own built-in "This site is protected" page instead. This keeps bots away from your real content while humans are unaffected.`,
   },
   {
     id: 'dashboard',
     keywords: ['dashboard', 'stats', 'statistics', 'activity', 'traffic', 'chart', 'analytics', 'metrics', 'click', 'clicks'],
-    answer: `The dashboard shows your last 24 hours of clicks, how many were blocked as bots, human click counts, active link count, domain health, a daily human/bot traffic chart, a live activity feed, and the blocked-IP review queue. Every entry explains why a request was let through or blocked.`,
+    answer: `The dashboard shows your last 24 hours of traffic, how many visitors were blocked as bots, human visitor counts, protection status, a daily human/bot traffic chart, a live activity feed, and the blocked-IP review queue. Every entry explains why a request was let through or blocked.`,
   },
   {
     id: 'pricing',
     keywords: ['price', 'pricing', 'cost', 'free', 'paid', 'plan', 'money', 'charge', 'billing', 'subscription', 'upgrade', 'premium', 'trial'],
-    answer: `Every new account starts with a free 7-day trial — 1 domain and 1 link, no credit card required. After that you'll need a plan to keep creating links and domains; your existing tracked links keep working. Plans are Basic (5 domains), Plus (10), and Pro (20) — all from just $25/month. Head to the Pricing page to compare, and to Billing to upgrade.`,
+    answer: `Every new account starts with a free 7-day trial — no credit card required. After that you'll need a plan to keep using VeriClick; your site stays protected. Plans are Basic, Plus, and Pro — all from just $25/month. Head to the Pricing page to compare, and to Billing to upgrade.`,
   },
   {
     id: 'site-script',
-    keywords: ['script', 'site script', 'tracker', 'javascript', 'embed', 'install', 'snippet', 'browser signals', 'tracker.js'],
-    answer: `The site script is an optional snippet you can add to pages you own to send extra browser signals to VeriClick. The link tracker works fine without it. You'll find the copy-ready snippet under Settings → Site script. Keep the data-token value private — anyone with it can send events to your workspace.`,
+    keywords: ['script', 'site script', 'tracker', 'javascript', 'embed', 'install', 'snippet', 'browser signals', 'tracker.js', 'add script', 'script tag'],
+    answer: `The VeriClick script is a small tag you add to your site's <head> to start protecting it. You'll find the copy-ready snippet under Install in your dashboard. Paste it on your site and VeriClick handles the rest. Keep your token value private.`,
   },
   {
     id: 'get-started',
     keywords: ['start', 'get started', 'begin', 'setup', 'onboarding', 'first', 'beginner', 'tutorial', 'guide', 'quick start'],
-    answer: `To get started: 1) Create an account (free, no card) and click the verification link we email you. 2) Add a domain under Domains. 3) Verify you own it (add a text/TXT record) then point it at VeriClick (one short record — the app walks you through both). 4) Create your first tracked link under Links. 5) Share the link and watch your dashboard. Your dashboard has a step-by-step onboarding checklist that walks you through all of it.`,
+    answer: `To get started: 1) Create an account (free, no card) and click the verification link we email you. 2) Go to Install and copy the script tag. 3) Paste it in your site's <head>. 4) Configure your shield on the Shield page. 5) Watch your dashboard for live traffic. Your dashboard has a step-by-step onboarding checklist that walks you through all of it.`,
   },
   {
     id: 'account',
@@ -100,21 +90,21 @@ const TOPICS: ChatTopic[] = [
   {
     id: 'contact',
     keywords: ['contact', 'support', 'help me', 'email', 'reach', 'reach out', 'talk', 'human', 'report', 'issue', 'bug', 'problem', 'helpdesk'],
-    answer: `You can reach a human through the Contact page on the site (link in the footer, or the "Contact" link at the top of this widget). For instant answers, I can help right here — just ask about links, domains, IP rules, blocked traffic, or pricing.`,
+    answer: `You can reach a human through the Contact page on the site (link in the footer, or the "Contact" link at the top of this widget). For instant answers, I can help right here — just ask about the script, shield, IP rules, blocked traffic, or pricing.`,
   },
   {
     id: 'data-privacy',
     keywords: ['privacy', 'data', 'gdpr', 'collect', 'tracking', 'information', 'stored', 'ip address', 'user agent', 'personal data'],
-    answer: `VeriClick stores what it needs to protect your links: account details (username/email), and for each click the IP address, user agent, and location where available. This data powers the bot detection and your dashboard analytics. Your links and their destinations are only visible to you.`,
+    answer: `VeriClick stores what it needs to protect your site: account details (username/email), and for each visit the IP address, user agent, and location where available. This data powers the bot detection and your dashboard analytics. Your configuration is only visible to you.`,
   },
   {
     id: 'technical',
     keywords: ['api', 'integration', 'developers', 'webhook', 'http', 'endpoint', 'docs', 'documentation'],
-    answer: `VeriClick exposes a REST API (JWT-authenticated) for links, domains, IP rules, dashboard data, and the public redirect + tracker endpoints. The full endpoint list is in the project's HANDOFF.md and README. If you need developer help, use the contact page.`,
+    answer: `VeriClick exposes a REST API (JWT-authenticated) for shield configuration, IP rules, dashboard data, and the script verification endpoints. The full endpoint list is in the project's HANDOFF.md and README. If you need developer help, use the contact page.`,
   },
 ]
 
-const FALLBACK_ANSWER = `I'm not sure I can answer that one yet. I'm best with questions about links, domains, verification, pointing a domain at VeriClick, IP rules, blocked traffic, the dashboard, pricing, and your account. For anything else, use the Contact page (link in the footer) or open the Help page in your dashboard.`
+const FALLBACK_ANSWER = `I'm not sure I can answer that one yet. I'm best with questions about the script, shield configuration, IP rules, blocked traffic, the dashboard, pricing, and your account. For anything else, use the Contact page (link in the footer) or open the Help page in your dashboard.`
 
 function tokenize(text: string): Set<string> {
   return new Set(text.split(' ').filter(Boolean))
@@ -175,7 +165,7 @@ export function initialBotMessage(): ChatMessage {
   return {
     id: 'welcome',
     role: 'bot',
-    text: `Hi! I'm the VeriClick assistant. Ask me about links, domains, IP rules, blocked traffic, pricing, or how to get started. If I can't help, I'll point you to the Contact page.`,
+    text: `Hi! I'm the VeriClick assistant. Ask me about the script, shield, IP rules, blocked traffic, pricing, or how to get started. If I can't help, I'll point you to the Contact page.`,
     suggestions: QUICK_QUESTIONS,
   }
 }
