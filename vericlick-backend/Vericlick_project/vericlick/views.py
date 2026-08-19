@@ -510,10 +510,14 @@ def redirect_route_list_create(request):
     # Safety check on destination
     destination_safe = None
     try:
-        from .views import _check_destination_safety
-        destination_safe = _check_destination_safety(destination_url)
+        import urllib.request as _req
+        import urllib.error as _err
+        _r = _req.Request(destination_url, method='HEAD',
+                          headers={'User-Agent': 'VeriClick/1.0 SafetyCheck'})
+        with _req.urlopen(_r, timeout=10) as _resp:
+            destination_safe = _resp.status < 400
     except Exception:
-        pass
+        destination_safe = None
 
     # Auto-replace: delete existing route for this domain
     RedirectRoute.objects.filter(domain=domain_obj).delete()

@@ -17,6 +17,8 @@ from decimal import Decimal
 from .models import (
     Workspace, IPRule, TrackerEvent,
     Plan, DiscountCode, SiteConfig, CheckoutIntent, BillingEvent,
+    DomainRegistry, InstallToken, RedirectRoute, EdgeSyncCredential,
+    RedirectEvent, ShieldConfig, CountryRule,
 )
 from .utils import snake_to_camel, camel_to_snake, transform_keys
 
@@ -1936,3 +1938,857 @@ class TrackerEventBeaconVerdictTests(APITestCase):
         event = TrackerEvent.objects.get(workspace=self.workspace)
         self.assertEqual(event.verdict, '')
         self.assertFalse(event.is_bot)
+
+
+# ---------------------------------------------------------------------------
+# Domain Verification
+# ---------------------------------------------------------------------------
+
+class DomainVerifyChallengeTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='verify_user', password='testpass123')
+        self.client.force_authenticate(user=self.user)
+        self.workspace = Workspace.objects.get(owner=self.user)
+        self.domain = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='example.com', purpose='protection',
+        )
+
+    def test_challenge_generates_token(self):
+        res = self.client.get(f'/api/domains/{self.domain.id}/verify-challenge/')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        body = res.json()
+        self.assertEqual(body['method'], 'html_meta')
+        self.assertIn('token', body)
+        self.assertIn('meta_tag', body)
+        self.assertIn(body['token'], body['meta_tag'])
+        self.domain.refresh_from_db()
+        self.assertEqual(self.domain.verification_token, body['token'])
+
+    def test_challenge_dns_method(self):
+        res = self.client.get(f'/api/domains/{self.domain.id}/verify-challenge/?method=dns_txt')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        body = res.json()
+        self.assertEqual(body['method'], 'dns_txt')
+        self.assertIn('_vericlick-challenge.example.com', body['dns_name'])
+        self.assertIn('vericlick-verify=', body['dns_value'])
+
+    def test_challenge_returns_existing_token(self):
+        self.domain.generate_verification_token()
+        original = self.domain.verification_token
+        res = self.client.get(f'/api/domains/{self.domain.id}/verify-challenge/')
+        self.assertEqual(res.json()['token'], original)
+
+    def test_challenge_not_found(self):
+        res = self.client.get(f'/api/domains/{uuid.uuid4()}/verify-challenge/')
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_challenge_requires_auth(self):
+        self.client.force_authenticate(user=None)
+        res = self.client.get(f'/api/domains/{self.domain.id}/verify-challenge/')
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+class DomainVerifyConfirmTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='confirm_user', password='testpass123')
+        self.client.force_authenticate(user=self.user)
+        self.workspace = Workspace.objects.get(owner=self.user)
+        self.domain = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='example.com', purpose='protection',
+        )
+
+    def test_already_verified_returns_true(self):
+        self.domain.verified = True
+        self.domain.save()
+        res = self.client.post(f'/api/domains/{self.domain.id}/verify-confirm/')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertTrue(res.json()['verified'])
+
+    def test_no_token_returns_400(self):
+        res = self.client.post(f'/api/domains/{self.domain.id}/verify-confirm/')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    @patch('vericlick.views._check_meta_tag', return_value=True)
+    def test_successful_verification(self, mock_check):
+        self.domain.generate_verification_token()
+        res = self.client.post(f'/api/domains/{self.domain.id}/verify-confirm/')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        body = res.json()
+        self.assertTrue(body['verified'])
+        self.domain.refresh_from_db()
+        self.assertTrue(self.domain.verified)
+
+    @patch('vericlick.views._check_meta_tag', return_value=False)
+    def test_failed_verification(self, mock_check):
+        self.domain.generate_verification_token()
+        res = self.client.post(f'/api/domains/{self.domain.id}/verify-confirm/')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        body = res.json()
+        self.assertFalse(body['verified'])
+        self.assertIn('error', body)
+
+    def test_not_found(self):
+        res = self.client.post(f'/api/domains/{uuid.uuid4()}/verify-confirm/')
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+
+
+class DomainRecheckTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='recheck_user', password='testpass123')
+        self.client.force_authenticate(user=self.user)
+        self.workspace = Workspace.objects.get(owner=self.user)
+        self.domain = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='example.com', purpose='protection',
+        )
+
+    @patch('urllib.request.urlopen')
+    def test_healthy_domain(self, mock_urlopen):
+        mock_resp = mock_urlopen.return_value.__enter__.return_value
+        mock_resp.status = 200
+        res = self.client.post(f'/api/domains/{self.domain.id}/recheck/')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        body = res.json()
+        self.assertEqual(body['health_status'], 'healthy')
+
+    @patch('urllib.request.urlopen', side_effect=OSError('connection refused'))
+    def test_unhealthy_domain(self, mock_urlopen):
+        res = self.client.post(f'/api/domains/{self.domain.id}/recheck/')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.json()['health_status'], 'unhealthy')
+
+
+# ---------------------------------------------------------------------------
+# Install Tokens
+# ---------------------------------------------------------------------------
+
+class InstallTokenTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='token_user', password='testpass123')
+        self.client.force_authenticate(user=self.user)
+        self.workspace = Workspace.objects.get(owner=self.user)
+
+    def test_list_empty(self):
+        res = self.client.get('/api/install-tokens/')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.json(), [])
+
+    def test_create_token(self):
+        res = self.client.post('/api/install-tokens/', {'label': 'Test'}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        body = res.json()
+        self.assertTrue(body['token'].startswith('vc_'))
+        self.assertEqual(body['label'], 'Test')
+        self.assertIn('id', body)
+        self.assertIn('expires_at', body)
+
+    def test_token_shown_once(self):
+        res = self.client.post('/api/install-tokens/', format='json')
+        raw_token = res.json()['token']
+        self.assertTrue(raw_token.startswith('vc_'))
+        self.assertNotIn('token', self.client.get('/api/install-tokens/').json()[0])
+
+    def test_max_5_tokens(self):
+        for i in range(5):
+            InstallToken.create_for_workspace(self.workspace, label=f'Token {i}')
+        res = self.client.post('/api/install-tokens/', format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_revoke_token(self):
+        raw, inst = InstallToken.create_for_workspace(self.workspace)
+        res = self.client.delete(f'/api/install-tokens/{inst.id}/')
+        self.assertEqual(res.status_code, status.HTTP_204_NO_CONTENT)
+        inst.refresh_from_db()
+        self.assertFalse(inst.is_active)
+
+    def test_revoke_nonexistent(self):
+        res = self.client.delete(f'/api/install-tokens/{uuid.uuid4()}/')
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_verify_token_valid(self):
+        raw, inst = InstallToken.create_for_workspace(self.workspace)
+        ws, token = InstallToken.verify_token(raw)
+        self.assertEqual(ws.id, self.workspace.id)
+        self.assertEqual(token.id, inst.id)
+
+    def test_verify_token_invalid(self):
+        ws, token = InstallToken.verify_token('vc_nonexistent')
+        self.assertIsNone(ws)
+        self.assertIsNone(token)
+
+    def test_verify_token_inactive(self):
+        raw, inst = InstallToken.create_for_workspace(self.workspace)
+        inst.is_active = False
+        inst.save()
+        ws, _ = InstallToken.verify_token(raw)
+        self.assertIsNone(ws)
+
+    def test_workspace_scoping(self):
+        other = User.objects.create_user(username='other_token', password='testpass123')
+        other_ws = Workspace.objects.get(owner=other)
+        raw, inst = InstallToken.create_for_workspace(other_ws)
+        res = self.client.get('/api/install-tokens/')
+        self.assertEqual(len(res.json()), 0)
+
+
+# ---------------------------------------------------------------------------
+# Redirect Domains
+# ---------------------------------------------------------------------------
+
+class RedirectDomainTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='rdomain_user', password='testpass123')
+        self.client.force_authenticate(user=self.user)
+        self.workspace = Workspace.objects.get(owner=self.user)
+        self.plan = Plan.objects.get(code='plus')
+        self.workspace.plan = self.plan
+        self.workspace.save()
+
+    def test_list_empty(self):
+        res = self.client.get('/api/redirect-domains/')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.json(), [])
+
+    def test_create_redirect_domain(self):
+        res = self.client.post('/api/redirect-domains/', {
+            'domain': 'go.example.com',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        body = res.json()
+        self.assertEqual(body['domain'], 'go.example.com')
+        self.assertEqual(body['purpose'], 'redirect')
+
+    def test_duplicate_domain_rejected(self):
+        DomainRegistry.objects.create(
+            workspace=self.workspace, domain='go.example.com', purpose='redirect',
+        )
+        res = self.client.post('/api/redirect-domains/', {
+            'domain': 'go.example.com',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_domain_limit_enforced(self):
+        for i in range(10):
+            DomainRegistry.objects.create(
+                workspace=self.workspace, domain=f'd{i}.example.com', purpose='redirect',
+            )
+        res = self.client.post('/api/redirect-domains/', {
+            'domain': 'extra.example.com',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+# ---------------------------------------------------------------------------
+# Redirect Routes
+# ---------------------------------------------------------------------------
+
+class RedirectRouteTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='route_user', password='testpass123')
+        self.client.force_authenticate(user=self.user)
+        self.workspace = Workspace.objects.get(owner=self.user)
+        self.domain = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='go.example.com',
+            purpose='redirect', verified=True,
+        )
+
+    def test_list_empty(self):
+        res = self.client.get('/api/redirect-routes/')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.json(), [])
+
+    def test_create_route(self):
+        res = self.client.post('/api/redirect-routes/', {
+            'domain_id': str(self.domain.id),
+            'destination_url': 'https://target.example.com',
+            'slug': 'promo',
+            'bot_action': 'honeypot',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        body = res.json()
+        self.assertEqual(body['slug'], 'promo')
+        self.assertEqual(body['destination_url'], 'https://target.example.com')
+        self.assertTrue(body['is_active'])
+
+    def test_create_requires_domain_and_url(self):
+        res = self.client.post('/api/redirect-routes/', {}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_create_unverified_domain_rejected(self):
+        d = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='unverified.com', purpose='redirect',
+        )
+        res = self.client.post('/api/redirect-routes/', {
+            'domain_id': str(d.id),
+            'destination_url': 'https://target.example.com',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_auto_replace_existing_route(self):
+        RedirectRoute.objects.create(
+            workspace=self.workspace, domain=self.domain,
+            destination_url='https://old.example.com',
+        )
+        res = self.client.post('/api/redirect-routes/', {
+            'domain_id': str(self.domain.id),
+            'destination_url': 'https://new.example.com',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(RedirectRoute.objects.filter(workspace=self.workspace).count(), 1)
+        self.assertEqual(
+            RedirectRoute.objects.first().destination_url, 'https://new.example.com',
+        )
+
+    def test_get_route_detail(self):
+        route = RedirectRoute.objects.create(
+            workspace=self.workspace, domain=self.domain,
+            destination_url='https://target.example.com',
+        )
+        res = self.client.get(f'/api/redirect-routes/{route.id}/')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.json()['destination_url'], 'https://target.example.com')
+
+    def test_patch_route(self):
+        route = RedirectRoute.objects.create(
+            workspace=self.workspace, domain=self.domain,
+            destination_url='https://old.example.com',
+        )
+        res = self.client.patch(f'/api/redirect-routes/{route.id}/', {
+            'destination_url': 'https://new.example.com',
+            'bot_action': 'block',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        route.refresh_from_db()
+        self.assertEqual(route.destination_url, 'https://new.example.com')
+        self.assertEqual(route.bot_action, 'block')
+
+    def test_delete_route(self):
+        route = RedirectRoute.objects.create(
+            workspace=self.workspace, domain=self.domain,
+            destination_url='https://target.example.com',
+        )
+        res = self.client.delete(f'/api/redirect-routes/{route.id}/')
+        self.assertEqual(res.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(RedirectRoute.objects.filter(id=route.id).exists())
+
+    def test_renew_route(self):
+        route = RedirectRoute.objects.create(
+            workspace=self.workspace, domain=self.domain,
+            destination_url='https://target.example.com',
+            expires_at=timezone.now() + timedelta(days=1),
+        )
+        res = self.client.post(f'/api/redirect-routes/{route.id}/renew/')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        route.refresh_from_db()
+        self.assertTrue(route.is_active)
+        self.assertGreater(route.expires_at, timezone.now() + timedelta(days=6))
+
+    def test_activate_route(self):
+        route = RedirectRoute.objects.create(
+            workspace=self.workspace, domain=self.domain,
+            destination_url='https://target.example.com',
+            is_active=False,
+            expires_at=timezone.now() + timedelta(days=3),
+        )
+        res = self.client.post(f'/api/redirect-routes/{route.id}/activate/')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        route.refresh_from_db()
+        self.assertTrue(route.is_active)
+
+    def test_activate_expired_route_rejected(self):
+        route = RedirectRoute.objects.create(
+            workspace=self.workspace, domain=self.domain,
+            destination_url='https://target.example.com',
+            is_active=False,
+            expires_at=timezone.now() - timedelta(days=1),
+        )
+        res = self.client.post(f'/api/redirect-routes/{route.id}/activate/')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_deactivate_route(self):
+        route = RedirectRoute.objects.create(
+            workspace=self.workspace, domain=self.domain,
+            destination_url='https://target.example.com',
+            is_active=True,
+        )
+        res = self.client.post(f'/api/redirect-routes/{route.id}/deactivate/')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        route.refresh_from_db()
+        self.assertFalse(route.is_active)
+
+    def test_one_to_one_enforced(self):
+        RedirectRoute.objects.create(
+            workspace=self.workspace, domain=self.domain,
+            destination_url='https://a.example.com',
+        )
+        with self.assertRaises(Exception):
+            RedirectRoute.objects.create(
+                workspace=self.workspace, domain=self.domain,
+                destination_url='https://b.example.com',
+            )
+
+
+# ---------------------------------------------------------------------------
+# Edge Sync Credential Management
+# ---------------------------------------------------------------------------
+
+class EdgeCredentialTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='edge_user', password='testpass123')
+        self.client.force_authenticate(user=self.user)
+        self.workspace = Workspace.objects.get(owner=self.user)
+
+    def test_list_empty(self):
+        res = self.client.get('/api/edge/credentials/')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.json(), [])
+
+    def test_create_credential(self):
+        res = self.client.post('/api/edge/credentials/', {
+            'label': 'FlokiNET DE',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        body = res.json()
+        self.assertTrue(body['key'].startswith('ek_'))
+        self.assertEqual(body['label'], 'FlokiNET DE')
+
+    def test_max_2_credentials(self):
+        EdgeSyncCredential.create_for_workspace(self.workspace, label='Node 1')
+        EdgeSyncCredential.create_for_workspace(self.workspace, label='Node 2')
+        res = self.client.post('/api/edge/credentials/', format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_revoke_credential(self):
+        raw, cred = EdgeSyncCredential.create_for_workspace(self.workspace)
+        res = self.client.delete(f'/api/edge/credentials/{cred.id}/')
+        self.assertEqual(res.status_code, status.HTTP_204_NO_CONTENT)
+        cred.refresh_from_db()
+        self.assertFalse(cred.is_active)
+
+    def test_revoke_allows_new_creation(self):
+        _, cred = EdgeSyncCredential.create_for_workspace(self.workspace)
+        cred.is_active = False
+        cred.save()
+        res = self.client.post('/api/edge/credentials/', format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+
+    def test_verify_key_valid(self):
+        raw, cred = EdgeSyncCredential.create_for_workspace(self.workspace)
+        ws, instance = EdgeSyncCredential.verify_key(raw)
+        self.assertEqual(ws.id, self.workspace.id)
+        self.assertEqual(instance.id, cred.id)
+
+    def test_verify_key_invalid(self):
+        ws, cred = EdgeSyncCredential.verify_key('ek_nonexistent')
+        self.assertIsNone(ws)
+        self.assertIsNone(cred)
+
+    def test_verify_key_inactive(self):
+        raw, cred = EdgeSyncCredential.create_for_workspace(self.workspace)
+        cred.is_active = False
+        cred.save()
+        ws, _ = EdgeSyncCredential.verify_key(raw)
+        self.assertIsNone(ws)
+
+    def test_verify_key_updates_last_sync(self):
+        raw, cred = EdgeSyncCredential.create_for_workspace(self.workspace)
+        self.assertIsNone(cred.last_sync_at)
+        EdgeSyncCredential.verify_key(raw)
+        cred.refresh_from_db()
+        self.assertIsNotNone(cred.last_sync_at)
+
+
+# ---------------------------------------------------------------------------
+# Edge Sync Endpoint
+# ---------------------------------------------------------------------------
+
+class EdgeSyncTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='sync_user', password='testpass123')
+        self.workspace = Workspace.objects.get(owner=self.user)
+        self.raw_key, self.cred = EdgeSyncCredential.create_for_workspace(
+            self.workspace, label='Test Node',
+        )
+        self.headers = {'HTTP_X_EDGE_API_KEY': self.raw_key}
+
+    def test_requires_edge_api_key(self):
+        res = self.client.get('/api/edge/sync/')
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_invalid_key(self):
+        res = self.client.get('/api/edge/sync/', **{'HTTP_X_EDGE_API_KEY': 'ek_bad'})
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_returns_routes(self):
+        domain = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='go.example.com',
+            purpose='redirect', verified=True,
+        )
+        RedirectRoute.objects.create(
+            workspace=self.workspace, domain=domain,
+            destination_url='https://target.example.com',
+            bot_action='honeypot',
+        )
+        res = self.client.get('/api/edge/sync/', **self.headers)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        body = res.json()
+        self.assertIn('routes', body)
+        self.assertIn('blocked_ips', body)
+        self.assertIn('country_rules', body)
+        self.assertEqual(len(body['routes']), 1)
+        self.assertEqual(body['routes'][0]['domain'], 'go.example.com')
+
+    def test_returns_blocked_ips(self):
+        IPRule.objects.create(
+            workspace=self.workspace, ip_or_cidr='1.2.3.4', action='deny',
+        )
+        res = self.client.get('/api/edge/sync/', **self.headers)
+        self.assertIn('1.2.3.4', res.json()['blocked_ips'])
+
+    def test_returns_country_rules(self):
+        CountryRule.objects.create(
+            workspace=self.workspace, country_code='CN', action='deny',
+        )
+        res = self.client.get('/api/edge/sync/', **self.headers)
+        rules = res.json()['country_rules']
+        self.assertTrue(any(r['country_code'] == 'CN' for r in rules))
+
+    def test_domain_filter(self):
+        d1 = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='a.com',
+            purpose='redirect', verified=True,
+        )
+        d2 = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='b.com',
+            purpose='redirect', verified=True,
+        )
+        RedirectRoute.objects.create(workspace=self.workspace, domain=d1, destination_url='https://a.example.com')
+        RedirectRoute.objects.create(workspace=self.workspace, domain=d2, destination_url='https://b.example.com')
+        res = self.client.get('/api/edge/sync/?domain=a.com', **self.headers)
+        routes = res.json()['routes']
+        self.assertEqual(len(routes), 1)
+        self.assertEqual(routes[0]['domain'], 'a.com')
+
+    def test_sync_token_present(self):
+        res = self.client.get('/api/edge/sync/', **self.headers)
+        self.assertIn('sync_token', res.json())
+
+
+# ---------------------------------------------------------------------------
+# Edge Validate Domain
+# ---------------------------------------------------------------------------
+
+class EdgeValidateDomainTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='val_user', password='testpass123')
+        self.workspace = Workspace.objects.get(owner=self.user)
+
+    def test_vericlick_cc_always_valid(self):
+        res = self.client.get('/api/edge/validate-domain/?domain=vericlick.cc')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+
+    def test_active_route_returns_200(self):
+        domain = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='go.example.com',
+            purpose='redirect', verified=True,
+        )
+        RedirectRoute.objects.create(
+            workspace=self.workspace, domain=domain,
+            destination_url='https://target.example.com',
+        )
+        res = self.client.get('/api/edge/validate-domain/?domain=go.example.com')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+
+    def test_unknown_domain_returns_404(self):
+        res = self.client.get('/api/edge/validate-domain/?domain=unknown.com')
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_no_domain_param_returns_404(self):
+        res = self.client.get('/api/edge/validate-domain/')
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+
+
+# ---------------------------------------------------------------------------
+# Edge Events Batch
+# ---------------------------------------------------------------------------
+
+class EdgeEventsBatchTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='events_user', password='testpass123')
+        self.workspace = Workspace.objects.get(owner=self.user)
+        self.raw_key, self.cred = EdgeSyncCredential.create_for_workspace(self.workspace)
+        self.domain = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='go.example.com',
+            purpose='redirect', verified=True,
+        )
+        self.route = RedirectRoute.objects.create(
+            workspace=self.workspace, domain=self.domain,
+            destination_url='https://target.example.com',
+        )
+        self.headers = {'HTTP_X_EDGE_API_KEY': self.raw_key}
+
+    def test_requires_edge_api_key(self):
+        res = self.client.post('/api/edge/events/', {'events': []}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_creates_events(self):
+        res = self.client.post('/api/edge/events/', {
+            'events': [{
+                'domain': 'go.example.com',
+                'slug': 'promo',
+                'ip': '1.2.3.4',
+                'user_agent': 'Mozilla/5.0',
+                'destination': 'https://target.example.com',
+                'verdict': 'allowed',
+                'is_bot': False,
+                'country_code': 'US',
+                'country': 'United States',
+            }],
+        }, format='json', **self.headers)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.json()['created'], 1)
+        self.assertEqual(RedirectEvent.objects.count(), 1)
+        event = RedirectEvent.objects.first()
+        self.assertEqual(event.ip, '1.2.3.4')
+        self.assertEqual(event.verdict, 'allowed')
+
+    def test_increments_clicks_count(self):
+        self.route.refresh_from_db()
+        self.assertEqual(self.route.clicks_count, 0)
+        self.client.post('/api/edge/events/', {
+            'events': [{
+                'domain': 'go.example.com',
+                'ip': '1.2.3.4',
+                'destination': 'https://target.example.com',
+            }],
+        }, format='json', **self.headers)
+        self.route.refresh_from_db()
+        self.assertEqual(self.route.clicks_count, 1)
+
+    def test_skips_invalid_events(self):
+        res = self.client.post('/api/edge/events/', {
+            'events': [
+                {'domain': '', 'ip': '1.2.3.4', 'destination': 'x'},
+                {'domain': 'go.example.com', 'ip': '', 'destination': 'x'},
+                {'domain': 'go.example.com', 'ip': '1.2.3.4', 'destination': 'x'},
+            ],
+        }, format='json', **self.headers)
+        self.assertEqual(res.json()['created'], 1)
+
+    def test_batch_capped_at_500(self):
+        events = [
+            {'domain': 'go.example.com', 'ip': '1.2.3.4', 'destination': 'x'}
+            for _ in range(600)
+        ]
+        res = self.client.post('/api/edge/events/', {'events': events}, format='json', **self.headers)
+        self.assertEqual(res.json()['created'], 500)
+
+    def test_events_must_be_list(self):
+        res = self.client.post('/api/edge/events/', {'events': 'not-a-list'}, format='json', **self.headers)
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+# ---------------------------------------------------------------------------
+# Shield Verify with Install Token
+# ---------------------------------------------------------------------------
+
+class ShieldVerifyInstallTokenTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='shield_user', password='testpass123')
+        self.workspace = Workspace.objects.get(owner=self.user)
+        self.domain = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='example.com', purpose='protection',
+        )
+        self.raw_token, self.install_token = InstallToken.create_for_workspace(self.workspace)
+
+    def test_verify_with_api_key(self):
+        res = self.client.post('/api/shield/verify/', {
+            'api_key': str(self.workspace.tracker_secret),
+            'page_url': 'https://example.com/',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertIn('verdict', res.json())
+
+    def test_verify_with_install_token(self):
+        res = self.client.post('/api/shield/verify/', {
+            'install_token': self.raw_token,
+            'page_url': 'https://example.com/',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertIn('verdict', res.json())
+
+    def test_verify_invalid_token(self):
+        res = self.client.post('/api/shield/verify/', {
+            'install_token': 'vc_nonexistent',
+            'page_url': 'https://example.com/',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_verify_unregistered_domain_returns_allow(self):
+        res = self.client.post('/api/shield/verify/', {
+            'api_key': str(self.workspace.tracker_secret),
+            'page_url': 'https://unknown.com/',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.json()['verdict'], 'allow')
+
+    def test_verify_missing_both_keys(self):
+        res = self.client.post('/api/shield/verify/', {
+            'page_url': 'https://example.com/',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+class ShieldConfigInstallTokenTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='shieldcfg_user', password='testpass123')
+        self.workspace = Workspace.objects.get(owner=self.user)
+        self.raw_token, self.install_token = InstallToken.create_for_workspace(self.workspace)
+
+    def test_config_with_api_key(self):
+        res = self.client.get(f'/api/shield/config/?api_key={self.workspace.tracker_secret}')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertIn('protection_mode', res.json())
+
+    def test_config_with_install_token(self):
+        res = self.client.get(f'/api/shield/config/?install_token={self.raw_token}')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertIn('protection_mode', res.json())
+
+    def test_config_invalid_token(self):
+        res = self.client.get('/api/shield/config/?install_token=vc_bad')
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+# ---------------------------------------------------------------------------
+# Test Installation
+# ---------------------------------------------------------------------------
+
+class TestInstallationTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='testinst_user', password='testpass123')
+        self.client.force_authenticate(user=self.user)
+        self.workspace = Workspace.objects.get(owner=self.user)
+        self.domain = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='example.com',
+        )
+
+    def test_requires_domain_id(self):
+        res = self.client.post('/api/test-installation/', {}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_domain_not_found(self):
+        res = self.client.post('/api/test-installation/', {
+            'domain_id': str(uuid.uuid4()),
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+
+    @patch('urllib.request.urlopen')
+    def test_installed(self, mock_urlopen):
+        mock_resp = mock_urlopen.return_value.__enter__.return_value
+        mock_resp.status = 200
+        mock_resp.read.return_value = b'<html><script src="https://cdn.vericlick.site/shield.js"></script></html>'
+        res = self.client.post('/api/test-installation/', {
+            'domain_id': str(self.domain.id),
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertTrue(res.json()['installed'])
+
+    @patch('urllib.request.urlopen')
+    def test_not_installed(self, mock_urlopen):
+        mock_resp = mock_urlopen.return_value.__enter__.return_value
+        mock_resp.status = 200
+        mock_resp.read.return_value = b'<html><head></head><body>Hello</body></html>'
+        res = self.client.post('/api/test-installation/', {
+            'domain_id': str(self.domain.id),
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertFalse(res.json()['installed'])
+
+    def test_requires_auth(self):
+        self.client.force_authenticate(user=None)
+        res = self.client.post('/api/test-installation/', {
+            'domain_id': str(self.domain.id),
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+# ---------------------------------------------------------------------------
+# Model Tests: InstallToken, RedirectRoute, EdgeSyncCredential, RedirectEvent
+# ---------------------------------------------------------------------------
+
+class InstallTokenModelTests(TestCase):
+    def test_create_for_workspace(self):
+        user = User.objects.create_user(username='itok_model')
+        ws = Workspace.objects.get(owner=user)
+        raw, inst = InstallToken.create_for_workspace(ws, label='Test')
+        self.assertTrue(raw.startswith('vc_'))
+        self.assertEqual(inst.label, 'Test')
+        self.assertTrue(inst.is_active)
+        self.assertEqual(inst.token_prefix, raw[:12])
+
+    def test_verify_token(self):
+        user = User.objects.create_user(username='itok_verify')
+        ws = Workspace.objects.get(owner=user)
+        raw, inst = InstallToken.create_for_workspace(ws)
+        found_ws, found_inst = InstallToken.verify_token(raw)
+        self.assertEqual(found_ws.id, ws.id)
+
+    def test_str(self):
+        user = User.objects.create_user(username='itok_str')
+        ws = Workspace.objects.get(owner=user)
+        _, inst = InstallToken.create_for_workspace(ws)
+        self.assertIn(inst.token_prefix, str(inst))
+
+
+class RedirectRouteModelTests(TestCase):
+    def test_str(self):
+        user = User.objects.create_user(username='rr_str')
+        ws = Workspace.objects.get(owner=user)
+        d = DomainRegistry.objects.create(workspace=ws, domain='go.com', purpose='redirect')
+        route = RedirectRoute.objects.create(
+            workspace=ws, domain=d, destination_url='https://target.com',
+        )
+        self.assertIn('go.com', str(route))
+        self.assertIn('target.com', str(route))
+
+    def test_bot_action_choices(self):
+        self.assertEqual(len(RedirectRoute.BotAction), 4)
+
+    def test_default_values(self):
+        user = User.objects.create_user(username='rr_defaults')
+        ws = Workspace.objects.get(owner=user)
+        d = DomainRegistry.objects.create(workspace=ws, domain='go.com', purpose='redirect')
+        route = RedirectRoute.objects.create(
+            workspace=ws, domain=d, destination_url='https://target.com',
+        )
+        self.assertEqual(route.bot_action, 'honeypot')
+        self.assertTrue(route.is_active)
+        self.assertEqual(route.clicks_count, 0)
+
+
+class EdgeSyncCredentialModelTests(TestCase):
+    def test_create_and_verify(self):
+        user = User.objects.create_user(username='esc_model')
+        ws = Workspace.objects.get(owner=user)
+        raw, cred = EdgeSyncCredential.create_for_workspace(ws, label='Test')
+        self.assertTrue(raw.startswith('ek_'))
+        self.assertEqual(cred.key_prefix, raw[:12])
+        found_ws, found_cred = EdgeSyncCredential.verify_key(raw)
+        self.assertEqual(found_ws.id, ws.id)
+
+    def test_str(self):
+        user = User.objects.create_user(username='esc_str')
+        ws = Workspace.objects.get(owner=user)
+        _, cred = EdgeSyncCredential.create_for_workspace(ws, label='MyNode')
+        self.assertIn('MyNode', str(cred))
+
+
+class DomainRegistryModelTests(TestCase):
+    def test_generate_verification_token(self):
+        user = User.objects.create_user(username='dr_model')
+        ws = Workspace.objects.get(owner=user)
+        d = DomainRegistry.objects.create(workspace=ws, domain='test.com')
+        token = d.generate_verification_token()
+        self.assertEqual(len(token), 32)
+        d.refresh_from_db()
+        self.assertEqual(d.verification_token, token)
