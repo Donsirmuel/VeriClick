@@ -1,5 +1,5 @@
 import { apiClient } from './client'
-import type { BillingHistory, BillingMode, CheckoutSession, PaymentMethod, Workspace, Domain } from '@/types'
+import type { BillingHistory, BillingMode, CheckoutSession, PaymentMethod, Workspace, Domain, InstallToken, RedirectRoute, RedirectDomain } from '@/types'
 
 interface WorkspaceUpdateInput {
   name?: string
@@ -56,5 +56,141 @@ export interface DashboardDomain {
 
 export async function fetchDashboardDomains(): Promise<DashboardDomain[]> {
   const { data } = await apiClient.get<DashboardDomain[]>('/dashboard/domains/')
+  return data
+}
+
+// --- Domain Verification ---
+
+export async function getVerifyChallenge(domainId: string, method: string = 'html_meta'): Promise<{
+  method: string
+  token: string
+  metaTag: string
+  dnsName: string
+  dnsValue: string
+}> {
+  const { data } = await apiClient.get(`/domains/${domainId}/verify-challenge/`, {
+    params: { method },
+  })
+  return data
+}
+
+export async function confirmVerification(domainId: string): Promise<{
+  verified: boolean
+  verifiedAt?: string
+  healthStatus?: string
+  error?: string
+  detail?: string
+}> {
+  const { data } = await apiClient.post(`/domains/${domainId}/verify-confirm/`)
+  return data
+}
+
+export async function recheckDomain(domainId: string): Promise<{
+  healthStatus: string
+  lastHealthCheck: string
+}> {
+  const { data } = await apiClient.post(`/domains/${domainId}/recheck/`)
+  return data
+}
+
+// --- Install Tokens ---
+
+export async function fetchInstallTokens(): Promise<InstallToken[]> {
+  const { data } = await apiClient.get<InstallToken[]>('/install-tokens/')
+  return data
+}
+
+export async function createInstallToken(label: string = 'Primary'): Promise<{
+  id: string
+  token: string
+  tokenPrefix: string
+  label: string
+  expiresAt: string
+  createdAt: string
+}> {
+  const { data } = await apiClient.post('/install-tokens/', { label })
+  return data
+}
+
+export async function revokeInstallToken(tokenId: string): Promise<void> {
+  await apiClient.delete(`/install-tokens/${tokenId}/`)
+}
+
+// --- Redirect Domains ---
+
+export async function fetchRedirectDomains(): Promise<RedirectDomain[]> {
+  const { data } = await apiClient.get<RedirectDomain[]>('/redirect-domains/')
+  return data
+}
+
+export async function addRedirectDomain(domain: string): Promise<RedirectDomain> {
+  const { data } = await apiClient.post<RedirectDomain>('/redirect-domains/', { domain })
+  return data
+}
+
+export async function deleteRedirectDomain(domainId: string): Promise<void> {
+  await apiClient.delete(`/redirect-domains/${domainId}/`)
+}
+
+// --- Redirect Routes ---
+
+export async function fetchRedirectRoutes(): Promise<RedirectRoute[]> {
+  const { data } = await apiClient.get<RedirectRoute[]>('/redirect-routes/')
+  return data
+}
+
+export async function createRedirectRoute(input: {
+  domainId: string
+  slug: string
+  destinationUrl: string
+  botAction?: string
+  fallbackUrl?: string
+}): Promise<RedirectRoute> {
+  const { data } = await apiClient.post<RedirectRoute>('/redirect-routes/', {
+    domain_id: input.domainId,
+    slug: input.slug,
+    destination_url: input.destinationUrl,
+    bot_action: input.botAction || 'honeypot',
+    fallback_url: input.fallbackUrl || '',
+  })
+  return data
+}
+
+export async function updateRedirectRoute(routeId: string, input: Partial<{
+  slug: string
+  destinationUrl: string
+  botAction: string
+  fallbackUrl: string
+  isActive: boolean
+}>): Promise<RedirectRoute> {
+  const payload: Record<string, unknown> = {}
+  if (input.slug !== undefined) payload.slug = input.slug
+  if (input.destinationUrl !== undefined) payload.destination_url = input.destinationUrl
+  if (input.botAction !== undefined) payload.bot_action = input.botAction
+  if (input.fallbackUrl !== undefined) payload.fallback_url = input.fallbackUrl
+  if (input.isActive !== undefined) payload.is_active = input.isActive
+  const { data } = await apiClient.patch<RedirectRoute>(`/redirect-routes/${routeId}/`, payload)
+  return data
+}
+
+export async function deleteRedirectRoute(routeId: string): Promise<void> {
+  await apiClient.delete(`/redirect-routes/${routeId}/`)
+}
+
+export async function renewRedirectRoute(routeId: string): Promise<{ expiresAt: string; isActive: boolean }> {
+  const { data } = await apiClient.post(`/redirect-routes/${routeId}/renew/`)
+  return data
+}
+
+// --- Test Installation ---
+
+export async function testInstallation(domainId: string): Promise<{
+  installed: boolean
+  hasScriptTag?: boolean
+  hasInitCall?: boolean
+  domain?: string
+  error?: string
+}> {
+  const { data } = await apiClient.post('/test-installation/', { domain_id: domainId })
   return data
 }

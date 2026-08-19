@@ -412,9 +412,31 @@ class ShieldConfig(models.Model):
 
 
 class DomainRegistry(models.Model):
-    """Simplified domain tracking — no DNS verification. Users add domains and
-    click "authorize" to confirm ownership. The domain count is the pricing
-    differentiator across plans (Basic=5, Plus=10, Pro=20)."""
+    """Domain ownership tracking with verification. The domain count is the
+    pricing differentiator across plans (Basic=5, Plus=10, Pro=20).
+
+    Two purposes:
+    - protection: domain is protected by the shield.js script
+    - redirect: domain is used for smart redirects via the edge proxy
+
+    Verification methods:
+    - html_meta: user adds a <meta> tag to their site
+    - dns_txt: user adds a DNS TXT record (fallback)
+    """
+
+    class VerificationMethod(models.TextChoices):
+        HTML_META = 'html_meta', 'HTML Meta Tag'
+        DNS_TXT = 'dns_txt', 'DNS TXT Record'
+
+    class HealthStatus(models.TextChoices):
+        UNKNOWN = 'unknown', 'Unknown'
+        HEALTHY = 'healthy', 'Healthy'
+        UNHEALTHY = 'unhealthy', 'Unreachable'
+
+    class Purpose(models.TextChoices):
+        PROTECTION = 'protection', 'Bot Protection'
+        REDIRECT = 'redirect', 'Smart Redirect'
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     workspace = models.ForeignKey(
         Workspace, on_delete=models.CASCADE, related_name='domains',
@@ -423,6 +445,28 @@ class DomainRegistry(models.Model):
         max_length=253,
         help_text='Registered domain (e.g. example.com).',
     )
+    purpose = models.CharField(
+        max_length=10, choices=Purpose.choices, default=Purpose.PROTECTION,
+    )
+
+    # Verification
+    verification_method = models.CharField(
+        max_length=10, choices=VerificationMethod.choices, blank=True, default='',
+    )
+    verification_token = models.CharField(
+        max_length=64, blank=True, default='',
+        help_text='Auto-generated challenge token for domain verification.',
+    )
+    verified = models.BooleanField(default=False)
+    verified_at = models.DateTimeField(null=True, blank=True)
+
+    # Health
+    last_health_check = models.DateTimeField(null=True, blank=True)
+    health_status = models.CharField(
+        max_length=10, choices=HealthStatus.choices, default=HealthStatus.UNKNOWN,
+    )
+
+    # Soft delete
     is_active = models.BooleanField(
         default=True,
         help_text='Soft-delete flag — removed domains keep their slot until period ends.',
@@ -435,6 +479,166 @@ class DomainRegistry(models.Model):
 
     def __str__(self):
         return f'{self.domain} ({self.workspace_id})'
+
+    def generate_verification_token(self):
+        """Generate a new verification token for domain ownership challenge."""
+        import secrets
+        self.verification_token = secrets.token_hex(16)  # 32-char hex
+        self.save(update_fields=['verification_token'])
+        return self.verification_token
+
+
+class InstallToken(models.Model):
+    """Scoped token for script installation. The raw token is shown once on
+    creation and never stored — only the SHA-256 hash is persisted. Used by
+    shield.js to authenticate without exposing workspace secrets."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace = models.ForeignKey(
+        Workspace, on_delete=models.CASCADE, related_name='install_tokens',
+    )
+    token_hash = models.CharField(max_length=64, unique=True)
+    token_prefix = models.CharField(max_length=12, help_text='First chars for display.')
+    label = models.CharField(max_length=100, default='Primary')
+    expires_at = models.DateTimeField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.token_prefix}… ({self.workspace_id})'
+
+    @staticmethod
+    def create_for_workspace(workspace, label='Primary'):
+        """Generate a new install token. Returns (raw_token, token_instance).
+        The raw token MUST be shown to the user once — it cannot be recovered."""
+        import secrets
+        import hashlib
+        raw_token = 'vc_' + secrets.token_urlsafe(48)
+        token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+        token_prefix = raw_token[:12]
+        instance = InstallToken.objects.create(
+            workspace=workspace,
+            token_hash=token_hash,
+            token_prefix=token_prefix,
+            label=label,
+        )
+        return raw_token, instance
+
+    @staticmethod
+    def verify_token(raw_token):
+        """Look up a workspace by raw install token. Returns (workspace, token) or (None, None)."""
+        import hashlib
+        token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+        try:
+            token = InstallToken.objects.select_related('workspace').get(
+                token_hash=token_hash, is_active=True,
+            )
+            if token.expires_at and token.expires_at < timezone.now():
+                return None, None
+            token.last_used_at = timezone.now()
+            token.save(update_fields=['last_used_at'])
+            return token.workspace, token
+        except InstallToken.DoesNotExist:
+            return None, None
+
+
+class RedirectRoute(models.Model):
+    """One redirect rule scoped to a single domain. The edge proxy fetches
+    routes from the backend API for each domain it receives traffic on."""
+
+    class BotAction(models.TextChoices):
+        HONEYPOT = 'honeypot', 'Honeypot (trap bots)'
+        BLOCK = 'block', 'Block (403)'
+
+    class AbuseStatus(models.TextChoices):
+        NONE = 'none', 'No abuse'
+        FLAGGED = 'flagged', 'Flagged for review'
+        BLOCKED = 'blocked', 'Blocked'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace = models.ForeignKey(
+        Workspace, on_delete=models.CASCADE, related_name='redirect_routes',
+    )
+    domain = models.ForeignKey(
+        DomainRegistry, on_delete=models.CASCADE, related_name='redirect_routes',
+    )
+    slug = models.SlugField(
+        max_length=100, blank=True, default='',
+        help_text='Short path on the redirect domain. Empty = root.',
+    )
+    destination_url = models.URLField(max_length=2048)
+    bot_action = models.CharField(
+        max_length=10, choices=BotAction.choices, default=BotAction.HONEYPOT,
+    )
+    fallback_url = models.URLField(
+        max_length=2048, blank=True, default='',
+        help_text='Where to send suspected bots (empty = neutral fallback).',
+    )
+    is_active = models.BooleanField(default=True)
+    expires_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text='After this time the redirect stops working. Auto-set to 7 days from creation.',
+    )
+    destination_safe = models.BooleanField(
+        null=True, default=None,
+        help_text='Last safety-check result for the destination URL.',
+    )
+    clicks_count = models.PositiveIntegerField(default=0)
+    abuse_status = models.CharField(
+        max_length=10, choices=AbuseStatus.choices, default=AbuseStatus.NONE,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'redirect_routes'
+        ordering = ['-created_at']
+        # One active route per (domain, slug)
+        constraints = [
+            models.UniqueConstraint(
+                fields=['domain', 'slug'],
+                condition=models.Q(is_active=True),
+                name='unique_active_route_per_domain_slug',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.domain.domain}/{self.slug} -> {self.destination_url}'
+
+
+class EdgeSyncCredential(models.Model):
+    """Shared secret between backend and each edge proxy node. Used to
+    authenticate the edge → backend routes-sync polling endpoint."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace = models.ForeignKey(
+        Workspace, on_delete=models.CASCADE, related_name='edge_credentials',
+    )
+    label = models.CharField(
+        max_length=100, default='default',
+        help_text='Human label for this edge node (e.g. "FlokiNET DE").',
+    )
+    api_secret = models.CharField(
+        max_length=128,
+        help_text='Shared secret. Shown once on creation.',
+    )
+    is_active = models.BooleanField(default=True)
+    last_sync_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'edge_sync_credentials'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.label} ({self.workspace_id})'
+
+    @staticmethod
+    def generate_secret():
+        return secrets.token_urlsafe(48)
 
 
 class SiteConfig(models.Model):

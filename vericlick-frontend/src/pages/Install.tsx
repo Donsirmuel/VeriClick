@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
@@ -6,23 +6,112 @@ import {
   Copy01Icon,
   CheckmarkCircle02Icon,
   Globe02Icon,
+  Loading03Icon,
 } from "@hugeicons/core-free-icons";
 import toast from "react-hot-toast";
-import { fetchWorkspace, fetchDomains } from "@/api/workspace";
+import { fetchWorkspace, fetchDomains, testInstallation, getVerifyChallenge } from "@/api/workspace";
 import { apiClient } from "@/api/client";
 import { DashboardSkeleton } from "@/components/ui/DashboardSkeleton";
 
 const API_BASE = (apiClient.defaults.baseURL || "").replace(/\/$/, "");
 
+type Platform = "html" | "wordpress" | "shopify" | "wix" | "squarespace" | "webflow";
+
 interface PlatformGuide {
+  key: Platform;
   name: string;
   icon: string;
   description: string;
-  snippet: string;
+  detailedSteps: string[];
 }
 
+const PLATFORMS: PlatformGuide[] = [
+  {
+    key: "html",
+    name: "HTML",
+    icon: "🌐",
+    description: "Add before the closing </head> tag",
+    detailedSteps: [
+      "Open your HTML file",
+      "Find the <head> section",
+      "Paste the snippet before the closing </head> tag",
+      "Save and deploy your changes",
+    ],
+  },
+  {
+    key: "wordpress",
+    name: "WordPress",
+    icon: "📝",
+    description: "Plugin or theme header",
+    detailedSteps: [
+      "Option A — Plugin: Install 'Insert Headers and Footers' by WPCode",
+      "Go to Code Snippets > Header & Footer",
+      "Paste the snippet in the Header section",
+      "Save and activate",
+      "Option B — Theme: Go to Appearance > Theme File Editor",
+      "Open header.php and paste in the <head> section",
+    ],
+  },
+  {
+    key: "shopify",
+    name: "Shopify",
+    icon: "🛒",
+    description: "theme.liquid before </head>",
+    detailedSteps: [
+      "Go to Online Store > Edit Code",
+      "Open layout/theme.liquid",
+      "Find the </head> tag",
+      "Paste the snippet immediately before it",
+      "Save",
+    ],
+  },
+  {
+    key: "wix",
+    name: "Wix",
+    icon: "✨",
+    description: "Custom code via Settings",
+    detailedSteps: [
+      "Go to Settings > Custom Code (or trackalytics in newer Wix)",
+      "Click '+ Add Custom Code'",
+      "Select 'Head' as the placement",
+      "Paste the snippet",
+      "Save and publish",
+    ],
+  },
+  {
+    key: "squarespace",
+    name: "Squarespace",
+    icon: "🎨",
+    description: "Code Injection in site settings",
+    detailedSteps: [
+      "Go to Settings > Advanced > Code Injection",
+      "Paste the snippet in the 'Header' field",
+      "Click Save",
+    ],
+  },
+  {
+    key: "webflow",
+    name: "Webflow",
+    icon: "🖼️",
+    description: "Site Settings > Custom Code > Head Code",
+    detailedSteps: [
+      "Go to Site Settings > Custom Code",
+      "Paste in the 'Head Code' section",
+      "Save and publish your site",
+    ],
+  },
+];
+
 export default function InstallPage() {
-  const [copiedSnippet, setCopiedSnippet] = useState<string | null>(null);
+  const [selectedPlatform, setSelectedPlatform] = useState<Platform>("html");
+  const [selectedDomainId, setSelectedDomainId] = useState<string>("");
+  const [copiedSnippet, setCopiedSnippet] = useState(false);
+  const [testResult, setTestResult] = useState<{
+    installed: boolean;
+    hasScriptTag?: boolean;
+    hasInitCall?: boolean;
+    error?: string;
+  } | null>(null);
 
   const { data: workspace, isLoading } = useQuery({
     queryKey: ["workspace"],
@@ -34,84 +123,57 @@ export default function InstallPage() {
     queryFn: fetchDomains,
   });
 
+  const { data: verificationChallenge } = useQuery({
+    queryKey: ["verify-challenge", selectedDomainId, "html_meta"],
+    queryFn: () => getVerifyChallenge(selectedDomainId, "html_meta"),
+    enabled: !!selectedDomainId,
+  });
+
+  const testMutation = useMutation({
+    mutationFn: testInstallation,
+    onSuccess: (data) => {
+      setTestResult(data);
+      if (data.installed) {
+        toast.success("Script detected on your domain!");
+      } else {
+        toast.error(data.error || "Script not found on your domain");
+      }
+    },
+    onError: (err) => {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      toast.error(msg || "Test failed");
+    },
+  });
+
   const hasDomain = (domains?.length ?? 0) > 0;
   const apiKey = workspace?.trackerSecret || "";
+  const installToken = verificationChallenge?.token || "";
 
-  const getSnippet = (platform: string) => {
-    if (platform === "nextjs") {
-      return `<!-- VeriClick Bot Protection -->
+  const selectedDomain = domains?.find((d) => d.id === selectedDomainId);
+
+  const getSnippet = (platform: Platform) => {
+    const tokenAttr = installToken ? ` data-install-token="${installToken}"` : "";
+    const base = `<!-- VeriClick Bot Protection -->
 <script
   src="${API_BASE}/shield.js"
-  data-api-key="${apiKey}"
+  data-api-key="${apiKey}"${tokenAttr}
   defer
 ></script>`;
-    }
-
-    if (platform === "wordpress") {
-      return `<!-- VeriClick Bot Protection -->
-<script src="${API_BASE}/shield.js" data-api-key="${apiKey}" defer></script>`;
-    }
 
     if (platform === "shopify") {
       return `<!-- VeriClick Bot Protection -->
-<script src="${API_BASE}/shield.js" data-api-key="${apiKey}" defer></script>`;
+<script src="${API_BASE}/shield.js" data-api-key="${apiKey}"${tokenAttr} defer></script>`;
     }
 
-    if (platform === "webflow") {
-      return `<!-- VeriClick Bot Protection -->
-<script src="${API_BASE}/shield.js" data-api-key="${apiKey}" defer></script>`;
-    }
-
-    return `<!-- VeriClick Bot Protection -->
-<script src="${API_BASE}/shield.js" data-api-key="${apiKey}" defer></script>`;
+    return base;
   };
 
-  const mainSnippet = `<!-- VeriClick Bot Protection -->
-<script
-  src="${API_BASE}/shield.js"
-  data-api-key="${apiKey}"
-  defer
-></script>`;
-
-  const platformGuides: PlatformGuide[] = [
-    {
-      name: "HTML",
-      icon: "🌐",
-      description: "Paste before the closing </head> tag",
-      snippet: getSnippet("html"),
-    },
-    {
-      name: "WordPress",
-      icon: "📝",
-      description: "Use the Insert Headers and Footers plugin",
-      snippet: getSnippet("wordpress"),
-    },
-    {
-      name: "Shopify",
-      icon: "🛒",
-      description: "Online Store > Edit Code > theme.liquid > before </head>",
-      snippet: getSnippet("shopify"),
-    },
-    {
-      name: "Webflow",
-      icon: "🎨",
-      description: "Site Settings > Custom Code > Head Code",
-      snippet: getSnippet("webflow"),
-    },
-    {
-      name: "Next.js",
-      icon: "⚡",
-      description: "Add to _document.js or layout.tsx head",
-      snippet: getSnippet("nextjs"),
-    },
-  ];
-
-  const handleCopy = async (snippet: string, name: string) => {
+  const handleCopy = async (text: string) => {
     try {
-      await navigator.clipboard.writeText(snippet);
-      setCopiedSnippet(name);
+      await navigator.clipboard.writeText(text);
+      setCopiedSnippet(true);
       toast.success("Copied to clipboard");
-      setTimeout(() => setCopiedSnippet(null), 2000);
+      setTimeout(() => setCopiedSnippet(false), 2000);
     } catch {
       toast.error("Failed to copy");
     }
@@ -128,7 +190,7 @@ export default function InstallPage() {
       number: 2,
       title: "Bot Analysis",
       description:
-        "Signals are sent to VeriClick's servers where our AI-powered engine analyzes the data to determine if the visitor is a human or a bot.",
+        "Signals are sent to VeriClick's servers where our engine analyzes the data to determine if the visitor is a human or a bot.",
     },
     {
       number: 3,
@@ -150,7 +212,7 @@ export default function InstallPage() {
         </div>
         <h1 className="text-2xl font-bold text-slate-900 mb-2">Register a domain first</h1>
         <p className="text-sm text-muted max-w-md mx-auto leading-relaxed mb-8">
-          You need to register at least one domain before you can install the protection script.
+          You need to register and verify at least one domain before you can install the protection script.
           The script won't work on unregistered domains.
         </p>
         <a
@@ -164,6 +226,9 @@ export default function InstallPage() {
     );
   }
 
+  const currentSnippet = getSnippet(selectedPlatform);
+  const currentGuide = PLATFORMS.find((p) => p.key === selectedPlatform)!;
+
   return (
     <div className="space-y-8">
       <div>
@@ -173,38 +238,107 @@ export default function InstallPage() {
         </p>
       </div>
 
-      <div className="bg-white rounded-2xl border border-border p-6 sm:p-8 shadow-sm">
+      {/* Domain selector */}
+      <div className="bg-white rounded-2xl border border-neutral-200 p-6 shadow-sm">
+        <h2 className="text-sm font-bold text-slate-900 mb-3">1. Select Domain</h2>
+        <p className="text-xs text-muted mb-4">
+          Choose a verified domain to generate the correct installation snippet.
+        </p>
+        <div className="flex flex-col sm:flex-row gap-3">
+          <select
+            value={selectedDomainId}
+            onChange={(e) => {
+              setSelectedDomainId(e.target.value)
+              setTestResult(null)
+            }}
+            className="flex-1 bg-slate-50 border border-neutral-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-black transition-colors"
+          >
+            <option value="">Select a domain…</option>
+            {domains?.map((d) => (
+              <option key={d.id} value={d.id} disabled={!d.verified}>
+                {d.domain} {!d.verified ? '(unverified)' : ''}
+              </option>
+            ))}
+          </select>
+          {selectedDomain && selectedDomain.verified && (
+            <button
+              onClick={() => {
+                setTestResult(null)
+                testMutation.mutate(selectedDomainId)
+              }}
+              disabled={testMutation.isPending}
+              className="bg-black hover:bg-neutral-800 text-white px-5 py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50 whitespace-nowrap"
+            >
+              <HugeiconsIcon
+                icon={testMutation.isPending ? Loading03Icon : CheckmarkCircle02Icon}
+                className={`w-4 h-4 ${testMutation.isPending ? 'animate-spin' : ''}`}
+              />
+              {testMutation.isPending ? 'Testing…' : 'Test Installation'}
+            </button>
+          )}
+        </div>
+
+        {testResult && (
+          <div className={`mt-4 p-4 rounded-xl text-sm ${testResult.installed
+              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+              : 'bg-red-50 text-red-700 border border-red-200'
+            }`}>
+            {testResult.installed ? (
+              <div className="flex items-center gap-2">
+                <HugeiconsIcon icon={CheckmarkCircle02Icon} className="w-5 h-5" />
+                <span className="font-bold">Script detected! Protection is active on {selectedDomain?.domain}.</span>
+              </div>
+            ) : (
+              <div>
+                <span className="font-bold">Script not found.</span>{' '}
+                {testResult.error || 'Make sure you pasted the snippet and deployed your changes, then try again.'}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Platform selector */}
+      <div className="bg-white rounded-2xl border border-neutral-200 p-6 shadow-sm">
+        <h2 className="text-sm font-bold text-slate-900 mb-3">2. Choose Platform</h2>
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+          {PLATFORMS.map((p) => (
+            <button
+              key={p.key}
+              onClick={() => setSelectedPlatform(p.key)}
+              className={`flex flex-col items-center gap-1.5 p-3 rounded-xl text-xs font-bold transition-all ${selectedPlatform === p.key
+                  ? 'bg-black text-white'
+                  : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                }`}
+            >
+              <span className="text-lg">{p.icon}</span>
+              {p.name}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Snippet */}
+      <div className="bg-white rounded-2xl border border-neutral-200 p-6 shadow-sm">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <div className="bg-neutral-900 p-2 rounded-xl">
-              <HugeiconsIcon
-                icon={CodeIcon}
-                className="w-5 h-5 text-white"
-              />
+              <HugeiconsIcon icon={CodeIcon} className="w-5 h-5 text-white" />
             </div>
             <div>
               <h2 className="text-lg font-bold text-slate-900">
-                Shield.js Snippet
+                {currentGuide.name} Snippet
               </h2>
-              <p className="text-sm text-muted">
-                Copy and paste this code into your website's{" "}
-                <code className="bg-neutral-100 px-1.5 py-0.5 rounded text-xs font-mono">
-                  &lt;head&gt;
-                </code>{" "}
-                tag.
-              </p>
+              <p className="text-sm text-muted">{currentGuide.description}</p>
             </div>
           </div>
           <button
-            onClick={() => handleCopy(mainSnippet, "main")}
-            className="bg-white hover:bg-neutral-100 text-slate-700 border border-border px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors"
+            onClick={() => handleCopy(currentSnippet)}
+            className="bg-white hover:bg-neutral-100 text-slate-700 border border-neutral-200 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors"
           >
-            {copiedSnippet === "main" ? (
+            {copiedSnippet ? (
               <>
-                <HugeiconsIcon
-                  icon={CheckmarkCircle02Icon}
-                  className="w-3.5 h-3.5 text-green-500"
-                />
+                <HugeiconsIcon icon={CheckmarkCircle02Icon} className="w-3.5 h-3.5 text-green-500" />
                 Copied
               </>
             ) : (
@@ -216,74 +350,29 @@ export default function InstallPage() {
           </button>
         </div>
         <pre className="bg-neutral-900 text-neutral-100 text-xs font-mono p-4 rounded-xl overflow-x-auto">
-          <code>{mainSnippet}</code>
+          <code>{currentSnippet}</code>
         </pre>
       </div>
 
-      <div>
-        <div className="flex items-center gap-3 mb-4">
-          <div className="bg-neutral-900 p-2 rounded-xl">
-            <HugeiconsIcon
-              icon={Globe02Icon}
-              className="w-5 h-5 text-white"
-            />
-          </div>
-          <div>
-            <h2 className="text-lg font-bold text-slate-900">
-              Platform Guides
-            </h2>
-            <p className="text-sm text-muted">
-              Select your platform for installation instructions.
-            </p>
-          </div>
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {platformGuides.map((guide) => (
-            <div
-              key={guide.name}
-              className="bg-white rounded-2xl border border-border p-6 shadow-sm"
-            >
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">{guide.icon}</span>
-                  <div>
-                    <h3 className="font-bold text-slate-900">{guide.name}</h3>
-                    <p className="text-sm text-muted">{guide.description}</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => handleCopy(guide.snippet, guide.name)}
-                  className="bg-white hover:bg-neutral-100 text-slate-700 border border-border px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors"
-                >
-                  {copiedSnippet === guide.name ? (
-                    <>
-                      <HugeiconsIcon
-                        icon={CheckmarkCircle02Icon}
-                        className="w-3.5 h-3.5 text-green-500"
-                      />
-                      Copied
-                    </>
-                  ) : (
-                    <>
-                      <HugeiconsIcon
-                        icon={Copy01Icon}
-                        className="w-3.5 h-3.5"
-                      />
-                      Copy
-                    </>
-                  )}
-                </button>
-              </div>
-              <pre className="bg-neutral-900 text-neutral-100 text-xs font-mono p-3 rounded-xl overflow-x-auto">
-                <code>{guide.snippet}</code>
-              </pre>
-            </div>
+      {/* Platform-specific guide */}
+      <div className="bg-white rounded-2xl border border-neutral-200 p-6 shadow-sm">
+        <h3 className="text-sm font-bold text-slate-900 mb-3">
+          {currentGuide.icon} {currentGuide.name} — Step by Step
+        </h3>
+        <ol className="space-y-3">
+          {currentGuide.detailedSteps.map((step, i) => (
+            <li key={i} className="flex gap-3">
+              <span className="bg-slate-100 text-slate-600 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">
+                {i + 1}
+              </span>
+              <span className="text-sm text-slate-700">{step}</span>
+            </li>
           ))}
-        </div>
+        </ol>
       </div>
 
-      <div className="bg-white rounded-2xl border border-border p-6 sm:p-8 shadow-sm">
+      {/* How it works */}
+      <div className="bg-white rounded-2xl border border-neutral-200 p-6 sm:p-8 shadow-sm">
         <h2 className="text-lg font-bold text-slate-900 mb-6">How it works</h2>
         <div className="space-y-6">
           {steps.map((step) => (

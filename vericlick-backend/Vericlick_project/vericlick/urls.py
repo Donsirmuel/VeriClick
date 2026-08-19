@@ -40,6 +40,20 @@ urlpatterns = [
     # Domains
     path('domains/', views.domain_list_create, name='domain-list-create'),
     path('domains/<uuid:domain_id>/', views.domain_delete, name='domain-delete'),
+    path('domains/<uuid:domain_id>/verify-challenge/', views.domain_verify_challenge, name='domain-verify-challenge'),
+    path('domains/<uuid:domain_id>/verify-confirm/', views.domain_verify_confirm, name='domain-verify-confirm'),
+    path('domains/<uuid:domain_id>/recheck/', views.domain_recheck, name='domain-recheck'),
+    # Install Tokens
+    path('install-tokens/', views.install_token_list_create, name='install-token-list-create'),
+    path('install-tokens/<uuid:token_id>/', views.install_token_revoke, name='install-token-revoke'),
+    # Redirect Domains
+    path('redirect-domains/', views.redirect_domain_list_create, name='redirect-domain-list-create'),
+    # Redirect Routes
+    path('redirect-routes/', views.redirect_route_list_create, name='redirect-route-list-create'),
+    path('redirect-routes/<uuid:route_id>/', views.redirect_route_detail, name='redirect-route-detail'),
+    path('redirect-routes/<uuid:route_id>/renew/', views.redirect_route_renew, name='redirect-route-renew'),
+    path('redirect-routes/<uuid:route_id>/activate/', views.redirect_route_activate, name='redirect-route-activate'),
+    path('redirect-routes/<uuid:route_id>/deactivate/', views.redirect_route_deactivate, name='redirect-route-deactivate'),
     # Traffic rules
     path('device-policy/', views.device_policy, name='device-policy'),
     # Tracker (script telemetry)
@@ -56,6 +70,10 @@ urlpatterns = [
     path('shield.js', views.serve_tracker_script, name='shield-script'),
     # Blocked IPs
     path('ip-rules/blocked/', views.blocked_ips, name='blocked-ips'),
+    # Edge sync
+    path('edge/sync/', views.edge_routes_sync, name='edge-routes-sync'),
+    # Test installation
+    path('test-installation/', views.test_installation, name='test-installation'),
     # CRUD
     path('', include(router.urls)),
 ]

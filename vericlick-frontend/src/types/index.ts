@@ -56,6 +56,47 @@ export interface Workspace {
 export interface Domain {
   id: string
   domain: string
+  purpose: 'protection' | 'redirect'
+  verificationMethod: 'html_meta' | 'dns_txt' | null
+  verified: boolean
+  verifiedAt: string | null
+  healthStatus: 'healthy' | 'unhealthy' | 'unknown'
+  lastHealthCheck: string | null
+  isActive: boolean
+  createdAt: string
+}
+
+export interface InstallToken {
+  id: string
+  tokenPrefix: string
+  label: string
+  isActive: boolean
+  lastUsedAt: string | null
+  createdAt: string
+}
+
+export interface RedirectRoute {
+  id: string
+  domain: { id: string; domain: string }
+  slug: string
+  destinationUrl: string
+  isActive: boolean
+  botAction: 'honeypot' | 'block'
+  fallbackUrl: string | null
+  expiresAt: string | null
+  clicksCount: number
+  abuseStatus: 'none' | 'flagged' | 'blocked'
+  destinationSafe: boolean | null
+  createdAt: string
+}
+
+export interface RedirectDomain {
+  id: string
+  domain: string
+  purpose: 'redirect'
+  verified: boolean
+  verifiedAt: string | null
+  healthStatus: string
   isActive: boolean
   createdAt: string
 }

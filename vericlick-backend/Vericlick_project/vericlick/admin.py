@@ -9,7 +9,7 @@ from .models import (
     DevicePolicy, TrackerEvent, Plan, DiscountCode, SiteConfig, CheckoutIntent,
     BillingEvent, PLAN_PERIOD_DAYS,
     BlockedDestination, UserProfile,
-    ShieldConfig, DomainRegistry,
+    ShieldConfig, DomainRegistry, InstallToken, RedirectRoute, EdgeSyncCredential,
 )
 
 
@@ -264,8 +264,35 @@ class ShieldConfigAdmin(admin.ModelAdmin):
 
 @admin.register(DomainRegistry)
 class DomainRegistryAdmin(admin.ModelAdmin):
-    list_display = ('domain', 'workspace', 'is_active', 'created_at')
-    list_filter = ('is_active', 'created_at')
+    list_display = ('domain', 'workspace', 'purpose', 'verified', 'health_status', 'is_active', 'created_at')
+    list_filter = ('purpose', 'verified', 'health_status', 'is_active', 'created_at')
     search_fields = ('domain', 'workspace__name', 'workspace__owner__username')
     autocomplete_fields = ['workspace']
-    readonly_fields = ('created_at',)
+    readonly_fields = ('created_at', 'verified_at', 'last_health_check')
+
+
+@admin.register(InstallToken)
+class InstallTokenAdmin(admin.ModelAdmin):
+    list_display = ('token_prefix', 'label', 'workspace', 'is_active', 'last_used_at', 'created_at')
+    list_filter = ('is_active', 'created_at')
+    search_fields = ('token_prefix', 'label', 'workspace__name')
+    autocomplete_fields = ['workspace']
+    readonly_fields = ('created_at', 'last_used_at')
+
+
+@admin.register(RedirectRoute)
+class RedirectRouteAdmin(admin.ModelAdmin):
+    list_display = ('slug', 'domain', 'workspace', 'bot_action', 'is_active', 'expires_at', 'clicks_count', 'created_at')
+    list_filter = ('is_active', 'bot_action', 'abuse_status', 'created_at')
+    search_fields = ('slug', 'domain__domain', 'destination_url', 'workspace__name')
+    autocomplete_fields = ['workspace', 'domain']
+    readonly_fields = ('created_at', 'updated_at', 'clicks_count')
+
+
+@admin.register(EdgeSyncCredential)
+class EdgeSyncCredentialAdmin(admin.ModelAdmin):
+    list_display = ('label', 'workspace', 'is_active', 'last_sync_at', 'created_at')
+    list_filter = ('is_active', 'created_at')
+    search_fields = ('label', 'workspace__name')
+    autocomplete_fields = ['workspace']
+    readonly_fields = ('created_at', 'last_sync_at')

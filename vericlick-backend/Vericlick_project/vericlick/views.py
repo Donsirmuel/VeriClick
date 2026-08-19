@@ -21,7 +21,7 @@ from decouple import config
 from .models import (
     Workspace, IPRule, CountryRule,
     DevicePolicy, TrackerEvent, Plan, DiscountCode, SiteConfig, CheckoutIntent,
-    ShieldConfig, DomainRegistry,
+    ShieldConfig, DomainRegistry, InstallToken,
 )
 from .serializers import (
     UserSerializer,
@@ -34,6 +34,8 @@ from .serializers import (
     BlockedIPSerializer,
     PlanSerializer,
     DomainRegistrySerializer,
+    InstallTokenSerializer,
+    InstallTokenCreateSerializer,
 )
 from .version import get_version
 from .emails import (
@@ -141,6 +143,556 @@ def domain_delete(request, domain_id):
         )
     domain.delete()
     return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ---------------------------------------------------------------------------
+# Domain Verification
+# ---------------------------------------------------------------------------
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def domain_verify_challenge(request, domain_id):
+    """Return the verification challenge for a domain. Generates a token if
+    one doesn't exist yet, then returns the meta tag or DNS TXT record the
+    user needs to add."""
+    workspace = get_user_workspace(request.user)
+    if not workspace:
+        return Response({'error': 'No workspace found'}, status=status.HTTP_404_NOT_FOUND)
+
+    try:
+        domain_obj = DomainRegistry.objects.get(id=domain_id, workspace=workspace)
+    except DomainRegistry.DoesNotExist:
+        return Response(
+            {'errors': [{'field': 'domain', 'detail': 'Domain not found.'}]},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    method = request.query_params.get('method', 'html_meta')
+    if method not in ('html_meta', 'dns_txt'):
+        method = 'html_meta'
+
+    # Generate token if needed
+    if not domain_obj.verification_token:
+        domain_obj.verification_method = method
+        domain_obj.generate_verification_token()
+    elif domain_obj.verification_method != method:
+        # User switched method — regenerate token
+        domain_obj.verification_method = method
+        domain_obj.generate_verification_token()
+
+    token = domain_obj.verification_token
+    meta_tag = f'<meta name="vericlick-verification" content="{token}">'
+    dns_record = f'_vericlick-challenge.{domain_obj.domain}'
+
+    return Response({
+        'method': domain_obj.verification_method,
+        'token': token,
+        'meta_tag': meta_tag,
+        'dns_name': dns_record,
+        'dns_value': f'vericlick-verify={token}',
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def domain_verify_confirm(request, domain_id):
+    """Attempt to verify domain ownership by checking for the verification
+    challenge on the live domain."""
+    workspace = get_user_workspace(request.user)
+    if not workspace:
+        return Response({'error': 'No workspace found'}, status=status.HTTP_404_NOT_FOUND)
+
+    try:
+        domain_obj = DomainRegistry.objects.get(id=domain_id, workspace=workspace)
+    except DomainRegistry.DoesNotExist:
+        return Response(
+            {'errors': [{'field': 'domain', 'detail': 'Domain not found.'}]},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    if domain_obj.verified:
+        return Response({
+            'verified': True,
+            'verified_at': domain_obj.verified_at,
+            'health_status': domain_obj.health_status,
+        })
+
+    if not domain_obj.verification_token:
+        return Response(
+            {'errors': [{'field': 'verification', 'detail': 'No verification challenge found. Please start verification first.'}]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    token = domain_obj.verification_token
+    method = domain_obj.verification_method or 'html_meta'
+
+    verified = False
+    if method == 'html_meta':
+        verified = _check_meta_tag(domain_obj.domain, token)
+    elif method == 'dns_txt':
+        verified = _check_dns_txt(domain_obj.domain, token)
+
+    if verified:
+        from django.utils import timezone as tz
+        domain_obj.verified = True
+        domain_obj.verified_at = tz.now()
+        domain_obj.health_status = 'healthy'
+        domain_obj.last_health_check = tz.now()
+        domain_obj.save(update_fields=[
+            'verified', 'verified_at', 'health_status', 'last_health_check',
+        ])
+        return Response({
+            'verified': True,
+            'verified_at': domain_obj.verified_at,
+            'health_status': domain_obj.health_status,
+        })
+
+    return Response({
+        'verified': False,
+        'error': 'meta_tag_not_found' if method == 'html_meta' else 'dns_txt_not_found',
+        'detail': (
+            f'We couldn\'t find the verification record on {domain_obj.domain}. '
+            'Make sure you saved your changes and wait a few minutes, then try again.'
+        ),
+    })
+
+
+def _check_meta_tag(domain, expected_token):
+    """Fetch the domain homepage and look for the verification meta tag."""
+    import urllib.request
+    import urllib.error
+    import re
+    try:
+        req = urllib.request.Request(
+            f'http://{domain}/',
+            headers={'User-Agent': 'VeriClick/1.0 Verification Bot'},
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            if resp.status != 200:
+                return False
+            html = resp.read(512 * 1024).decode('utf-8', errors='ignore')
+            # Look for the meta tag
+            pattern = r'<meta\s+name=["\']vericlick-verification["\']\s+content=["\']' + re.escape(expected_token) + r'["\']'
+            return bool(re.search(pattern, html, re.IGNORECASE))
+    except (urllib.error.URLError, OSError, ValueError):
+        return False
+
+
+def _check_dns_txt(domain, expected_token):
+    """Check DNS TXT records for the verification token."""
+    try:
+        import dns.resolver
+        answers = dns.resolver.resolve(f'_vericlick-challenge.{domain}', 'TXT')
+        for rdata in answers:
+            txt = b''.join(rdata.strings).decode('utf-8', errors='ignore')
+            if f'vericlick-verify={expected_token}' in txt:
+                return True
+        return False
+    except Exception:
+        return False
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def domain_recheck(request, domain_id):
+    """Re-run health check on a verified domain."""
+    workspace = get_user_workspace(request.user)
+    if not workspace:
+        return Response({'error': 'No workspace found'}, status=status.HTTP_404_NOT_FOUND)
+
+    try:
+        domain_obj = DomainRegistry.objects.get(id=domain_id, workspace=workspace)
+    except DomainRegistry.DoesNotExist:
+        return Response(
+            {'errors': [{'field': 'domain', 'detail': 'Domain not found.'}]},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    import urllib.request
+    import urllib.error
+    try:
+        req = urllib.request.Request(
+            f'http://{domain_obj.domain}/',
+            headers={'User-Agent': 'VeriClick/1.0 Health Check'},
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            healthy = resp.status < 400
+    except (urllib.error.URLError, OSError, ValueError):
+        healthy = False
+
+    from django.utils import timezone as tz
+    domain_obj.health_status = 'healthy' if healthy else 'unhealthy'
+    domain_obj.last_health_check = tz.now()
+    domain_obj.save(update_fields=['health_status', 'last_health_check'])
+
+    return Response({
+        'health_status': domain_obj.health_status,
+        'last_health_check': domain_obj.last_health_check,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Install Tokens
+# ---------------------------------------------------------------------------
+
+MAX_INSTALL_TOKENS = 5
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def install_token_list_create(request):
+    """List active install tokens or generate a new one. The raw token is
+    returned ONLY on creation — it cannot be recovered."""
+    workspace = get_user_workspace(request.user)
+    if not workspace:
+        return Response({'error': 'No workspace found'}, status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == 'GET':
+        tokens = InstallToken.objects.filter(workspace=workspace)
+        return Response(InstallTokenSerializer(tokens, many=True).data)
+
+    # POST — generate new token
+    active_count = InstallToken.objects.filter(workspace=workspace, is_active=True).count()
+    if active_count >= MAX_INSTALL_TOKENS:
+        return Response(
+            {'errors': [{'field': 'token', 'detail': f'You can have at most {MAX_INSTALL_TOKENS} active install tokens. Revoke one first.'}]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    serializer = InstallTokenCreateSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    label = serializer.validated_data.get('label', 'Primary')
+
+    raw_token, token_instance = InstallToken.create_for_workspace(workspace, label=label)
+
+    return Response({
+        'id': str(token_instance.id),
+        'token': raw_token,
+        'token_prefix': token_instance.token_prefix,
+        'label': token_instance.label,
+        'expires_at': token_instance.expires_at,
+        'created_at': token_instance.created_at,
+    }, status=status.HTTP_201_CREATED)
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def install_token_revoke(request, token_id):
+    """Revoke an install token."""
+    workspace = get_user_workspace(request.user)
+    if not workspace:
+        return Response({'error': 'No workspace found'}, status=status.HTTP_404_NOT_FOUND)
+
+    try:
+        token = InstallToken.objects.get(id=token_id, workspace=workspace)
+    except InstallToken.DoesNotExist:
+        return Response(
+            {'errors': [{'field': 'token', 'detail': 'Token not found.'}]},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    token.is_active = False
+    token.save(update_fields=['is_active'])
+    return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ---------------------------------------------------------------------------
+# Redirect Domains (for edge proxy CNAME setup)
+# ---------------------------------------------------------------------------
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def redirect_domain_list_create(request):
+    """List or add redirect-purpose domains."""
+    workspace = get_user_workspace(request.user)
+    if not workspace:
+        return Response({'error': 'No workspace found'}, status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == 'GET':
+        domains = DomainRegistry.objects.filter(
+            workspace=workspace, purpose='redirect',
+        ).order_by('-created_at')
+        return Response(DomainRegistrySerializer(domains, many=True).data)
+
+    serializer = DomainRegistrySerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    domain_name = serializer.validated_data['domain']
+
+    # Check duplicate
+    if DomainRegistry.objects.filter(workspace=workspace, domain=domain_name, is_active=True).exists():
+        return Response(
+            {'errors': [{'field': 'domain', 'detail': 'This domain is already registered.'}]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Check limit (redirect domains count toward the same domain limit)
+    active_plan = workspace.active_plan
+    current_count = DomainRegistry.objects.filter(workspace=workspace, is_active=True).count()
+    limit = active_plan.domain_limit if active_plan else 3
+    if current_count >= limit:
+        plan_name = active_plan.name if active_plan else 'your current plan'
+        return Response(
+            {'errors': [{'field': 'domain', 'detail': f'You\'ve reached the {limit}-domain limit on {plan_name}. Upgrade to add more.'}]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    domain = DomainRegistry.objects.create(
+        workspace=workspace, domain=domain_name, purpose='redirect',
+    )
+    return Response(DomainRegistrySerializer(domain).data, status=status.HTTP_201_CREATED)
+
+
+# ---------------------------------------------------------------------------
+# Redirect Routes
+# ---------------------------------------------------------------------------
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def redirect_route_list_create(request):
+    """List or create redirect routes. Creating a new route for a domain that
+    already has one auto-replaces the old one."""
+    workspace = get_user_workspace(request.user)
+    if not workspace:
+        return Response({'error': 'No workspace found'}, status=status.HTTP_404_NOT_FOUND)
+
+    from .models import RedirectRoute
+    from datetime import timedelta
+
+    if request.method == 'GET':
+        routes = RedirectRoute.objects.filter(
+            workspace=workspace,
+        ).select_related('domain').order_by('-created_at')
+        data = []
+        for r in routes:
+            data.append({
+                'id': str(r.id),
+                'domain': {'id': str(r.domain_id), 'domain': r.domain.domain},
+                'slug': r.slug,
+                'destination_url': r.destination_url,
+                'is_active': r.is_active,
+                'bot_action': r.bot_action,
+                'fallback_url': r.fallback_url,
+                'expires_at': r.expires_at,
+                'clicks_count': r.clicks_count,
+                'abuse_status': r.abuse_status,
+                'created_at': r.created_at,
+            })
+        return Response(data)
+
+    # POST — create route
+    domain_id = request.data.get('domain_id')
+    destination_url = request.data.get('destination_url', '').strip()
+    slug = request.data.get('slug', '').strip()
+    bot_action = request.data.get('bot_action', 'honeypot')
+    fallback_url = request.data.get('fallback_url', '').strip() or None
+
+    if not domain_id or not destination_url:
+        return Response(
+            {'errors': [{'field': 'domain_id', 'detail': 'domain_id and destination_url are required.'}]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        domain_obj = DomainRegistry.objects.get(
+            id=domain_id, workspace=workspace, purpose='redirect', is_active=True,
+        )
+    except DomainRegistry.DoesNotExist:
+        return Response(
+            {'errors': [{'field': 'domain_id', 'detail': 'Redirect domain not found.'}]},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    if not domain_obj.verified:
+        return Response(
+            {'errors': [{'field': 'domain_id', 'detail': 'Domain must be verified before creating a redirect.'}]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Safety check on destination
+    destination_safe = None
+    try:
+        from .views import _check_destination_safety
+        destination_safe = _check_destination_safety(destination_url)
+    except Exception:
+        pass
+
+    # Auto-replace: delete existing route for this domain
+    RedirectRoute.objects.filter(domain=domain_obj).delete()
+
+    route = RedirectRoute.objects.create(
+        workspace=workspace,
+        domain=domain_obj,
+        slug=slug,
+        destination_url=destination_url,
+        bot_action=bot_action,
+        fallback_url=fallback_url,
+        expires_at=timezone.now() + timedelta(days=7),
+        destination_safe=destination_safe,
+    )
+
+    return Response({
+        'id': str(route.id),
+        'domain': {'id': str(route.domain_id), 'domain': domain_obj.domain},
+        'slug': route.slug,
+        'destination_url': route.destination_url,
+        'is_active': route.is_active,
+        'bot_action': route.bot_action,
+        'fallback_url': route.fallback_url,
+        'expires_at': route.expires_at,
+        'clicks_count': route.clicks_count,
+        'abuse_status': route.abuse_status,
+        'destination_safe': route.destination_safe,
+        'created_at': route.created_at,
+    }, status=status.HTTP_201_CREATED)
+
+
+@api_view(['GET', 'PATCH', 'DELETE'])
+@permission_classes([IsAuthenticated])
+def redirect_route_detail(request, route_id):
+    """Get, update, or delete a redirect route."""
+    workspace = get_user_workspace(request.user)
+    if not workspace:
+        return Response({'error': 'No workspace found'}, status=status.HTTP_404_NOT_FOUND)
+
+    from .models import RedirectRoute
+
+    try:
+        route = RedirectRoute.objects.select_related('domain').get(
+            id=route_id, workspace=workspace,
+        )
+    except RedirectRoute.DoesNotExist:
+        return Response(
+            {'errors': [{'field': 'route', 'detail': 'Redirect route not found.'}]},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    if request.method == 'GET':
+        return Response({
+            'id': str(route.id),
+            'domain': {'id': str(route.domain_id), 'domain': route.domain.domain},
+            'slug': route.slug,
+            'destination_url': route.destination_url,
+            'is_active': route.is_active,
+            'bot_action': route.bot_action,
+            'fallback_url': route.fallback_url,
+            'expires_at': route.expires_at,
+            'clicks_count': route.clicks_count,
+            'abuse_status': route.abuse_status,
+            'destination_safe': route.destination_safe,
+            'created_at': route.created_at,
+        })
+
+    if request.method == 'DELETE':
+        route.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    # PATCH
+    fields_to_update = []
+    for field in ('destination_url', 'bot_action', 'fallback_url', 'slug', 'is_active'):
+        if field in request.data:
+            setattr(route, field, request.data[field])
+            fields_to_update.append(field)
+    if fields_to_update:
+        fields_to_update.append('updated_at')
+        route.save(update_fields=fields_to_update)
+
+    return Response({
+        'id': str(route.id),
+        'domain': {'id': str(route.domain_id), 'domain': route.domain.domain},
+        'slug': route.slug,
+        'destination_url': route.destination_url,
+        'is_active': route.is_active,
+        'bot_action': route.bot_action,
+        'fallback_url': route.fallback_url,
+        'expires_at': route.expires_at,
+        'clicks_count': route.clicks_count,
+        'abuse_status': route.abuse_status,
+        'created_at': route.created_at,
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def redirect_route_renew(request, route_id):
+    """Renew a redirect route for 7 more days."""
+    workspace = get_user_workspace(request.user)
+    if not workspace:
+        return Response({'error': 'No workspace found'}, status=status.HTTP_404_NOT_FOUND)
+
+    from .models import RedirectRoute
+    from datetime import timedelta
+
+    try:
+        route = RedirectRoute.objects.get(id=route_id, workspace=workspace)
+    except RedirectRoute.DoesNotExist:
+        return Response(
+            {'errors': [{'field': 'route', 'detail': 'Redirect route not found.'}]},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    route.expires_at = timezone.now() + timedelta(days=7)
+    route.is_active = True
+    route.save(update_fields=['expires_at', 'is_active'])
+
+    return Response({
+        'expires_at': route.expires_at,
+        'is_active': route.is_active,
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def redirect_route_activate(request, route_id):
+    """Re-activate an expired/disabled redirect route."""
+    workspace = get_user_workspace(request.user)
+    if not workspace:
+        return Response({'error': 'No workspace found'}, status=status.HTTP_404_NOT_FOUND)
+
+    from .models import RedirectRoute
+    from datetime import timedelta
+
+    try:
+        route = RedirectRoute.objects.get(id=route_id, workspace=workspace)
+    except RedirectRoute.DoesNotExist:
+        return Response(
+            {'errors': [{'field': 'route', 'detail': 'Redirect route not found.'}]},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    # Cannot activate an expired route — must renew
+    if route.expires_at and route.expires_at < timezone.now():
+        return Response(
+            {'errors': [{'field': 'route', 'detail': 'This redirect has expired. Use renew to start a new 7-day period.'}]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    route.is_active = True
+    route.save(update_fields=['is_active'])
+
+    return Response({'is_active': True})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def redirect_route_deactivate(request, route_id):
+    """Deactivate a redirect route."""
+    workspace = get_user_workspace(request.user)
+    if not workspace:
+        return Response({'error': 'No workspace found'}, status=status.HTTP_404_NOT_FOUND)
+
+    from .models import RedirectRoute
+
+    try:
+        route = RedirectRoute.objects.get(id=route_id, workspace=workspace)
+    except RedirectRoute.DoesNotExist:
+        return Response(
+            {'errors': [{'field': 'route', 'detail': 'Redirect route not found.'}]},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    route.is_active = False
+    route.save(update_fields=['is_active'])
+
+    return Response({'is_active': False})
 
 
 @api_view(['GET'])
@@ -495,17 +1047,17 @@ def shield_verify(request):
 
     Fail-open: any uncertainty returns 'allow' so real visitors are never blocked."""
     api_key = request.data.get('api_key') or ''
-    if not api_key:
-        return Response(
-            {'errors': [{'field': 'api_key', 'detail': 'api_key is required'}]},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+    install_token_raw = request.data.get('install_token') or ''
 
-    # Authenticate via workspace tracker_secret (the api_key)
-    workspace = Workspace.objects.filter(tracker_secret=api_key).first()
+    workspace = None
+    if install_token_raw:
+        workspace, _ = InstallToken.verify_token(install_token_raw)
+    elif api_key:
+        workspace = Workspace.objects.filter(tracker_secret=api_key).first()
+
     if not workspace:
         return Response(
-            {'errors': [{'field': 'api_key', 'detail': 'Invalid API key'}]},
+            {'errors': [{'field': 'api_key', 'detail': 'Valid api_key or install_token is required'}]},
             status=status.HTTP_401_UNAUTHORIZED,
         )
 
@@ -635,16 +1187,17 @@ def shield_config_view(request):
     """Serve the shield configuration for a workspace. The script calls this
     on first load to get protection settings."""
     api_key = request.query_params.get('api_key') or ''
-    if not api_key:
-        return Response(
-            {'errors': [{'field': 'api_key', 'detail': 'api_key is required'}]},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+    install_token_raw = request.query_params.get('install_token') or ''
 
-    workspace = Workspace.objects.filter(tracker_secret=api_key).first()
+    workspace = None
+    if install_token_raw:
+        workspace, _ = InstallToken.verify_token(install_token_raw)
+    elif api_key:
+        workspace = Workspace.objects.filter(tracker_secret=api_key).first()
+
     if not workspace:
         return Response(
-            {'errors': [{'field': 'api_key', 'detail': 'Invalid API key'}]},
+            {'errors': [{'field': 'api_key', 'detail': 'Valid api_key or install_token is required'}]},
             status=status.HTTP_401_UNAUTHORIZED,
         )
 
@@ -1396,3 +1949,134 @@ class CountryRuleViewSet(viewsets.ModelViewSet):
         )
         headers = self.get_success_headers(serializer.data)
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+
+# ---------------------------------------------------------------------------
+# Edge Sync — edge proxy polls this for routes + site configs
+# ---------------------------------------------------------------------------
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def edge_routes_sync(request):
+    """Edge proxy sends its api_secret; backend returns all active routes
+    for the workspace's redirect domains. The edge polls this every 60s."""
+    from .models import EdgeSyncCredential, RedirectRoute
+
+    api_secret = request.data.get('api_secret', '')
+    if not api_secret:
+        return Response({'error': 'api_secret required'}, status=status.HTTP_401_UNAUTHORIZED)
+
+    cred = EdgeSyncCredential.objects.filter(
+        api_secret=api_secret, is_active=True,
+    ).select_related('workspace').first()
+    if not cred:
+        return Response({'error': 'Invalid api_secret'}, status=status.HTTP_401_UNAUTHORIZED)
+
+    cred.last_sync_at = timezone.now()
+    cred.save(update_fields=['last_sync_at'])
+
+    workspace = cred.workspace
+    routes = RedirectRoute.objects.filter(
+        workspace=workspace,
+        is_active=True,
+        domain__purpose='redirect',
+        domain__is_active=True,
+    ).select_related('domain')
+
+    route_data = []
+    for r in routes:
+        route_data.append({
+            'domain': r.domain.domain,
+            'slug': r.slug,
+            'destination_url': r.destination_url,
+            'bot_action': r.bot_action,
+            'fallback_url': r.fallback_url,
+            'expires_at': r.expires_at.isoformat() if r.expires_at else None,
+        })
+
+    # Also return site configs for the workspace
+    from .models import ShieldConfig
+    site_configs = ShieldConfig.objects.filter(workspace=workspace)
+    config_data = []
+    for sc in site_configs:
+        config_data.append({
+            'workspace_id': str(workspace.id),
+            'protection_mode': sc.protection_mode,
+            'bot_action': sc.bot_action,
+            'protected_paths': sc.protected_paths,
+            'blocked_paths': sc.blocked_paths,
+            'rate_limit_per_hour': sc.rate_limit_per_hour,
+        })
+
+    return Response({
+        'routes': route_data,
+        'site_configs': config_data,
+        'synced_at': timezone.now().isoformat(),
+    })
+
+
+# ---------------------------------------------------------------------------
+# Test Installation — checks if script loads on user's domain
+# ---------------------------------------------------------------------------
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def test_installation(request):
+    """Fetch the user's domain and check if the VeriClick script is present."""
+    workspace = get_user_workspace(request.user)
+    if not workspace:
+        return Response({'error': 'No workspace found'}, status=status.HTTP_404_NOT_FOUND)
+
+    domain_id = request.data.get('domain_id')
+    if not domain_id:
+        return Response(
+            {'errors': [{'field': 'domain_id', 'detail': 'domain_id is required.'}]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        domain_obj = DomainRegistry.objects.get(id=domain_id, workspace=workspace)
+    except DomainRegistry.DoesNotExist:
+        return Response(
+            {'errors': [{'field': 'domain_id', 'detail': 'Domain not found.'}]},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    import urllib.request
+    import urllib.error
+    try:
+        req = urllib.request.Request(
+            f'https://{domain_obj.domain}/',
+            headers={'User-Agent': 'VeriClick/1.0 Test Installation'},
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            if resp.status != 200:
+                return Response({
+                    'installed': False,
+                    'error': f'HTTP {resp.status} received from {domain_obj.domain}',
+                })
+            html = resp.read(1024 * 1024).decode('utf-8', errors='ignore')
+
+            # Check for vericlick script tag
+            import re
+            has_script = bool(re.search(
+                r'<script[^>]+src=["\'][^"\']*vericlick[^"\']*["\']',
+                html, re.IGNORECASE,
+            ))
+            # Also check for inline init
+            has_init = bool(re.search(
+                r'VeriClick\.init|vericlick_init|window\.vericlick',
+                html, re.IGNORECASE,
+            ))
+
+            return Response({
+                'installed': has_script or has_init,
+                'has_script_tag': has_script,
+                'has_init_call': has_init,
+                'domain': domain_obj.domain,
+            })
+    except (urllib.error.URLError, OSError, ValueError) as exc:
+        return Response({
+            'installed': False,
+            'error': f'Could not reach {domain_obj.domain}: {exc}',
+        })

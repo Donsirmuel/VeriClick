@@ -5,7 +5,7 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from .models import (
     Workspace, IPRule, CountryRule,
     DevicePolicy, TrackerEvent, Plan, DiscountCode, SiteConfig, BillingEvent,
-    ShieldConfig, DomainRegistry,
+    ShieldConfig, DomainRegistry, InstallToken,
 )
 
 
@@ -263,8 +263,15 @@ class ShieldConfigSerializer(serializers.ModelSerializer):
 class DomainRegistrySerializer(serializers.ModelSerializer):
     class Meta:
         model = DomainRegistry
-        fields = ['id', 'domain', 'is_active', 'created_at']
-        read_only_fields = ['id', 'is_active', 'created_at']
+        fields = [
+            'id', 'domain', 'purpose', 'verification_method', 'verified',
+            'verified_at', 'health_status', 'last_health_check',
+            'is_active', 'created_at',
+        ]
+        read_only_fields = [
+            'id', 'verification_method', 'verified', 'verified_at',
+            'health_status', 'last_health_check', 'is_active', 'created_at',
+        ]
 
     def validate_domain(self, value):
         import re
@@ -278,6 +285,17 @@ class DomainRegistrySerializer(serializers.ModelSerializer):
         if not re.match(r'^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*\.[a-z]{2,}$', value):
             raise serializers.ValidationError('Enter a valid domain (e.g. example.com).')
         return value
+
+
+class InstallTokenSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = InstallToken
+        fields = ['id', 'token_prefix', 'label', 'is_active', 'last_used_at', 'created_at']
+        read_only_fields = ['id', 'token_prefix', 'is_active', 'last_used_at', 'created_at']
+
+
+class InstallTokenCreateSerializer(serializers.Serializer):
+    label = serializers.CharField(max_length=100, default='Primary')
 
 
 def mask_reference_id(value):
