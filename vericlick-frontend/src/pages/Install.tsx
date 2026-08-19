@@ -123,6 +123,7 @@ export default function InstallPage() {
   const { data: tokens, isLoading: tokensLoading } = useQuery({
     queryKey: ["install-tokens"],
     queryFn: fetchInstallTokens,
+    retry: false,
   });
 
   const createTokenMutation = useMutation({

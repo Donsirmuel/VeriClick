@@ -202,6 +202,7 @@ function InstallTokenSection() {
   const { data: tokens, isLoading } = useQuery({
     queryKey: ['install-tokens'],
     queryFn: fetchInstallTokens,
+    retry: false,
   })
 
   const createMutation = useMutation({
