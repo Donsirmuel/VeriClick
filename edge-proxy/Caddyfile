@@ -1,0 +1,28 @@
+# VeriClick Edge Proxy — Caddyfile
+#
+# On-demand TLS: Caddy asks the backend whether a domain is allowed before
+# issuing a certificate. This lets us serve any customer domain without
+# pre-provisioning certs.
+
+{
+    on_demand_tls {
+        ask https://vericlick.site/api/edge/validate-domain/
+        interval 1m
+        burst 10
+    }
+}
+
+# Default site: edge.vericlick.cc (always valid, no on-demand check needed)
+{$EDGE_HOSTNAME} {
+    reverse_proxy app:8000
+}
+
+# On-demand TLS for customer domains
+https:// {
+    reverse_proxy app:8000
+}
+
+# HTTP: redirect to HTTPS
+http:// {
+    redir https://{host}{uri} permanent
+}

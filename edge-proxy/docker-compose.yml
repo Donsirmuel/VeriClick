@@ -1,0 +1,45 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    environment:
+      BACKEND_URL: ${BACKEND_URL:?set BACKEND_URL in .env}
+      EDGE_API_KEY: ${EDGE_API_KEY:?set EDGE_API_KEY in .env}
+      REDIS_URL: redis://redis:6379/0
+      SYNC_INTERVAL: ${SYNC_INTERVAL:-60}
+      EVENT_BATCH_INTERVAL: ${EVENT_BATCH_INTERVAL:-60}
+      EDGE_HOSTNAME: ${EDGE_HOSTNAME:-edge.vericlick.cc}
+      GEOIP2_DB: ${GEOIP2_DB:-}
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - redis_data:/data
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+
+volumes:
+  redis_data:
+  caddy_data:
+  caddy_config:

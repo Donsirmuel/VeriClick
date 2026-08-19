@@ -1,0 +1,27 @@
+from pydantic_settings import BaseSettings
+
+
+class Settings(BaseSettings):
+    # Backend API
+    BACKEND_URL: str = "https://vericlick.site"
+    EDGE_API_KEY: str = ""
+
+    # Redis
+    REDIS_URL: str = "redis://redis:6379/0"
+
+    # Sync
+    SYNC_INTERVAL: int = 60
+    EVENT_BATCH_INTERVAL: int = 60
+    EVENT_BATCH_SIZE: int = 500
+
+    # Edge proxy
+    EDGE_HOSTNAME: str = "edge.vericlick.cc"
+    CADDY_ON_DEMAND_API: str = "https://vericlick.site/api/edge/validate-domain/"
+
+    # GeoIP (optional)
+    GEOIP2_DB: str = ""
+
+    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+
+
+settings = Settings()
