@@ -46,10 +46,10 @@ function PlanCard({ plan, popular }: { plan: Plan; popular?: boolean }) {
       </div>
       <div className="grid grid-cols-2 gap-2 mb-6">
         <div className="rounded-xl bg-neutral-800/50 border border-neutral-700/60 px-4 py-3">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 mb-1">Sites</div>
+          <div className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 mb-1">Domains</div>
           <div className="flex items-center gap-1.5 text-sm font-bold text-white">
             <HugeiconsIcon icon={Globe02Icon} className="w-4 h-4" />
-            Unlimited
+            {plan.domainLimit ?? '—'}
           </div>
         </div>
         <div className="rounded-xl bg-neutral-800/50 border border-neutral-700/60 px-4 py-3">
@@ -111,9 +111,9 @@ function LimitsBand({ plans }: { plans: Plan[] }) {
           </thead>
           <tbody>
             <tr className="border-b border-neutral-900">
-              <td className="py-3 pr-6 text-neutral-400">Sites protected</td>
+              <td className="py-3 pr-6 text-neutral-400">Domains</td>
               {plans.map((p) => (
-                <td key={p.code} className="py-3 font-bold text-white">Unlimited</td>
+                <td key={p.code} className="py-3 font-bold text-white">{p.domainLimit}</td>
               ))}
             </tr>
             <tr>
@@ -204,7 +204,7 @@ export default function Pricing() {
           )}
 
           <p className="text-center text-sm text-neutral-500 mt-8">
-            The only difference between plans is the number of sites — Basic 5, Plus 10, Pro 20.
+            The only difference between plans is the number of domains — Basic 5, Plus 10, Pro 20.
             Protected pages are unlimited on every paid plan, and every tier runs the full protection engine.
           </p>
         </div>

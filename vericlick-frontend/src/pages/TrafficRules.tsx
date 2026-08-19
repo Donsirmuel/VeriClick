@@ -76,20 +76,22 @@ export default function TrafficRulesPage() {
         <FreeTierBanner workspace={workspace} />
       </div>
 
-      <div className="mb-6 inline-flex gap-1 p-1 rounded-xl bg-neutral-100">
-        {TABS.map(({ id, label, icon }) => (
-          <button
-            key={id}
-            onClick={() => setTab(id)}
-            className={cn(
-              'flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold transition-all',
-              tab === id ? 'bg-white text-black shadow-sm' : 'text-muted hover:text-slate-900',
-            )}
-          >
-            <HugeiconsIcon icon={icon} className="w-4 h-4" />
-            {label}
-          </button>
-        ))}
+      <div className="mb-6 overflow-x-auto">
+        <div className="inline-flex gap-1 p-1 rounded-xl bg-neutral-100 whitespace-nowrap">
+          {TABS.map(({ id, label, icon }) => (
+            <button
+              key={id}
+              onClick={() => setTab(id)}
+              className={cn(
+                'flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold transition-all',
+                tab === id ? 'bg-white text-black shadow-sm' : 'text-muted hover:text-slate-900',
+              )}
+            >
+              <HugeiconsIcon icon={icon} className="w-4 h-4" />
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {tab === 'ip' && (
@@ -201,8 +203,8 @@ function IpTab({ canManage }: { canManage: boolean }) {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <p className="text-sm text-muted max-w-2xl">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+        <p className="text-sm text-muted max-w-2xl min-w-0">
           Allow specific IPs through or block suspicious addresses before they reach your site.
           <HelpTooltip text="An IP address is like a computer's home address on the internet. Allow rules let specific IPs through and are checked first — they always win, so whitelisted IPs are never flagged again. Deny rules block traffic next. After that, automated bot detection and rate limits apply. You can use CIDR ranges like 192.168.1.0/24 to cover many addresses at once." side="bottom" />
         </p>
@@ -489,8 +491,8 @@ function CountriesTab({ canManage, queryClient }: { canManage: boolean; queryCli
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <p className="text-sm text-muted max-w-2xl">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+        <p className="text-sm text-muted max-w-2xl min-w-0">
           Block or allow entire countries. Visitors from a denied country are sent to your safe
           destination; an allow rule for a country wins over a deny rule for the same country.
         </p>

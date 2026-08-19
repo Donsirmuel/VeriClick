@@ -62,7 +62,7 @@ export default function SettingsPage() {
   }
 
   const snippet = workspace
-    ? `<script src="${API_BASE}/tracker.js" data-site="${workspace.id}" data-token="${workspace.trackerSecret}" async></script>`
+    ? `<script src="${API_BASE}/shield.js" data-api-key="${workspace.trackerSecret}" defer></script>`
     : ''
 
   const handleCopySnippet = async () => {
@@ -236,7 +236,7 @@ export default function SettingsPage() {
             <ol className="list-decimal pl-5 text-sm text-muted space-y-1 leading-relaxed">
               <li>Copy the snippet above.</li>
               <li>Paste it near the end of the page <span className="font-mono text-xs bg-neutral-100 px-1 rounded">&lt;head&gt;</span>.</li>
-              <li>Keep the <span className="font-mono text-xs bg-neutral-100 px-1 rounded">data-site</span> and <span className="font-mono text-xs bg-neutral-100 px-1 rounded">data-token</span> values unchanged.</li>
+              <li>The script uses your API key to identify your workspace — no domain registration needed.</li>
               <li>The script sends an event after a few seconds of inactivity or when the visitor leaves the page.</li>
             </ol>
           </div>
@@ -256,7 +256,7 @@ export default function SettingsPage() {
             <p className="text-[11px] text-muted leading-relaxed">
               Your snippet with the shield flag:
               <code className="mt-1 block font-mono text-[11px] bg-neutral-900 text-neutral-100 px-3 py-2 rounded-lg break-all">
-                {snippet ? snippet.replace(' async>', ' data-shield async>') : '…'}
+                {snippet ? snippet.replace(' defer>', ' data-shield defer>') : '…'}
               </code>
             </p>
           </div>

@@ -114,8 +114,7 @@ export default function Billing() {
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Billing &amp; Plan</h1>
         <p className="text-sm text-muted mt-1">
-          Your plan controls plan features for your workspace — protected pages are
-          unlimited on every paid plan. Pay monthly by card, or buy a 30-day period with the payment method that suits you.
+          Your plan controls how many domains you can protect. Pay monthly by card, or buy a 30-day period with the payment method that suits you.
         </p>
       </div>
 
@@ -212,9 +211,15 @@ export default function Billing() {
           )}
         </div>
         <div className="bg-white border border-neutral-200 rounded-2xl p-5">
-          <div className="text-xs font-bold text-muted uppercase tracking-wider mb-1">Sites protected</div>
-          <div className="text-xl font-bold text-slate-900">Active</div>
-          <div className="text-xs text-muted mt-1">Script installed on your site</div>
+          <div className="text-xs font-bold text-muted uppercase tracking-wider mb-1">Domains</div>
+          <div className="text-xl font-bold text-slate-900">
+            {workspace?.planName ? `${workspace.domainsUsed ?? 0} / ${workspace.domainLimit ?? 3}` : '—'}
+          </div>
+          <div className="text-xs text-muted mt-1">
+            {workspace?.planName
+              ? `${(workspace.domainLimit ?? 3) - (workspace.domainsUsed ?? 0)} remaining`
+              : 'Pick a plan to register domains'}
+          </div>
         </div>
         <div className="bg-white border border-neutral-200 rounded-2xl p-5">
           <div className="text-xs font-bold text-muted uppercase tracking-wider mb-1">Protected pages</div>
@@ -283,10 +288,10 @@ export default function Billing() {
                 </div>
                 <div className="grid grid-cols-2 gap-2 mb-5">
                   <div className="rounded-xl bg-neutral-50 border border-neutral-200 px-3 py-2.5">
-                    <div className="text-[10px] font-bold text-muted uppercase tracking-wider mb-1">Sites</div>
+                    <div className="text-[10px] font-bold text-muted uppercase tracking-wider mb-1">Domains</div>
                     <div className="flex items-center gap-1.5 text-sm font-bold text-slate-900">
                       <HugeiconsIcon icon={Globe02Icon} className="w-4 h-4 text-muted" />
-                      Unlimited
+                      {plan.domainLimit ?? '—'}
                     </div>
                   </div>
                   <div className="rounded-xl bg-neutral-50 border border-neutral-200 px-3 py-2.5">

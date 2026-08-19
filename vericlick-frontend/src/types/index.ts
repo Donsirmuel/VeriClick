@@ -49,12 +49,22 @@ export interface Workspace {
   graceExpiresAt: string | null
   trialExpiresAt: string | null
   trialActive: boolean
+  domainsUsed: number
+  domainLimit: number
+}
+
+export interface Domain {
+  id: string
+  domain: string
+  isActive: boolean
+  createdAt: string
 }
 
 export interface Plan {
   code: string
   name: string
   monthlyPrice: number
+  domainLimit: number
   features: string[]
   sortOrder: number
 }

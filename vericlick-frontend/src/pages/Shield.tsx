@@ -41,7 +41,7 @@ export default function ShieldPage() {
     queryKey: ['shield-config', workspace?.trackerSecret],
     queryFn: async () => {
       const { data } = await apiClient.get<ShieldConfig>('/shield/config/', {
-        params: { apiKey: workspace!.trackerSecret },
+        params: { api_key: workspace!.trackerSecret },
       })
       return data
     },
@@ -67,7 +67,7 @@ export default function ShieldPage() {
   const saveMutation = useMutation({
     mutationFn: async (payload: ShieldConfig) => {
       const { data } = await apiClient.patch<ShieldConfig>('/shield/config/', payload, {
-        params: { apiKey: workspace!.trackerSecret },
+        params: { api_key: workspace!.trackerSecret },
       })
       return data
     },

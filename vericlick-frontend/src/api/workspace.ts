@@ -1,5 +1,5 @@
 import { apiClient } from './client'
-import type { BillingHistory, BillingMode, CheckoutSession, PaymentMethod, Workspace } from '@/types'
+import type { BillingHistory, BillingMode, CheckoutSession, PaymentMethod, Workspace, Domain } from '@/types'
 
 interface WorkspaceUpdateInput {
   name?: string
@@ -32,4 +32,18 @@ export async function startCheckout(
 export async function fetchBillingHistory(): Promise<BillingHistory> {
   const { data } = await apiClient.get<BillingHistory>('/workspace/billing-history/')
   return data
+}
+
+export async function fetchDomains(): Promise<Domain[]> {
+  const { data } = await apiClient.get<Domain[]>('/domains/')
+  return data
+}
+
+export async function addDomain(domain: string): Promise<Domain> {
+  const { data } = await apiClient.post<Domain>('/domains/', { domain })
+  return data
+}
+
+export async function deleteDomain(domainId: string): Promise<void> {
+  await apiClient.delete(`/domains/${domainId}/`)
 }
