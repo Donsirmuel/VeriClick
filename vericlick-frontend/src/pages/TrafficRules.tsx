@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { PlusSignIcon, Edit01Icon, Cancel01Icon, ShieldIcon, Clock02Icon, Globe02Icon, SmartPhone01Icon } from '@hugeicons/core-free-icons'
@@ -112,6 +113,7 @@ export default function TrafficRulesPage() {
 // ---------------------------------------------------------------------------
 
 function IpTab({ canManage }: { canManage: boolean }) {
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [showForm, setShowForm] = useState(false)
   const [editTarget, setEditTarget] = useState<IPRule | null>(null)
@@ -209,10 +211,8 @@ function IpTab({ canManage }: { canManage: boolean }) {
           <HelpTooltip text="An IP address is like a computer's home address on the internet. Allow rules let specific IPs through and are checked first — they always win, so whitelisted IPs are never flagged again. Deny rules block traffic next. After that, automated bot detection and rate limits apply. You can use CIDR ranges like 192.168.1.0/24 to cover many addresses at once." side="bottom" />
         </p>
         <button
-          onClick={openCreate}
-          disabled={!canManage}
-          title={canManage ? undefined : 'A plan is required to manage traffic rules. Choose a plan to get started.'}
-          className="bg-black hover:bg-neutral-800 disabled:bg-neutral-300 disabled:cursor-not-allowed text-white px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-sm shrink-0"
+          onClick={() => canManage ? openCreate() : navigate('/app/billing')}
+          className="bg-black hover:bg-neutral-800 disabled:bg-neutral-300 disabled:cursor-pointer text-white px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-sm shrink-0"
         >
           <HugeiconsIcon icon={PlusSignIcon} className="w-4 h-4" />
           Add Rule
@@ -404,6 +404,7 @@ function IpTab({ canManage }: { canManage: boolean }) {
 // ---------------------------------------------------------------------------
 
 function CountriesTab({ canManage, queryClient }: { canManage: boolean; queryClient: ReturnType<typeof useQueryClient> }) {
+  const navigate = useNavigate()
   const [showForm, setShowForm] = useState(false)
   const [editTarget, setEditTarget] = useState<CountryRule | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<CountryRule | null>(null)
@@ -497,10 +498,8 @@ function CountriesTab({ canManage, queryClient }: { canManage: boolean; queryCli
           destination; an allow rule for a country wins over a deny rule for the same country.
         </p>
         <button
-          onClick={openCreate}
-          disabled={!canManage}
-          title={canManage ? undefined : 'A plan is required to manage traffic rules. Choose a plan to get started.'}
-          className="bg-black hover:bg-neutral-800 disabled:bg-neutral-300 disabled:cursor-not-allowed text-white px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-sm shrink-0"
+          onClick={() => canManage ? openCreate() : navigate('/app/billing')}
+          className="bg-black hover:bg-neutral-800 disabled:bg-neutral-300 disabled:cursor-pointer text-white px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-sm shrink-0"
         >
           <HugeiconsIcon icon={PlusSignIcon} className="w-4 h-4" />
           Add Rule
@@ -665,6 +664,7 @@ function CountriesTab({ canManage, queryClient }: { canManage: boolean; queryCli
 // ---------------------------------------------------------------------------
 
 function DevicesTab({ canManage, queryClient }: { canManage: boolean; queryClient: ReturnType<typeof useQueryClient> }) {
+  const navigate = useNavigate()
   const [selectedClasses, setSelectedClasses] = useState<DeviceClass[] | null>(null)
   const [selectedOs, setSelectedOs] = useState<string[] | null>(null)
 
@@ -724,9 +724,8 @@ function DevicesTab({ canManage, queryClient }: { canManage: boolean; queryClien
                 <button
                   key={value}
                   type="button"
-                  onClick={() => canManage && toggleClass(value)}
-                  disabled={!canManage}
-                  className={`p-4 rounded-xl border text-left transition-all disabled:cursor-not-allowed disabled:opacity-50 ${
+                  onClick={() => canManage ? toggleClass(value) : navigate('/app/billing')}
+                  className={`p-4 rounded-xl border text-left transition-all disabled:cursor-pointer disabled:opacity-50 ${
                     classes.includes(value)
                       ? 'border-black bg-slate-50 ring-1 ring-black'
                       : 'border-neutral-200 hover:border-neutral-400'
@@ -758,9 +757,8 @@ function DevicesTab({ canManage, queryClient }: { canManage: boolean; queryClien
                 <button
                   key={osName}
                   type="button"
-                  onClick={() => canManage && toggleOs(osName)}
-                  disabled={!canManage}
-                  className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-full border transition-all disabled:cursor-not-allowed disabled:opacity-50 ${
+                  onClick={() => canManage ? toggleOs(osName) : navigate('/app/billing')}
+                  className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-full border transition-all disabled:cursor-pointer disabled:opacity-50 ${
                     os.includes(osName)
                       ? 'bg-error/10 text-error border-error/30'
                       : 'bg-neutral-50 text-slate-700 border-neutral-200 hover:border-neutral-400'
@@ -780,10 +778,8 @@ function DevicesTab({ canManage, queryClient }: { canManage: boolean; queryClien
               <span className="text-xs text-muted">Unsaved changes</span>
             )}
             <button
-              onClick={save}
-              disabled={!canManage || !dirty || saveMutation.isPending}
-              title={canManage ? undefined : 'A plan is required to manage traffic rules. Choose a plan to get started.'}
-              className="bg-black hover:bg-neutral-800 disabled:bg-neutral-300 disabled:cursor-not-allowed text-white px-6 py-2.5 rounded-xl text-sm font-bold transition-all disabled:opacity-50"
+              onClick={() => canManage ? save() : navigate('/app/billing')}
+              className="bg-black hover:bg-neutral-800 disabled:bg-neutral-300 disabled:cursor-pointer text-white px-6 py-2.5 rounded-xl text-sm font-bold transition-all disabled:opacity-50"
             >
               {saveMutation.isPending ? 'Saving…' : 'Save device rules'}
             </button>

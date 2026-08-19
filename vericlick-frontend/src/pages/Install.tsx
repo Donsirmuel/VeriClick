@@ -1,5 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   CodeIcon,
@@ -115,7 +116,7 @@ export default function InstallPage() {
     error?: string;
   } | null>(null);
 
-  const { data: workspace, isLoading: workspaceLoading } = useQuery({
+  const { data: workspace } = useQuery({
     queryKey: ["workspace"],
     queryFn: fetchWorkspace,
   });
@@ -131,7 +132,8 @@ export default function InstallPage() {
     queryKey: ["install-tokens"],
     queryFn: fetchInstallTokens,
     retry: false,
-    enabled: hasPlan,
+    refetchOnWindowFocus: false,
+    enabled: hasPlan === true,
   });
 
   const createTokenMutation = useMutation({
@@ -363,7 +365,7 @@ export default function InstallPage() {
       <div className="bg-white rounded-2xl border border-neutral-200 p-6 shadow-sm">
         <h2 className="text-sm font-bold text-slate-900 mb-1">Install Token</h2>
         <p className="text-xs text-muted">
-          A plan is required to generate install tokens. Choose a plan to get started.
+          A plan is required to generate install tokens. <Link to="/app/billing" className="font-bold text-slate-900 underline">Choose a plan</Link> to get started.
         </p>
       </div>
       )}

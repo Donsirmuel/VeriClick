@@ -107,7 +107,7 @@ export default function DashboardPage() {
 
         <div className="space-y-3 mb-6">
           <a
-            href="/pricing"
+            href="/app/billing"
             className="w-full flex items-start gap-4 p-4 bg-white border border-neutral-200 rounded-2xl text-left hover:border-neutral-400 hover:shadow-sm transition-all"
           >
             <div className="w-10 h-10 rounded-xl bg-neutral-100 flex items-center justify-center shrink-0">
