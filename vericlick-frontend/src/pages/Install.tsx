@@ -8,7 +8,7 @@ import {
   Globe02Icon,
 } from "@hugeicons/core-free-icons";
 import toast from "react-hot-toast";
-import { fetchWorkspace } from "@/api/workspace";
+import { fetchWorkspace, fetchDomains } from "@/api/workspace";
 import { apiClient } from "@/api/client";
 import { DashboardSkeleton } from "@/components/ui/DashboardSkeleton";
 
@@ -29,6 +29,12 @@ export default function InstallPage() {
     queryFn: fetchWorkspace,
   });
 
+  const { data: domains, isLoading: domainsLoading } = useQuery({
+    queryKey: ["domains"],
+    queryFn: fetchDomains,
+  });
+
+  const hasDomain = (domains?.length ?? 0) > 0;
   const apiKey = workspace?.trackerSecret || "";
 
   const getSnippet = (platform: string) => {
@@ -132,8 +138,30 @@ export default function InstallPage() {
     },
   ];
 
-  if (isLoading) {
+  if (isLoading || domainsLoading) {
     return <DashboardSkeleton />;
+  }
+
+  if (!hasDomain) {
+    return (
+      <div className="max-w-2xl mx-auto py-16 px-4 text-center">
+        <div className="w-20 h-20 bg-neutral-100 rounded-3xl flex items-center justify-center mx-auto mb-6">
+          <HugeiconsIcon icon={Globe02Icon} className="w-9 h-9 text-muted" />
+        </div>
+        <h1 className="text-2xl font-bold text-slate-900 mb-2">Register a domain first</h1>
+        <p className="text-sm text-muted max-w-md mx-auto leading-relaxed mb-8">
+          You need to register at least one domain before you can install the protection script.
+          The script won't work on unregistered domains.
+        </p>
+        <a
+          href="/app/domains"
+          className="inline-flex items-center gap-2 bg-black hover:bg-neutral-800 text-white px-6 py-3 rounded-xl text-sm font-bold transition-all"
+        >
+          <HugeiconsIcon icon={Globe02Icon} className="w-4 h-4" />
+          Add your first domain
+        </a>
+      </div>
+    );
   }
 
   return (

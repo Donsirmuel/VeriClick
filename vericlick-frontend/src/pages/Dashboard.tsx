@@ -9,6 +9,7 @@ import { ActivityFeed } from '@/components/dashboard/ActivityFeed'
 import { BlockedQueueWidget } from '@/components/dashboard/BlockedQueueWidget'
 import { TopBreakdownWidget } from '@/components/dashboard/TopBreakdownWidget'
 import { fetchDashboardStats, fetchTrafficData, fetchActivity, fetchBreakdown } from '@/api/dashboard'
+import { fetchDashboardDomains } from '@/api/workspace'
 import { fetchWorkspace } from '@/api/workspace'
 import { FreeTierBanner } from '@/components/FreeTierBanner'
 import { DashboardSkeleton } from '@/components/ui/DashboardSkeleton'
@@ -18,30 +19,38 @@ const SHIELD_TOAST_KEY = 'vericlick-first-bot-blocked-toast'
 
 export default function DashboardPage() {
   const [range, setRange] = useState<TimeRange>('7d')
+  const [selectedDomain, setSelectedDomain] = useState('')
+
+  const { data: dashboardDomains } = useQuery({
+    queryKey: ['dashboard-domains'],
+    queryFn: fetchDashboardDomains,
+  })
+
+  const domainParam = selectedDomain || undefined
 
   const { data: stats, isLoading: statsLoading } = useQuery({
-    queryKey: ['dashboard-stats'],
-    queryFn: fetchDashboardStats,
+    queryKey: ['dashboard-stats', selectedDomain],
+    queryFn: () => fetchDashboardStats(domainParam),
   })
 
   const { data: trafficData, isFetching: trafficFetching } = useQuery({
-    queryKey: ['traffic', range],
-    queryFn: () => fetchTrafficData(range),
+    queryKey: ['traffic', range, selectedDomain],
+    queryFn: () => fetchTrafficData(range, domainParam),
   })
 
   const { data: activity, isLoading: activityLoading } = useQuery({
-    queryKey: ['activity'],
-    queryFn: fetchActivity,
+    queryKey: ['activity', selectedDomain],
+    queryFn: () => fetchActivity(domainParam),
   })
 
   const { data: countryBreakdown } = useQuery({
-    queryKey: ['breakdown', 'country', range],
-    queryFn: () => fetchBreakdown('country', range),
+    queryKey: ['breakdown', 'country', range, selectedDomain],
+    queryFn: () => fetchBreakdown('country', range, domainParam),
   })
 
   const { data: deviceBreakdown } = useQuery({
-    queryKey: ['breakdown', 'device', range],
-    queryFn: () => fetchBreakdown('device', range),
+    queryKey: ['breakdown', 'device', range, selectedDomain],
+    queryFn: () => fetchBreakdown('device', range, domainParam),
   })
 
   const { data: workspace } = useQuery({
@@ -168,9 +177,25 @@ export default function DashboardPage() {
           <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
           <p className="text-sm text-muted mt-1">Traffic analytics and protection overview</p>
         </div>
-        <div className="inline-flex items-center gap-2 text-sm text-neutral-500 bg-neutral-100 px-3 py-1.5 rounded-lg">
-          <div className="w-2 h-2 rounded-full bg-success animate-pulse shrink-0" />
-          <span>Shield active</span>
+        <div className="flex items-center gap-3">
+          {dashboardDomains && dashboardDomains.length > 0 && (
+            <select
+              value={selectedDomain}
+              onChange={(e) => setSelectedDomain(e.target.value)}
+              className="text-sm bg-neutral-100 border border-neutral-200 rounded-lg px-3 py-1.5 text-slate-700 focus:outline-none focus:ring-2 focus:ring-black/10"
+            >
+              <option value="">All domains</option>
+              {dashboardDomains.map((d) => (
+                <option key={d.domain} value={d.domain}>
+                  {d.domain}
+                </option>
+              ))}
+            </select>
+          )}
+          <div className="inline-flex items-center gap-2 text-sm text-neutral-500 bg-neutral-100 px-3 py-1.5 rounded-lg">
+            <div className="w-2 h-2 rounded-full bg-success animate-pulse shrink-0" />
+            <span>Shield active</span>
+          </div>
         </div>
       </div>
 

@@ -47,3 +47,14 @@ export async function addDomain(domain: string): Promise<Domain> {
 export async function deleteDomain(domainId: string): Promise<void> {
   await apiClient.delete(`/domains/${domainId}/`)
 }
+
+export interface DashboardDomain {
+  domain: string
+  registered: boolean
+  hasTraffic: boolean
+}
+
+export async function fetchDashboardDomains(): Promise<DashboardDomain[]> {
+  const { data } = await apiClient.get<DashboardDomain[]>('/dashboard/domains/')
+  return data
+}

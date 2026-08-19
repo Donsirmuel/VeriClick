@@ -33,6 +33,7 @@ urlpatterns = [
     path('dashboard/traffic/', views.dashboard_traffic, name='dashboard-traffic'),
     path('dashboard/activity/', views.dashboard_activity, name='dashboard-activity'),
     path('dashboard/breakdown/', views.dashboard_breakdown, name='dashboard-breakdown'),
+    path('dashboard/domains/', views.dashboard_domains, name='dashboard-domains'),
     # Workspace
     path('workspace/', views.workspace_detail, name='workspace-detail'),
     path('workspace/billing-history/', views.billing_history, name='billing-history'),

@@ -211,7 +211,7 @@ class TrackerEventSerializer(serializers.ModelSerializer):
     class Meta:
         model = TrackerEvent
         fields = [
-            'id', 'workspace', 'page_url', 'referrer', 'signals',
+            'id', 'workspace', 'page_url', 'domain', 'referrer', 'signals',
             'engagement', 'ip', 'user_agent', 'verdict', 'is_bot', 'reason',
             'canvas_hash', 'trajectory', 'ja4_hash', 'bot_score', 'bot_verdict',
             'created_at',
@@ -225,7 +225,7 @@ class BlockedIPSerializer(serializers.ModelSerializer):
     class Meta:
         model = TrackerEvent
         fields = [
-            'id', 'ip', 'reason', 'reason_label', 'is_bot',
+            'id', 'ip', 'domain', 'reason', 'reason_label', 'is_bot',
             'page_url', 'country', 'verdict', 'created_at',
         ]
 

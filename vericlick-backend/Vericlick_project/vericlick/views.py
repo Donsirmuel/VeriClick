@@ -440,9 +440,20 @@ def receive_tracker_event(request):
     bot_signals = score_from_signals(request, tracker_signals, trajectory, click_metrics)
     bot_result = compute_bot_score(bot_signals)
 
+    # Extract domain from page_url
+    domain = ''
+    page_url_val = request.data.get('page_url', '')
+    if page_url_val:
+        try:
+            from urllib.parse import urlparse
+            domain = (urlparse(page_url_val).hostname or '').lower().lstrip('www.')
+        except Exception:
+            pass
+
     data = {
         'workspace': workspace.id,
-        'page_url': request.data.get('page_url'),
+        'page_url': page_url_val,
+        'domain': domain,
         'referrer': request.data.get('referrer', ''),
         'signals': tracker_signals,
         'engagement': request.data.get('engagement') or {},
@@ -505,6 +516,28 @@ def shield_verify(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    # Domain enforcement: extract domain from page_url and verify it's registered.
+    from urllib.parse import urlparse
+    try:
+        parsed = urlparse(page_url)
+        domain = parsed.hostname or ''
+    except Exception:
+        domain = ''
+
+    # Strip 'www.' prefix for matching
+    check_domain = domain.lower().lstrip('www.') if domain else ''
+    if check_domain and not DomainRegistry.objects.filter(
+        workspace=workspace, domain=check_domain, is_active=True,
+    ).exists():
+        # Domain not registered — silently ignore (don't reveal whether domain
+        # is registered to unauthenticated callers).
+        return Response({
+            'verdict': 'allow',
+            'is_bot': False,
+            'reason': 'unregistered-domain',
+            'reason_label': '',
+        })
+
     def _allow(reason=''):
         return Response({
             'verdict': 'allow',
@@ -558,6 +591,15 @@ def _log_shield_event(request, workspace, page_url, blocked=False, reason=''):
     if forwarded:
         ip = forwarded.split(',')[0].strip()
 
+    # Extract domain from page_url
+    domain = ''
+    if page_url:
+        try:
+            from urllib.parse import urlparse
+            domain = (urlparse(page_url).hostname or '').lower().lstrip('www.')
+        except Exception:
+            pass
+
     tracker_signals = request.data.get('signals') or {}
     trajectory = tracker_signals.get('trajectory') or {}
     click_metrics = tracker_signals.get('click_metrics') or {}
@@ -569,6 +611,7 @@ def _log_shield_event(request, workspace, page_url, blocked=False, reason=''):
     TrackerEvent.objects.create(
         workspace=workspace,
         page_url=page_url,
+        domain=domain,
         referrer=request.data.get('referrer', ''),
         signals=tracker_signals,
         engagement=request.data.get('engagement') or {},
@@ -641,7 +684,21 @@ def shield_telemetry(request):
     if workspace.plan_status == 'suspended':
         return Response({'status': 'ok'})
 
-    _log_shield_event(request, workspace, request.data.get('page_url', ''), blocked=False, reason='telemetry')
+    # Domain enforcement: silently ignore telemetry from unregistered domains.
+    page_url = request.data.get('page_url', '')
+    if page_url:
+        from urllib.parse import urlparse
+        try:
+            parsed = urlparse(page_url)
+            domain = (parsed.hostname or '').lower().lstrip('www.')
+        except Exception:
+            domain = ''
+        if domain and not DomainRegistry.objects.filter(
+            workspace=workspace, domain=domain, is_active=True,
+        ).exists():
+            return Response({'status': 'ok'})
+
+    _log_shield_event(request, workspace, page_url, blocked=False, reason='telemetry')
     return Response({'status': 'ok'})
 
 
@@ -879,10 +936,15 @@ def dashboard_stats(request):
     now = timezone.now()
     twenty_four_hours_ago = now - timedelta(hours=24)
 
+    # Optional domain filter
+    domain_filter = request.query_params.get('domain', '').strip().lower()
+
     # Use TrackerEvent (script telemetry) instead of ClickLog (link redirects)
     events_24h = TrackerEvent.objects.filter(
         workspace=workspace, created_at__gte=twenty_four_hours_ago
     )
+    if domain_filter:
+        events_24h = events_24h.filter(domain=domain_filter)
     total_events_24h = events_24h.count()
     bot_events_24h = events_24h.filter(is_bot=True).count()
     blocked_24h = events_24h.filter(verdict='blocked').count()
@@ -926,12 +988,16 @@ def dashboard_traffic(request):
     range_param = request.query_params.get('range', '7d')
     days_map = {'7d': 7, '30d': 30, '90d': 90}
     days = days_map.get(range_param, 7)
+    domain_filter = request.query_params.get('domain', '').strip().lower()
 
     since = timezone.now() - timedelta(days=days)
 
+    qs = TrackerEvent.objects.filter(workspace=workspace, created_at__gte=since)
+    if domain_filter:
+        qs = qs.filter(domain=domain_filter)
+
     qs = (
-        TrackerEvent.objects
-        .filter(workspace=workspace, created_at__gte=since)
+        qs
         .annotate(date=TruncDate('created_at'))
         .values('date')
         .annotate(
@@ -966,11 +1032,14 @@ def dashboard_breakdown(request):
     range_param = request.query_params.get('range', '7d')
     days_map = {'7d': 7, '30d': 30, '90d': 90}
     days = days_map.get(range_param, 7)
+    domain_filter = request.query_params.get('domain', '').strip().lower()
     since = timezone.now() - timedelta(days=days)
 
     qs = TrackerEvent.objects.filter(
         workspace=workspace, created_at__gte=since,
     )
+    if domain_filter:
+        qs = qs.filter(domain=domain_filter)
 
     if dimension == 'device':
         rows = (
@@ -1033,6 +1102,10 @@ def blocked_ips(request):
         workspace=workspace,
         verdict='blocked',
     )
+
+    domain_filter = request.query_params.get('domain', '').strip().lower()
+    if domain_filter:
+        qs = qs.filter(domain=domain_filter)
 
     # A whitelisted IP is no longer "blocked"
     whitelisted = set(
@@ -1099,12 +1172,53 @@ def device_policy(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+def dashboard_domains(request):
+    """Return the list of domains with traffic in the last 30 days, plus their
+    registered status. Used by the frontend domain-filter dropdown."""
+    workspace = get_user_workspace(request.user)
+    if not workspace:
+        return Response({'error': 'No workspace found'}, status=status.HTTP_404_NOT_FOUND)
+
+    since = timezone.now() - timedelta(days=30)
+    # Distinct domains that have logged events recently
+    active_domains = set(
+        TrackerEvent.objects.filter(
+            workspace=workspace, created_at__gte=since,
+        ).exclude(domain='').values_list('domain', flat=True).distinct()
+    )
+    # All registered domains
+    registered_domains = set(
+        DomainRegistry.objects.filter(
+            workspace=workspace, is_active=True,
+        ).values_list('domain', flat=True)
+    )
+
+    # Merge: registered domains always appear; active-only domains appear too
+    all_domains = registered_domains | active_domains
+
+    result = []
+    for domain in sorted(all_domains):
+        result.append({
+            'domain': domain,
+            'registered': domain in registered_domains,
+            'hasTraffic': domain in active_domains,
+        })
+    return Response(result)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def dashboard_activity(request):
     workspace = get_user_workspace(request.user)
     if not workspace:
         return Response({'error': 'No workspace found'}, status=status.HTTP_404_NOT_FOUND)
 
-    events = TrackerEvent.objects.filter(workspace=workspace).order_by('-created_at')[:50]
+    qs = TrackerEvent.objects.filter(workspace=workspace)
+    domain_filter = request.query_params.get('domain', '').strip().lower()
+    if domain_filter:
+        qs = qs.filter(domain=domain_filter)
+
+    events = qs.order_by('-created_at')[:50]
     serializer = TrackerEventSerializer(events, many=True)
     return Response(serializer.data)
 

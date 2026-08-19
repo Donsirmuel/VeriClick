@@ -301,6 +301,10 @@ class TrackerEvent(models.Model):
         Workspace, on_delete=models.CASCADE, related_name='tracker_events',
     )
     page_url = models.URLField(max_length=2048)
+    domain = models.CharField(
+        max_length=253, blank=True, default='', db_index=True,
+        help_text='Domain extracted from page_url (e.g. example.com). Used for per-domain dashboard filtering.',
+    )
     referrer = models.URLField(max_length=2048, blank=True, default='')
     signals = models.JSONField(default=dict, blank=True)
     engagement = models.JSONField(default=dict, blank=True)
@@ -411,6 +415,7 @@ class DomainRegistry(models.Model):
     """Simplified domain tracking — no DNS verification. Users add domains and
     click "authorize" to confirm ownership. The domain count is the pricing
     differentiator across plans (Basic=5, Plus=10, Pro=20)."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     workspace = models.ForeignKey(
         Workspace, on_delete=models.CASCADE, related_name='domains',
     )
