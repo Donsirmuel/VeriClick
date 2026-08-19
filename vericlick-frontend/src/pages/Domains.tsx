@@ -199,10 +199,17 @@ function InstallTokenSection() {
   const queryClient = useQueryClient()
   const [showRawToken, setShowRawToken] = useState<string | null>(null)
 
+  const { data: workspace } = useQuery({
+    queryKey: ['workspace'],
+    queryFn: fetchWorkspace,
+  })
+  const hasPlan = !!workspace?.planName
+
   const { data: tokens, isLoading } = useQuery({
     queryKey: ['install-tokens'],
     queryFn: fetchInstallTokens,
     retry: false,
+    enabled: hasPlan,
   })
 
   const createMutation = useMutation({
@@ -229,6 +236,20 @@ function InstallTokenSection() {
   }
 
   if (isLoading) return null
+
+  if (!hasPlan) {
+    return (
+      <div className="bg-white rounded-2xl border border-neutral-200 p-6 shadow-sm">
+        <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2 mb-2">
+          <HugeiconsIcon icon={Key01Icon} className="w-4 h-4 text-muted" />
+          Install Tokens
+        </h3>
+        <p className="text-xs text-muted">
+          A plan is required to generate install tokens. Choose a plan to get started.
+        </p>
+      </div>
+    )
+  }
 
   return (
     <div className="bg-white rounded-2xl border border-neutral-200 p-6 shadow-sm">

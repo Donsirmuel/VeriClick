@@ -82,7 +82,7 @@ export default function DashboardPage() {
   }, [activity])
 
   const canManageRules = !workspace
-    ? true
+    ? false
     : workspace.planName !== null || workspace.trialActive
 
   const totalVisits = stats?.totalVisits24h ?? 0

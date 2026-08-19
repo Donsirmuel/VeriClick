@@ -9,7 +9,7 @@ import {
   Loading03Icon,
 } from "@hugeicons/core-free-icons";
 import toast from "react-hot-toast";
-import { fetchDomains, fetchInstallTokens, createInstallToken, testInstallation } from "@/api/workspace";
+import { fetchDomains, fetchInstallTokens, createInstallToken, testInstallation, fetchWorkspace } from "@/api/workspace";
 import { apiClient } from "@/api/client";
 import { DashboardSkeleton } from "@/components/ui/DashboardSkeleton";
 
@@ -115,6 +115,13 @@ export default function InstallPage() {
     error?: string;
   } | null>(null);
 
+  const { data: workspace, isLoading: workspaceLoading } = useQuery({
+    queryKey: ["workspace"],
+    queryFn: fetchWorkspace,
+  });
+
+  const hasPlan = !!workspace?.planName;
+
   const { data: domains, isLoading: domainsLoading } = useQuery({
     queryKey: ["domains"],
     queryFn: fetchDomains,
@@ -124,6 +131,7 @@ export default function InstallPage() {
     queryKey: ["install-tokens"],
     queryFn: fetchInstallTokens,
     retry: false,
+    enabled: hasPlan,
   });
 
   const createTokenMutation = useMutation({
@@ -134,12 +142,12 @@ export default function InstallPage() {
   });
 
   // Auto-create first install token if none exist
-  if (!tokensLoading && tokens && tokens.length === 0 && !activeToken && !createTokenMutation.isPending) {
+  if (hasPlan && !tokensLoading && tokens && tokens.length === 0 && !activeToken && !createTokenMutation.isPending) {
     createTokenMutation.mutate("Primary");
   }
 
   // Set active token from existing tokens
-  if (!tokensLoading && tokens && tokens.length > 0 && !activeToken && !createTokenMutation.isPending) {
+  if (hasPlan && !tokensLoading && tokens && tokens.length > 0 && !activeToken && !createTokenMutation.isPending) {
     setActiveToken(tokens[0].tokenPrefix + "…");
   }
 
@@ -317,6 +325,7 @@ export default function InstallPage() {
       </div>
 
       {/* Install token management */}
+      {hasPlan ? (
       <div className="bg-white rounded-2xl border border-neutral-200 p-6 shadow-sm">
         <h2 className="text-sm font-bold text-slate-900 mb-3">Install Token</h2>
         <p className="text-xs text-muted mb-4">
@@ -350,6 +359,14 @@ export default function InstallPage() {
           </button>
         </div>
       </div>
+      ) : (
+      <div className="bg-white rounded-2xl border border-neutral-200 p-6 shadow-sm">
+        <h2 className="text-sm font-bold text-slate-900 mb-1">Install Token</h2>
+        <p className="text-xs text-muted">
+          A plan is required to generate install tokens. Choose a plan to get started.
+        </p>
+      </div>
+      )}
 
       {/* Platform selector */}
       <div className="bg-white rounded-2xl border border-neutral-200 p-6 shadow-sm">

@@ -55,7 +55,7 @@ export default function TrafficRulesPage() {
   // IP rules are a paid feature, but free workspaces can use them during their
   // 7-day trial. Once the trial ends the UI locks the rule forms and points to upgrade.
   const canManageRules = !workspace
-    ? true
+    ? false
     : workspace.planName !== null || workspace.trialActive
 
   return (
