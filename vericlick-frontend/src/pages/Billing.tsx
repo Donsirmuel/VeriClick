@@ -36,11 +36,10 @@ export default function Billing() {
   const { data: history } = useQuery({ queryKey: ['billing-history'], queryFn: fetchBillingHistory })
 
   const checkoutMutation = useMutation({
-    mutationFn: ({ planCode, billingMode, paymentMethods }: {
+    mutationFn: ({ planCode, billingMode }: {
       planCode: string
       billingMode: BillingMode
-      paymentMethods: PaymentMethod[]
-    }) => startCheckout(planCode, billingMode, paymentMethods),
+    }) => startCheckout(planCode, billingMode, ['crypto']),
     onSuccess: (session) => {
       toast.success('Opening secure checkout…')
       window.location.href = session.checkoutUrl
@@ -73,7 +72,7 @@ export default function Billing() {
   }
 
   const beginCheckout = (planCode: string) => {
-    checkoutMutation.mutate({ planCode, billingMode, paymentMethods: ['crypto'] })
+    checkoutMutation.mutate({ planCode, billingMode })
   }
 
   return (
