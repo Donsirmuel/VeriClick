@@ -132,6 +132,15 @@ export async function deleteRedirectDomain(domainId: string): Promise<void> {
   await apiClient.delete(`/redirect-domains/${domainId}/`)
 }
 
+export async function verifyRedirectDomainCname(domainId: string): Promise<{
+  cname_ok: boolean
+  target: string | null
+  detail: string
+}> {
+  const { data } = await apiClient.post(`/redirect-domains/${domainId}/verify-cname/`)
+  return data
+}
+
 // --- Redirect Routes ---
 
 export async function fetchRedirectRoutes(): Promise<RedirectRoute[]> {

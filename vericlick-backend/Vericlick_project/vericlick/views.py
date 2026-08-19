@@ -136,10 +136,15 @@ def domain_list_create(request):
 
     # Check limit
     active_plan = workspace.active_plan
+    if not active_plan:
+        return Response(
+            {'errors': [{'field': 'domain', 'detail': 'Subscribe to a plan before adding domains.'}]},
+            status=status.HTTP_403_FORBIDDEN,
+        )
     current_count = DomainRegistry.objects.filter(workspace=workspace, is_active=True).count()
-    limit = active_plan.domain_limit if active_plan else 3
+    limit = active_plan.domain_limit
     if current_count >= limit:
-        plan_name = active_plan.name if active_plan else 'your current plan'
+        plan_name = active_plan.name
         return Response(
             {'errors': [{'field': 'domain', 'detail': f'You\'ve reached the {limit}-domain limit on {plan_name}. Upgrade to add more.'}]},
             status=status.HTTP_400_BAD_REQUEST,
@@ -374,6 +379,11 @@ def install_token_list_create(request):
         return Response(InstallTokenSerializer(tokens, many=True).data)
 
     # POST — generate new token
+    if not workspace.has_plan_access():
+        return Response(
+            {'errors': [{'field': 'token', 'detail': 'Subscribe to a plan before generating install tokens.'}]},
+            status=status.HTTP_403_FORBIDDEN,
+        )
     active_count = InstallToken.objects.filter(workspace=workspace, is_active=True).count()
     if active_count >= MAX_INSTALL_TOKENS:
         return Response(
@@ -448,10 +458,15 @@ def redirect_domain_list_create(request):
 
     # Check limit (redirect domains count toward the same domain limit)
     active_plan = workspace.active_plan
+    if not active_plan:
+        return Response(
+            {'errors': [{'field': 'domain', 'detail': 'Subscribe to a plan before adding redirect domains.'}]},
+            status=status.HTTP_403_FORBIDDEN,
+        )
     current_count = DomainRegistry.objects.filter(workspace=workspace, is_active=True).count()
-    limit = active_plan.domain_limit if active_plan else 3
+    limit = active_plan.domain_limit
     if current_count >= limit:
-        plan_name = active_plan.name if active_plan else 'your current plan'
+        plan_name = active_plan.name
         return Response(
             {'errors': [{'field': 'domain', 'detail': f'You\'ve reached the {limit}-domain limit on {plan_name}. Upgrade to add more.'}]},
             status=status.HTTP_400_BAD_REQUEST,
@@ -461,6 +476,63 @@ def redirect_domain_list_create(request):
         workspace=workspace, domain=domain_name, purpose='redirect',
     )
     return Response(DomainRegistrySerializer(domain).data, status=status.HTTP_201_CREATED)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def redirect_domain_verify_cname(request, domain_id):
+    """Check that a redirect domain's CNAME points to edge.vericlick.cc."""
+    workspace = get_user_workspace(request.user)
+    if not workspace:
+        return Response({'error': 'No workspace found'}, status=status.HTTP_404_NOT_FOUND)
+
+    try:
+        domain_obj = DomainRegistry.objects.get(
+            id=domain_id, workspace=workspace, purpose='redirect', is_active=True,
+        )
+    except DomainRegistry.DoesNotExist:
+        return Response(
+            {'errors': [{'field': 'domain', 'detail': 'Redirect domain not found.'}]},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    import dns.resolver
+    expected_cname = 'edge.vericlick.cc'
+
+    try:
+        answers = dns.resolver.resolve(domain_obj.domain, 'CNAME')
+        for rdata in answers:
+            target = str(rdata.target).rstrip('.')
+            if target.lower() == expected_cname.lower():
+                return Response({
+                    'cname_ok': True,
+                    'target': target,
+                    'detail': f'CNAME correctly points to {expected_cname}.',
+                })
+        return Response({
+            'cname_ok': False,
+            'target': str(answers[0].target).rstrip('.'),
+            'detail': f'CNAME points to {str(answers[0].target).rstrip(".")} instead of {expected_cname}.',
+        })
+    except dns.resolver.NoAnswer:
+        return Response({
+            'cname_ok': False,
+            'target': None,
+            'detail': f'No CNAME record found. Add a CNAME record pointing to {expected_cname}.',
+        })
+    except dns.resolver.NXDOMAIN:
+        return Response({
+            'cname_ok': False,
+            'target': None,
+            'detail': f'Domain does not exist. Make sure DNS is configured.',
+        })
+    except Exception as exc:
+        logger.warning('CNAME check failed for %s: %s', domain_obj.domain, exc)
+        return Response({
+            'cname_ok': False,
+            'target': None,
+            'detail': 'DNS lookup failed. Please try again in a few minutes.',
+        })
 
 
 # ---------------------------------------------------------------------------

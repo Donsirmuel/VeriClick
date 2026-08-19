@@ -42,7 +42,7 @@ const STEPS: TourStep[] = [
     icon: LinkSquare02Icon,
   },
   {
-    title: 'Configure Your Shield',
+    title: 'Configure Anti-Bot',
     body: 'Set your protection mode — strict, balanced, or monitor. Your rules, your site.',
     icon: ShieldIcon,
   },

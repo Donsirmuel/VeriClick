@@ -148,7 +148,7 @@ export function ChatWidget() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Ask about the script, shield, IP rules…"
+                placeholder="Ask about the script, anti-bot, IP rules…"
                 className="flex-1 bg-neutral-100 border border-transparent focus:border-neutral-300 focus:bg-white rounded-xl px-4 py-2.5 text-sm focus:outline-none transition-colors placeholder:text-neutral-400"
                 aria-label="Chat message"
               />

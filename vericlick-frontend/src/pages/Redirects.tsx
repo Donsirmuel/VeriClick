@@ -11,6 +11,7 @@ import {
   renewRedirectRoute, updateRedirectRoute,
   fetchRedirectDomains, addRedirectDomain,
   getVerifyChallenge, confirmVerification,
+  verifyRedirectDomainCname,
 } from '@/api/workspace'
 import type { RedirectRoute } from '@/types'
 import { parseApiError } from '@/lib/errors'
@@ -96,6 +97,7 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
   const [slug, setSlug] = useState('')
   const [newRedirectDomain, setNewRedirectDomain] = useState('')
   const [verifyMethod, setVerifyMethod] = useState<'html_meta' | 'dns_txt'>('html_meta')
+  const [cnameResult, setCnameResult] = useState<{ cname_ok: boolean; target: string | null; detail: string } | null>(null)
 
   const { data: redirectDomains } = useQuery({
     queryKey: ['redirect-domains'],
@@ -132,6 +134,19 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
     },
   })
 
+  const cnameVerifyMutation = useMutation({
+    mutationFn: () => verifyRedirectDomainCname(domainId),
+    onSuccess: (data) => {
+      setCnameResult(data)
+      if (data.cname_ok) {
+        toast.success('CNAME verified!')
+      }
+    },
+    onError: () => {
+      setCnameResult({ cname_ok: false, target: null, detail: 'DNS lookup failed. Try again in a few minutes.' })
+    },
+  })
+
   const createMutation = useMutation({
     mutationFn: () => createRedirectRoute({
       domainId,
@@ -160,7 +175,7 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
       <div className="bg-white rounded-2xl border border-neutral-200 shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
         <div className="p-6">
           <h2 className="text-lg font-bold text-slate-900 mb-1">Create Redirect</h2>
-          <p className="text-sm text-muted mb-5">Step {step} of 3</p>
+          <p className="text-sm text-muted mb-5">Step {step} of 4</p>
 
           {step === 1 && (
             <div className="space-y-4">
@@ -325,7 +340,7 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
               )}
 
               <div className="flex gap-2">
-                <button onClick={() => setStep(1)} className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-3 rounded-xl text-sm font-bold transition-colors">
+                <button onClick={() => setStep(3)} className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-3 rounded-xl text-sm font-bold transition-colors">
                   Back
                 </button>
                 <button
@@ -343,6 +358,58 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
           )}
 
           {step === 3 && (
+            <div className="space-y-4">
+              <p className="text-sm text-muted">
+                Point your domain to our edge proxy so traffic can be routed through VeriClick.
+              </p>
+
+              <div className="p-4 bg-slate-50 rounded-xl space-y-3">
+                <p className="text-sm font-bold text-slate-900">CNAME Setup</p>
+                <p className="text-xs text-muted">
+                  Add a CNAME record in your DNS settings for <strong>{selectedDomain?.domain}</strong>:
+                </p>
+                <div className="bg-slate-900 text-emerald-400 text-xs font-mono p-3 rounded-lg space-y-1">
+                  <div><span className="text-muted">Host:</span> {selectedDomain?.domain?.split('.')[0]}</div>
+                  <div><span className="text-muted">Value:</span> edge.vericlick.cc</div>
+                  <div><span className="text-muted">TTL:</span> 300 (or Auto)</div>
+                </div>
+                <p className="text-xs text-muted">
+                  This tells DNS to route traffic for your domain to our edge proxy.
+                  Changes may take a few minutes to propagate.
+                </p>
+              </div>
+
+              {cnameResult && (
+                <div className={`p-3 rounded-xl text-xs font-bold ${cnameResult.cname_ok
+                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                    : 'bg-amber-50 text-amber-700 border border-amber-200'
+                  }`}>
+                  {cnameResult.detail}
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <button onClick={() => setStep(2)} className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-3 rounded-xl text-sm font-bold transition-colors">
+                  Back
+                </button>
+                <button
+                  onClick={() => cnameVerifyMutation.mutate()}
+                  disabled={cnameVerifyMutation.isPending}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-3 rounded-xl text-sm font-bold transition-colors disabled:opacity-50"
+                >
+                  {cnameVerifyMutation.isPending ? 'Checking…' : 'Verify CNAME'}
+                </button>
+                <button
+                  onClick={() => setStep(4)}
+                  className="flex-1 bg-black hover:bg-neutral-800 text-white py-3 rounded-xl text-sm font-bold transition-all"
+                >
+                  Continue
+                </button>
+              </div>
+            </div>
+          )}
+
+          {step === 4 && (
             <div className="space-y-4">
               <div className="p-4 bg-slate-50 rounded-xl space-y-2 text-sm">
                 <div className="flex justify-between"><span className="text-muted">Domain</span><span className="font-bold">{selectedDomain?.domain}</span></div>

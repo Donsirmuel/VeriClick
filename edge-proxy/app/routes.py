@@ -85,6 +85,13 @@ async def handle_request(
     ip = _client_ip(request)
     user_agent = request.headers.get("user-agent", "")
 
+    # Block direct IP access — never serve content when Host is a raw IP
+    try:
+        ipaddress.ip_address(host)
+        return Response(status_code=444)
+    except ValueError:
+        pass  # Not an IP, continue
+
     # Look up route in Redis
     route = await get_route(redis, host, slug)
 

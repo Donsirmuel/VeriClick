@@ -14,11 +14,13 @@
 
 # Default site: edge.vericlick.cc (always valid, no on-demand check needed)
 {$EDGE_HOSTNAME} {
+    header -Server -X-Powered-By
     reverse_proxy app:8000
 }
 
 # On-demand TLS for customer domains
 https:// {
+    header -Server -X-Powered-By
     reverse_proxy app:8000
 }
 

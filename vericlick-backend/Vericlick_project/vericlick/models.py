@@ -10,8 +10,7 @@ from django.utils.timezone import now
 
 class Workspace(models.Model):
     class BillingMode(models.TextChoices):
-        # How a workspace pays for its plan.
-        SUBSCRIPTION = 'subscription', 'Subscription (card, auto-renews)'
+        # Only one-time period payments (manual renewal, crypto).
         PERIOD = 'period', 'One-time period (manual renew)'
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -57,11 +56,10 @@ class Workspace(models.Model):
         ),
     )
     plan_billing_mode = models.CharField(
-        max_length=16, choices=BillingMode.choices, default=BillingMode.SUBSCRIPTION,
+        max_length=16, choices=BillingMode.choices, default=BillingMode.PERIOD,
         help_text=(
-            'How this plan is paid: subscription = card monthly auto-renew; '
-            'period = a one-time payment covering a billing period (bank '
-            'transfer / crypto / mobile money), renewed manually.'
+            'How this plan is paid: always a one-time payment covering a '
+            'billing period (crypto), renewed manually.'
         ),
     )
     plan_expires_at = models.DateTimeField(
@@ -313,11 +311,11 @@ class TrackerEvent(models.Model):
     user_agent = models.TextField(blank=True, default='')
     verdict = models.CharField(
         max_length=20, blank=True, default='',
-        help_text='Shield verdict for this pageview: "allowed" or "blocked". Empty = not evaluated.',
+        help_text='Anti-bot verdict for this pageview: "allowed" or "blocked". Empty = not evaluated.',
     )
     is_bot = models.BooleanField(
         default=False,
-        help_text='Whether the shield judged this pageview as bot/automated traffic.',
+        help_text='Whether the anti-bot engine judged this pageview as bot/automated traffic.',
     )
     reason = models.CharField(
         max_length=100, blank=True, default='',
@@ -405,19 +403,19 @@ class ShieldConfig(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        verbose_name = 'Shield configuration'
-        verbose_name_plural = 'Shield configurations'
+        verbose_name = 'Anti-bot configuration'
+        verbose_name_plural = 'Anti-bot configurations'
 
     def __str__(self):
-        return f'Shield config for {self.workspace_id}: {self.protection_mode}'
+        return f'Anti-bot config for {self.workspace_id}: {self.protection_mode}'
 
 
 class DomainRegistry(models.Model):
-    """Domain ownership tracking with verification. The domain count is the
-    pricing differentiator across plans (Basic=5, Plus=10, Pro=20).
+    """Domain ownership tracking with verification. Plans differ by domain
+    count: Basic=1, Plus=1, Pro=1 (all 1 domain, 1-week access).
 
     Two purposes:
-    - protection: domain is protected by the shield.js script
+    - protection: domain is protected by the anti-bot script
     - redirect: domain is used for smart redirects via the edge proxy
 
     Verification methods:
@@ -742,15 +740,16 @@ class SiteConfig(models.Model):
 
 
 class Plan(models.Model):
-    # Paid tiers shown on the pricing page. The only difference between tiers
-    # today is the number of domains a workspace can register: Basic 5, Plus 10,
-    # Pro 20. Prices are monthly and USD.
+    # Paid tiers shown on the pricing page. Plans differ by domain count.
+    # Basic=1 domain $30, Plus=1 domain $50, Pro=1 domain $100.
+    # All plans: 1-week access, one-time payment, manual renewal, crypto only.
     code = models.SlugField(max_length=50, unique=True, help_text='e.g. basic, plus, pro')
     name = models.CharField(max_length=100, help_text='Display name, e.g. Basic')
     monthly_price = models.DecimalField(
-        max_digits=8, decimal_places=2, help_text='Monthly price in USD.',
+        max_digits=8, decimal_places=2, help_text='One-time price in USD (1-week access).',
     )
     domain_limit = models.PositiveIntegerField(
+        default=1,
         help_text='How many domains a workspace on this plan may register.',
     )
     features = models.JSONField(default=list, blank=True, help_text='Extra bullet points shown on the pricing page.')
@@ -789,7 +788,7 @@ class Plan(models.Model):
         ordering = ['sort_order', 'code']
 
     def __str__(self):
-        return f'{self.name} (${self.monthly_price}/mo)'
+        return f'{self.name} (${self.monthly_price}/week)'
 
 
 class CheckoutIntent(models.Model):
@@ -803,8 +802,7 @@ class CheckoutIntent(models.Model):
         FAILED = 'failed', 'Failed'
 
     class BillingMode(models.TextChoices):
-        SUBSCRIPTION = 'subscription', 'Recurring card subscription'
-        PERIOD = 'period', 'One-time period (any payment channel)'
+        PERIOD = 'period', 'One-time period (crypto)'
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     workspace = models.ForeignKey(
@@ -819,8 +817,8 @@ class CheckoutIntent(models.Model):
         help_text='The account that started the checkout (for the upgrade email).',
     )
     billing_mode = models.CharField(
-        max_length=16, choices=BillingMode.choices, default=BillingMode.SUBSCRIPTION,
-        help_text='subscription = recurring card charge; period = one-time payment covering a billing period.',
+        max_length=16, choices=BillingMode.choices, default=BillingMode.PERIOD,
+        help_text='One-time period payment (crypto), renewed manually.',
     )
     payment_method = models.CharField(
         max_length=24, blank=True, default='',

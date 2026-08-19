@@ -101,7 +101,7 @@ export function Sidebar({ onClose }: { onClose: () => void }) {
         <NavItem 
           to="/app/shield" 
           icon={Shield02Icon} 
-          label="Shield" 
+          label="Anti-Bot" 
           active={location.pathname === '/app/shield'} 
           onClick={onClose}
         />

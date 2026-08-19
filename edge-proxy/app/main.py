@@ -10,6 +10,7 @@ import logging
 import redis.asyncio as aioredis
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import PlainTextResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from .config import settings
 from . import geo
@@ -24,6 +25,18 @@ logging.basicConfig(
 logger = logging.getLogger("edge")
 
 app = FastAPI(title="VeriClick Edge Proxy", docs_url=None, redoc_url=None)
+
+
+class StripServerHeadersMiddleware(BaseHTTPMiddleware):
+    """Remove Server and X-Powered-By headers from all responses."""
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers.pop("server", None)
+        response.headers.pop("x-powered-by", None)
+        return response
+
+
+app.add_middleware(StripServerHeadersMiddleware)
 
 # Shared state
 _redis: aioredis.Redis | None = None

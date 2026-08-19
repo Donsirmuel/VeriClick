@@ -112,7 +112,8 @@ function VerifyModal({ domain, onClose }: { domain: Domain; onClose: () => void 
                     </div>
                   </div>
                   <p className="text-xs text-muted">
-                    Paste this in your site's HTML &lt;head&gt; section, save, and deploy.
+                    Or use the combined snippet on the <strong>Install</strong> page — it includes both the
+                    verification meta tag and the anti-bot script in one paste.
                   </p>
                 </>
               ) : (
@@ -155,7 +156,15 @@ function VerifyModal({ domain, onClose }: { domain: Domain; onClose: () => void 
               {result && (
                 <div className={`p-3 rounded-xl text-sm ${result.verified ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
                   {result.verified ? (
-                    <span className="font-bold">Domain verified successfully!</span>
+                    <div className="space-y-2">
+                      <span className="font-bold">Domain verified successfully!</span>
+                      <a
+                        href="/app/install"
+                        className="block w-full text-center bg-black hover:bg-neutral-800 text-white py-2.5 rounded-xl text-sm font-bold transition-all"
+                      >
+                        Next: Install Script
+                      </a>
+                    </div>
                   ) : (
                     <span>{result.detail || result.error || 'Verification failed.'}</span>
                   )}
@@ -485,7 +494,7 @@ export default function Domains() {
           </li>
           <li className="flex items-start gap-2">
             <span className="text-xs mt-1.5">2.</span>
-            Generate an install token and paste the VeriClick script into your site.
+            Generate an install token and paste the VeriClick anti-bot script into your site.
           </li>
           <li className="flex items-start gap-2">
             <span className="text-xs mt-1.5">3.</span>
@@ -493,7 +502,7 @@ export default function Domains() {
           </li>
           <li className="flex items-start gap-2">
             <span className="text-xs mt-1.5">4.</span>
-            Each plan covers a set number of domains — Basic (5), Plus (10), Pro (20).
+            Each plan covers 1 domain with 7-day access. Renew manually when ready.
           </li>
         </ul>
       </div>

@@ -83,7 +83,7 @@ export default function Contact() {
           </div>
           <p className="text-sm text-neutral-400 leading-relaxed">
             In a hurry? Open the assistant in the bottom-right corner — it answers questions
-            about the script, shield, IP rules, pricing, and blocked traffic instantly.
+            about the script, anti-bot, IP rules, pricing, and blocked traffic instantly.
           </p>
         </div>
       </section>

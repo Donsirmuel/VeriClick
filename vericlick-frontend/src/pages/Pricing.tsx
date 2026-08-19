@@ -21,7 +21,7 @@ const COMMON_FEATURES = [
 const HIGHLIGHTS = [
   { icon: ShieldIcon, title: 'Protected pages', desc: 'Paste a single script tag into your site and every page is covered — no per-link setup required.' },
   { icon: LinkSquare02Icon, title: 'Bot detection', desc: 'Every request is checked against IP rules, bot signatures, and rate limits before it reaches your page.' },
-  { icon: Globe02Icon, title: 'Real-time bot detection', desc: 'Your site is monitored in real time for suspicious traffic patterns and malicious bots.' },
+  { icon: Globe02Icon, title: 'Real-time monitoring', desc: 'Your site is monitored in real time for suspicious traffic patterns and malicious bots.' },
   { icon: Chart03Icon, title: 'Live dashboard', desc: 'Traffic chart, activity feed, site health, and a blocked-IP review queue — all explained in plain language.' },
 ]
 
@@ -42,7 +42,7 @@ function PlanCard({ plan, popular }: { plan: Plan; popular?: boolean }) {
       </div>
       <div className="text-4xl font-bold mb-1">
         ${plan.monthlyPrice}
-        <span className="text-base text-neutral-500 font-normal">/month</span>
+        <span className="text-base text-neutral-500 font-normal">/week</span>
       </div>
       <div className="grid grid-cols-2 gap-2 mb-6">
         <div className="rounded-xl bg-neutral-800/50 border border-neutral-700/60 px-4 py-3">
@@ -172,7 +172,7 @@ export default function Pricing() {
             Simple plans.<br />Clear pricing.
           </h1>
           <p className="text-lg text-neutral-400 max-w-2xl mx-auto mb-4 leading-relaxed">
-            Pick the plan that fits your needs — protected pages are unlimited on every plan.
+            Pick the plan that fits your needs — 1-week access, pay once with crypto, renew manually.
           </p>
         </div>
       </section>
@@ -204,8 +204,8 @@ export default function Pricing() {
           )}
 
           <p className="text-center text-sm text-neutral-500 mt-8">
-            The only difference between plans is the number of domains — Basic 5, Plus 10, Pro 20.
-            Protected pages are unlimited on every paid plan, and every tier runs the full protection engine.
+            Every plan includes 1 domain, unlimited protected pages, and 1-week access.
+            Pay once with crypto, renew manually when you're ready.
           </p>
         </div>
       </section>

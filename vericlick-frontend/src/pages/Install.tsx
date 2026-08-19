@@ -34,8 +34,9 @@ const PLATFORMS: PlatformGuide[] = [
     detailedSteps: [
       "Open your HTML file",
       "Find the <head> section",
-      "Paste the snippet before the closing </head> tag",
+      "Paste the full snippet (meta tag + script) before the closing </head> tag",
       "Save and deploy your changes",
+      "Come back and click Test Installation to verify",
     ],
   },
   {
@@ -165,8 +166,10 @@ export default function InstallPage() {
     if (!activeToken) return '';
 
     const tokenAttr = `data-token="${activeToken}"`;
+    const verificationToken = activeToken.replace(/\…$/, '');
 
-    const base = `<!-- VeriClick Bot Protection -->
+    const base = `<!-- VeriClick — domain verification + anti-bot protection -->
+<meta name="vericlick-verification" content="${verificationToken}">
 <script
   src="${API_BASE}/shield.js"
   ${tokenAttr}
@@ -174,7 +177,8 @@ export default function InstallPage() {
 ></script>`;
 
     if (platform === "shopify") {
-      return `<!-- VeriClick Bot Protection -->
+      return `<!-- VeriClick — domain verification + anti-bot protection -->
+<meta name="vericlick-verification" content="${verificationToken}">
 <script src="${API_BASE}/shield.js" ${tokenAttr} defer></script>`;
     }
 
@@ -247,7 +251,7 @@ export default function InstallPage() {
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Install Script</h1>
         <p className="text-sm text-muted mt-1">
-          Add the VeriClick script to your website to enable bot protection.
+          Add the VeriClick anti-bot script to your website.
         </p>
       </div>
 

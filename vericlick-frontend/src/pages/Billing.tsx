@@ -2,37 +2,17 @@ import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { CheckmarkCircle02Icon, CreditCardIcon, Globe02Icon, Invoice01Icon, LinkSquare02Icon, RefreshIcon, ShieldIcon } from '@hugeicons/core-free-icons'
+import { CheckmarkCircle02Icon, CreditCardIcon, Globe02Icon, LinkSquare02Icon, RefreshIcon, ShieldIcon } from '@hugeicons/core-free-icons'
 import toast from 'react-hot-toast'
 import { fetchPricing } from '@/api/pricing'
 import { fetchWorkspace, fetchBillingHistory, startCheckout } from '@/api/workspace'
 import { parseApiError } from '@/lib/errors'
 import { formatDate, formatCurrency } from '@/lib/utils'
-import type { BillingMode, PaymentMethod, Plan } from '@/types'
-
-const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
-  card: 'Card',
-  crypto: 'Crypto',
-  bank_transfer: 'Bank transfer',
-  mobile_money: 'Mobile money',
-}
-
-// Subscriptions are billed by card only at Bachs; one-time "period" payments
-// accept every channel (card, crypto, bank transfer, mobile money).
-const SUBSCRIPTION_METHODS: PaymentMethod[] = ['card']
+import type { BillingMode, Plan } from '@/types'
 
 function ModeToggle({ value, onChange }: { value: BillingMode; onChange: (m: BillingMode) => void }) {
   return (
     <div className="inline-flex rounded-xl border border-neutral-200 bg-neutral-50 p-1">
-      <button
-        type="button"
-        onClick={() => onChange('subscription')}
-        className={`px-4 py-2 rounded-lg text-xs font-bold transition-colors ${
-          value === 'subscription' ? 'bg-white text-slate-900 shadow-sm' : 'text-muted hover:text-slate-700'
-        }`}
-      >
-        Monthly (card)
-      </button>
       <button
         type="button"
         onClick={() => onChange('period')}
@@ -40,7 +20,7 @@ function ModeToggle({ value, onChange }: { value: BillingMode; onChange: (m: Bil
           value === 'period' ? 'bg-white text-slate-900 shadow-sm' : 'text-muted hover:text-slate-700'
         }`}
       >
-        One-time 30 days
+        One-time 7 days
       </button>
     </div>
   )
@@ -49,8 +29,7 @@ function ModeToggle({ value, onChange }: { value: BillingMode; onChange: (m: Bil
 export default function Billing() {
   const queryClient = useQueryClient()
   const [justPaid, setJustPaid] = useState(false)
-  const [billingMode, setBillingMode] = useState<BillingMode>('subscription')
-  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>(SUBSCRIPTION_METHODS)
+  const [billingMode, setBillingMode] = useState<BillingMode>('period')
 
   const { data: pricing } = useQuery({ queryKey: ['pricing'], queryFn: fetchPricing })
   const { data: workspace } = useQuery({ queryKey: ['workspace'], queryFn: fetchWorkspace })
@@ -91,22 +70,10 @@ export default function Billing() {
 
   const handleModeChange = (mode: BillingMode) => {
     setBillingMode(mode)
-    setPaymentMethods(mode === 'subscription' ? SUBSCRIPTION_METHODS : [])
-  }
-
-  const toggleMethod = (method: PaymentMethod) => {
-    setPaymentMethods(prev =>
-      prev.includes(method) ? prev.filter(m => m !== method) : [...prev, method]
-    )
   }
 
   const beginCheckout = (planCode: string) => {
-    const methods = billingMode === 'subscription' ? SUBSCRIPTION_METHODS : paymentMethods
-    if (billingMode === 'period' && methods.length === 0) {
-      toast.error('Pick at least one payment method for a one-time payment.')
-      return
-    }
-    checkoutMutation.mutate({ planCode, billingMode, paymentMethods: methods })
+    checkoutMutation.mutate({ planCode, billingMode, paymentMethods: ['crypto'] })
   }
 
   return (
@@ -114,7 +81,7 @@ export default function Billing() {
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Billing &amp; Plan</h1>
         <p className="text-sm text-muted mt-1">
-          Your plan controls how many domains you can protect. Pay monthly by card, or buy a 30-day period with the payment method that suits you.
+          Your plan controls how many domains you can protect. Pay once with crypto for 7-day access, renew manually when ready.
         </p>
       </div>
 
@@ -126,7 +93,7 @@ export default function Billing() {
           <div>
             <h3 className="text-sm font-bold text-green-900 mb-1">Payment confirmed</h3>
             <p className="text-sm text-green-700 leading-relaxed">
-              Your new plan is active. Configure your shield settings.
+              Your new plan is active. Configure your anti-bot settings.
             </p>
           </div>
         </div>
@@ -139,7 +106,7 @@ export default function Billing() {
             <p className="text-sm text-amber-800 leading-relaxed">
               Your <strong>{sub.planName}</strong> period ended on {formatDate(sub.expiresAt)}. Everything
               keeps working during your 7-day grace period. Renew by {formatDate(sub.graceExpiresAt)} to keep
-              full analytics and protection — after that your site is still protected but no traffic is
+              full analytics and anti-bot protection — after that your site is still protected but no traffic is
               recorded or filtered until you renew.
             </p>
           </div>
@@ -153,7 +120,7 @@ export default function Billing() {
             <p className="text-sm text-red-800 leading-relaxed">
               Your site is still protected — your audience is
               unaffected — but VeriClick is no longer recording traffic or applying any filtering or
-              protection. Renew below to restore full analytics and protection. Your settings and data
+              anti-bot protection. Renew below to restore full analytics and protection. Your settings and data
               are all intact.
             </p>
           </div>
@@ -169,7 +136,7 @@ export default function Billing() {
           </div>
           {sub?.mode && (
             <div className="text-xs text-muted mt-1">
-              {sub.mode === 'subscription' ? 'Monthly subscription' : '30-day period'}
+              7-day access · One-time payment
             </div>
           )}
           {sub?.status === 'grace' && (
@@ -235,35 +202,6 @@ export default function Billing() {
           <ModeToggle value={billingMode} onChange={handleModeChange} />
         </div>
 
-        {billingMode === 'period' && (
-          <div className="mb-5 rounded-2xl border border-neutral-200 bg-white p-5">
-            <h3 className="text-sm font-bold text-slate-900 mb-1 flex items-center gap-2">
-              <HugeiconsIcon icon={Invoice01Icon} className="w-4 h-4 text-muted" />
-              Payment methods
-            </h3>
-            <p className="text-xs text-muted leading-relaxed mb-3">
-              One-time payments are accepted from any of these channels. Pick the ones you want to offer for this purchase.
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {(Object.keys(PAYMENT_METHOD_LABELS) as PaymentMethod[]).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => toggleMethod(m)}
-                  className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-colors ${
-                    paymentMethods.includes(m)
-                      ? 'bg-black text-white border-black'
-                      : 'bg-white text-slate-700 border-neutral-200 hover:border-neutral-300'
-                  }`}
-                >
-                  {paymentMethods.includes(m) && <HugeiconsIcon icon={CheckmarkCircle02Icon} className="w-3.5 h-3.5" />}
-                  {PAYMENT_METHOD_LABELS[m]}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {plans.map((plan: Plan) => {
             const isCurrentPlan = isCurrent(plan.code)
@@ -282,9 +220,7 @@ export default function Billing() {
                 <h3 className="text-lg font-bold text-slate-900 mb-2">{plan.name}</h3>
                 <div className="text-3xl font-bold text-slate-900 mb-1">
                   ${plan.monthlyPrice}
-                  <span className="text-sm text-muted font-normal">
-                    {billingMode === 'subscription' ? '/month' : '/30 days'}
-                  </span>
+                  <span className="text-sm text-muted font-normal">/week</span>
                 </div>
                 <div className="grid grid-cols-2 gap-2 mb-5">
                   <div className="rounded-xl bg-neutral-50 border border-neutral-200 px-3 py-2.5">
@@ -305,7 +241,7 @@ export default function Billing() {
                 <ul className="space-y-2.5 mb-6 text-sm text-slate-600 flex-1">
                   <li className="flex items-start gap-2">
                     <HugeiconsIcon icon={ShieldIcon} className="w-4 h-4 text-muted shrink-0 mt-0.5" />
-                    Full protection engine included
+                    Full anti-bot engine included
                   </li>
                   {plan.features.map((f) => (
                     <li key={f} className="flex items-start gap-2">
@@ -319,7 +255,7 @@ export default function Billing() {
                     to="/app/shield"
                     className="text-center bg-neutral-100 text-slate-900 px-4 py-3 rounded-xl text-sm font-bold transition-all"
                   >
-                    Configure shield
+                    Configure anti-bot
                   </Link>
                 ) : (
                   <button
@@ -378,7 +314,7 @@ export default function Billing() {
           </div>
         ) : (
           <div className="bg-white border border-neutral-200 rounded-2xl p-6 text-sm text-muted">
-            No payments yet. Choose a plan to start managing your site protection — protected pages are unlimited on every plan.
+            No payments yet. Choose a plan to start protecting your site — unlimited pages on every plan.
           </div>
         )}
       </div>

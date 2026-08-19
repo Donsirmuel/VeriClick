@@ -60,7 +60,7 @@ export default function BlockedIPsPage() {
           <h1 className="text-2xl font-bold text-slate-900">Blocked IPs</h1>
           <ReadMore className="max-w-2xl mt-1" lines={2}>
             Recently blocked traffic on your site. These requests were flagged as bots
-            and blocked by the shield. If any are actually humans, whitelist the IP to
+            and blocked by the anti-bot engine. If any are actually humans, whitelist the IP to
             let it through every time.
           </ReadMore>
         </div>

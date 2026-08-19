@@ -107,6 +107,21 @@ export default function DashboardPage() {
 
         <div className="space-y-3 mb-6">
           <a
+            href="/pricing"
+            className="w-full flex items-start gap-4 p-4 bg-white border border-neutral-200 rounded-2xl text-left hover:border-neutral-400 hover:shadow-sm transition-all"
+          >
+            <div className="w-10 h-10 rounded-xl bg-neutral-100 flex items-center justify-center shrink-0">
+              <HugeiconsIcon icon={ShieldIcon} className="w-5 h-5 text-muted" />
+            </div>
+            <div className="flex-1">
+              <span className="font-bold text-sm text-slate-900">1. Choose a plan</span>
+              <p className="text-xs text-muted mt-0.5 leading-relaxed">
+                Subscribe to get started — pay once with crypto, 7-day access.
+              </p>
+            </div>
+          </a>
+
+          <a
             href="/app/domains"
             className="w-full flex items-start gap-4 p-4 bg-white border border-neutral-200 rounded-2xl text-left hover:border-neutral-400 hover:shadow-sm transition-all"
           >
@@ -114,9 +129,9 @@ export default function DashboardPage() {
               <HugeiconsIcon icon={Globe02Icon} className="w-5 h-5 text-muted" />
             </div>
             <div className="flex-1">
-              <span className="font-bold text-sm text-slate-900">1. Add your domain</span>
+              <span className="font-bold text-sm text-slate-900">2. Add your domain</span>
               <p className="text-xs text-muted mt-0.5 leading-relaxed">
-                Register the domain you want to protect. No DNS changes needed.
+                Register the domain you want to protect and verify ownership.
               </p>
             </div>
           </a>
@@ -129,39 +144,9 @@ export default function DashboardPage() {
               <HugeiconsIcon icon={CodeIcon} className="w-5 h-5 text-muted" />
             </div>
             <div className="flex-1">
-              <span className="font-bold text-sm text-slate-900">2. Install the script</span>
+              <span className="font-bold text-sm text-slate-900">3. Install the script</span>
               <p className="text-xs text-muted mt-0.5 leading-relaxed">
-                Copy one line of code and paste it into your website's head tag.
-              </p>
-            </div>
-          </a>
-
-          <a
-            href="/app/shield"
-            className="w-full flex items-start gap-4 p-4 bg-white border border-neutral-200 rounded-2xl text-left hover:border-neutral-400 hover:shadow-sm transition-all"
-          >
-            <div className="w-10 h-10 rounded-xl bg-neutral-100 flex items-center justify-center shrink-0">
-              <HugeiconsIcon icon={Shield02Icon} className="w-5 h-5 text-muted" />
-            </div>
-            <div className="flex-1">
-              <span className="font-bold text-sm text-slate-900">3. Configure protection</span>
-              <p className="text-xs text-muted mt-0.5 leading-relaxed">
-                Choose how strict the protection should be and what happens to bots.
-              </p>
-            </div>
-          </a>
-
-          <a
-            href="/pricing"
-            className="w-full flex items-start gap-4 p-4 bg-white border border-neutral-200 rounded-2xl text-left hover:border-neutral-400 hover:shadow-sm transition-all"
-          >
-            <div className="w-10 h-10 rounded-xl bg-neutral-100 flex items-center justify-center shrink-0">
-              <HugeiconsIcon icon={ShieldIcon} className="w-5 h-5 text-muted" />
-            </div>
-            <div className="flex-1">
-              <span className="font-bold text-sm text-slate-900">4. Choose a plan</span>
-              <p className="text-xs text-muted mt-0.5 leading-relaxed">
-                Select a plan to activate protection on your site.
+                Copy the combined snippet (verification + anti-bot) and paste it into your site.
               </p>
             </div>
           </a>
@@ -194,7 +179,7 @@ export default function DashboardPage() {
           )}
           <div className="inline-flex items-center gap-2 text-sm text-neutral-500 bg-neutral-100 px-3 py-1.5 rounded-lg">
             <div className="w-2 h-2 rounded-full bg-success animate-pulse shrink-0" />
-            <span>Shield active</span>
+            <span>Anti-bot active</span>
           </div>
         </div>
       </div>

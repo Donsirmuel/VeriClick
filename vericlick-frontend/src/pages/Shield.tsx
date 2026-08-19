@@ -62,10 +62,10 @@ export default function ShieldPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['workspace-shield-config'] })
-      toast.success('Shield configuration saved')
+      toast.success('Anti-bot configuration saved')
     },
     onError: () => {
-      toast.error('Failed to save shield configuration')
+      toast.error('Failed to save anti-bot configuration')
     },
   })
 
@@ -95,7 +95,7 @@ export default function ShieldPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900">Shield Configuration</h1>
+        <h1 className="text-2xl font-bold text-slate-900">Anti-Bot Configuration</h1>
         <p className="text-sm text-muted mt-1 max-w-2xl">
           Configure how the VeriClick script protects your pages. These settings control bot detection,
           rate limiting, and path filtering for your site.
@@ -189,7 +189,7 @@ export default function ShieldPage() {
         <div className="bg-white rounded-2xl border border-border p-6 sm:p-8 shadow-sm">
           <h2 className="text-lg font-bold text-slate-900 mb-1">Blocked Paths</h2>
           <p className="text-sm text-muted leading-relaxed mb-4">
-            Comma-separated list of paths that should never be protected by shield.
+            Comma-separated list of paths that should never be protected by the anti-bot engine.
           </p>
           <input
             type="text"

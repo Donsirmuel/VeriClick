@@ -49,6 +49,7 @@ urlpatterns = [
     path('install-tokens/<uuid:token_id>/', views.install_token_revoke, name='install-token-revoke'),
     # Redirect Domains
     path('redirect-domains/', views.redirect_domain_list_create, name='redirect-domain-list-create'),
+    path('redirect-domains/<uuid:domain_id>/verify-cname/', views.redirect_domain_verify_cname, name='redirect-domain-verify-cname'),
     # Redirect Routes
     path('redirect-routes/', views.redirect_route_list_create, name='redirect-route-list-create'),
     path('redirect-routes/<uuid:route_id>/', views.redirect_route_detail, name='redirect-route-detail'),
