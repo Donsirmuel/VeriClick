@@ -5,7 +5,7 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from .models import (
     Workspace, IPRule, CountryRule,
     DevicePolicy, TrackerEvent, Plan, DiscountCode, SiteConfig, BillingEvent,
-    ShieldConfig,
+    ShieldConfig, DomainRegistry,
 )
 
 
@@ -66,6 +66,8 @@ class WorkspaceSerializer(serializers.ModelSerializer):
     grace_expires_at = serializers.DateTimeField(read_only=True)
     trial_expires_at = serializers.SerializerMethodField()
     trial_active = serializers.SerializerMethodField()
+    domains_used = serializers.SerializerMethodField()
+    domain_limit = serializers.SerializerMethodField()
 
     class Meta:
         model = Workspace
@@ -73,13 +75,13 @@ class WorkspaceSerializer(serializers.ModelSerializer):
             'id', 'name', 'tracker_secret', 'safe_destination',
             'created_at', 'plan', 'plan_name',
             'plan_billing_mode', 'plan_expires_at', 'plan_status', 'grace_expires_at',
-            'trial_expires_at', 'trial_active',
+            'trial_expires_at', 'trial_active', 'domains_used', 'domain_limit',
         ]
         read_only_fields = [
             'id', 'tracker_secret', 'created_at',
             'plan', 'plan_name', 'plan_billing_mode', 'plan_expires_at',
             'plan_status', 'grace_expires_at',
-            'trial_expires_at', 'trial_active',
+            'trial_expires_at', 'trial_active', 'domains_used', 'domain_limit',
         ]
 
     def get_plan(self, obj):
@@ -96,13 +98,20 @@ class WorkspaceSerializer(serializers.ModelSerializer):
     def get_trial_active(self, obj):
         return obj.trial_active
 
+    def get_domains_used(self, obj):
+        return obj.domains.filter(is_active=True).count()
+
+    def get_domain_limit(self, obj):
+        active = obj.active_plan
+        return active.domain_limit if active else 3
+
 
 class PlanSerializer(serializers.ModelSerializer):
     monthly_price = serializers.DecimalField(max_digits=8, decimal_places=2, coerce_to_string=False)
 
     class Meta:
         model = Plan
-        fields = ['code', 'name', 'monthly_price', 'features', 'sort_order']
+        fields = ['code', 'name', 'monthly_price', 'domain_limit', 'features', 'sort_order']
 
 
 class DiscountCodeSerializer(serializers.ModelSerializer):
@@ -248,6 +257,26 @@ class ShieldConfigSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('Rate limit must be at least 10 per hour.')
         if value > 10000:
             raise serializers.ValidationError('Rate limit cannot exceed 10,000 per hour.')
+        return value
+
+
+class DomainRegistrySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DomainRegistry
+        fields = ['id', 'domain', 'is_active', 'created_at']
+        read_only_fields = ['id', 'is_active', 'created_at']
+
+    def validate_domain(self, value):
+        import re
+        value = (value or '').strip().lower()
+        # Strip protocol and path if user pasted a full URL
+        value = re.sub(r'^https?://', '', value)
+        value = value.rstrip('/')
+        value = re.sub(r'/.*$', '', value)
+        if not value:
+            raise serializers.ValidationError('Enter a valid domain.')
+        if not re.match(r'^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*\.[a-z]{2,}$', value):
+            raise serializers.ValidationError('Enter a valid domain (e.g. example.com).')
         return value
 
 

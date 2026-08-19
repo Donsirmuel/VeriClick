@@ -9,7 +9,7 @@ from .models import (
     DevicePolicy, TrackerEvent, Plan, DiscountCode, SiteConfig, CheckoutIntent,
     BillingEvent, PLAN_PERIOD_DAYS,
     BlockedDestination, UserProfile,
-    ShieldConfig,
+    ShieldConfig, DomainRegistry,
 )
 
 
@@ -260,3 +260,12 @@ class ShieldConfigAdmin(admin.ModelAdmin):
     search_fields = ('workspace__name', 'workspace__owner__username')
     autocomplete_fields = ['workspace']
     readonly_fields = ('created_at', 'updated_at')
+
+
+@admin.register(DomainRegistry)
+class DomainRegistryAdmin(admin.ModelAdmin):
+    list_display = ('domain', 'workspace', 'is_active', 'created_at')
+    list_filter = ('is_active', 'created_at')
+    search_fields = ('domain', 'workspace__name', 'workspace__owner__username')
+    autocomplete_fields = ['workspace']
+    readonly_fields = ('created_at',)

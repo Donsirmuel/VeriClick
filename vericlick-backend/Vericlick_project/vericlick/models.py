@@ -407,6 +407,31 @@ class ShieldConfig(models.Model):
         return f'Shield config for {self.workspace_id}: {self.protection_mode}'
 
 
+class DomainRegistry(models.Model):
+    """Simplified domain tracking — no DNS verification. Users add domains and
+    click "authorize" to confirm ownership. The domain count is the pricing
+    differentiator across plans (Basic=5, Plus=10, Pro=20)."""
+    workspace = models.ForeignKey(
+        Workspace, on_delete=models.CASCADE, related_name='domains',
+    )
+    domain = models.CharField(
+        max_length=253,
+        help_text='Registered domain (e.g. example.com).',
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text='Soft-delete flag — removed domains keep their slot until period ends.',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        unique_together = [('workspace', 'domain')]
+
+    def __str__(self):
+        return f'{self.domain} ({self.workspace_id})'
+
+
 class SiteConfig(models.Model):
     # Admin-managed business toggles (a singleton: only the 'default' row is
     # ever used). These live in the database so an operator can flip them from

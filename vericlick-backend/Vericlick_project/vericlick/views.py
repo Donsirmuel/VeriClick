@@ -21,7 +21,7 @@ from decouple import config
 from .models import (
     Workspace, IPRule, CountryRule,
     DevicePolicy, TrackerEvent, Plan, DiscountCode, SiteConfig, CheckoutIntent,
-    ShieldConfig,
+    ShieldConfig, DomainRegistry,
 )
 from .serializers import (
     UserSerializer,
@@ -33,6 +33,7 @@ from .serializers import (
     TrackerEventSerializer,
     BlockedIPSerializer,
     PlanSerializer,
+    DomainRegistrySerializer,
 )
 from .version import get_version
 from .emails import (
@@ -84,6 +85,62 @@ def workspace_detail(request):
     serializer.is_valid(raise_exception=True)
     serializer.save()
     return Response(serializer.data)
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def domain_list_create(request):
+    workspace = get_user_workspace(request.user)
+    if not workspace:
+        return Response({'error': 'No workspace found'}, status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == 'GET':
+        domains = DomainRegistry.objects.filter(workspace=workspace).order_by('-created_at')
+        return Response(DomainRegistrySerializer(domains, many=True).data)
+
+    # POST — add a domain. Enforce the plan's domain_limit.
+    serializer = DomainRegistrySerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    domain_name = serializer.validated_data['domain']
+
+    # Check duplicate
+    if DomainRegistry.objects.filter(workspace=workspace, domain=domain_name, is_active=True).exists():
+        return Response(
+            {'errors': [{'field': 'domain', 'detail': 'This domain is already registered.'}]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Check limit
+    active_plan = workspace.active_plan
+    current_count = DomainRegistry.objects.filter(workspace=workspace, is_active=True).count()
+    limit = active_plan.domain_limit if active_plan else 3
+    if current_count >= limit:
+        plan_name = active_plan.name if active_plan else 'your current plan'
+        return Response(
+            {'errors': [{'field': 'domain', 'detail': f'You\'ve reached the {limit}-domain limit on {plan_name}. Upgrade to add more.'}]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    domain = DomainRegistry.objects.create(workspace=workspace, domain=domain_name)
+    return Response(DomainRegistrySerializer(domain).data, status=status.HTTP_201_CREATED)
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def domain_delete(request, domain_id):
+    workspace = get_user_workspace(request.user)
+    if not workspace:
+        return Response({'error': 'No workspace found'}, status=status.HTTP_404_NOT_FOUND)
+
+    try:
+        domain = DomainRegistry.objects.get(id=domain_id, workspace=workspace)
+    except DomainRegistry.DoesNotExist:
+        return Response(
+            {'errors': [{'field': 'domain', 'detail': 'Domain not found.'}]},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    domain.delete()
+    return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 @api_view(['GET'])
