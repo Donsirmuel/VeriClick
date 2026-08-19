@@ -37,6 +37,7 @@ urlpatterns = [
     # Workspace
     path('workspace/', views.workspace_detail, name='workspace-detail'),
     path('workspace/billing-history/', views.billing_history, name='billing-history'),
+    path('workspace/shield-config/', views.workspace_shield_config, name='workspace-shield-config'),
     # Domains
     path('domains/', views.domain_list_create, name='domain-list-create'),
     path('domains/<uuid:domain_id>/', views.domain_delete, name='domain-delete'),

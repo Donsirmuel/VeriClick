@@ -36,6 +36,7 @@ from .serializers import (
     DomainRegistrySerializer,
     InstallTokenSerializer,
     InstallTokenCreateSerializer,
+    ShieldConfigSerializer,
 )
 from .version import get_version
 from .emails import (
@@ -84,6 +85,27 @@ def workspace_detail(request):
         return Response(serializer.data)
 
     serializer = WorkspaceSerializer(workspace, data=request.data, partial=True)
+    serializer.is_valid(raise_exception=True)
+    serializer.save()
+    return Response(serializer.data)
+
+
+@api_view(['GET', 'PATCH'])
+@permission_classes([IsAuthenticated])
+def workspace_shield_config(request):
+    """Authenticated shield config for the dashboard. No trackerSecret needed."""
+    workspace = get_user_workspace(request.user)
+    if not workspace:
+        return Response({'error': 'No workspace found'}, status=status.HTTP_404_NOT_FOUND)
+
+    config = getattr(workspace, 'shield_config', None)
+    if not config:
+        config = ShieldConfig.objects.create(workspace=workspace)
+
+    if request.method == 'GET':
+        return Response(ShieldConfigSerializer(config).data)
+
+    serializer = ShieldConfigSerializer(config, data=request.data, partial=True)
     serializer.is_valid(raise_exception=True)
     serializer.save()
     return Response(serializer.data)

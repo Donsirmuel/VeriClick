@@ -9,7 +9,7 @@ import {
   Loading03Icon,
 } from "@hugeicons/core-free-icons";
 import toast from "react-hot-toast";
-import { fetchWorkspace, fetchDomains, fetchInstallTokens, createInstallToken, testInstallation } from "@/api/workspace";
+import { fetchDomains, fetchInstallTokens, createInstallToken, testInstallation } from "@/api/workspace";
 import { apiClient } from "@/api/client";
 import { DashboardSkeleton } from "@/components/ui/DashboardSkeleton";
 
@@ -114,11 +114,6 @@ export default function InstallPage() {
     error?: string;
   } | null>(null);
 
-  const { data: workspace, isLoading } = useQuery({
-    queryKey: ["workspace"],
-    queryFn: fetchWorkspace,
-  });
-
   const { data: domains, isLoading: domainsLoading } = useQuery({
     queryKey: ["domains"],
     queryFn: fetchDomains,
@@ -163,14 +158,13 @@ export default function InstallPage() {
   });
 
   const hasDomain = (domains?.length ?? 0) > 0;
-  const apiKey = workspace?.trackerSecret || "";
 
   const selectedDomain = domains?.find((d) => d.id === selectedDomainId);
 
   const getSnippet = (platform: Platform) => {
-    const tokenAttr = activeToken
-      ? `data-token="${activeToken}"`
-      : `data-api-key="${apiKey}"`;
+    if (!activeToken) return '';
+
+    const tokenAttr = `data-token="${activeToken}"`;
 
     const base = `<!-- VeriClick Bot Protection -->
 <script
@@ -219,7 +213,7 @@ export default function InstallPage() {
     },
   ];
 
-  if (isLoading || domainsLoading || tokensLoading) {
+  if (domainsLoading || tokensLoading) {
     return <DashboardSkeleton />;
   }
 
@@ -321,7 +315,7 @@ export default function InstallPage() {
       <div className="bg-white rounded-2xl border border-neutral-200 p-6 shadow-sm">
         <h2 className="text-sm font-bold text-slate-900 mb-3">Install Token</h2>
         <p className="text-xs text-muted mb-4">
-          Each site gets a scoped install token instead of your workspace secret.
+          Each site gets a scoped install token that authenticates the script.
           Tokens are shown once on creation — copy the snippet above before closing this page.
         </p>
         <div className="flex items-center gap-3">

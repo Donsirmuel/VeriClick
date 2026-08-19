@@ -1,7 +1,7 @@
 # VeriClick — VPS Deployment Runbook (InterServer)
 
 Step-by-step plan for taking a fresh clone on the VPS to a live, HTTPS-served,
-sign-in-enabled product at **getvericlick.site**.
+sign-in-enabled product at **vericlick.site**.
 
 Everything below runs on the VPS over SSH unless it says "on your local machine".
 
@@ -30,14 +30,14 @@ In your DNS provider's panel, create:
 
 | Type | Name              | Value          |
 |------|-------------------|----------------|
-| A    | `getvericlick.site`    | `<VPS IP>`     |
-| A    | `www.getvericlick.site`| `<VPS IP>`     |
+| A    | `vericlick.site`    | `<VPS IP>`     |
+| A    | `www.vericlick.site`| `<VPS IP>`     |
 
 Check propagation (repeat until both resolve):
 
 ```bash
-dig +short getvericlick.site
-dig +short www.getvericlick.site
+dig +short vericlick.site
+dig +short www.vericlick.site
 ```
 
 > Caddy (in the frontend container) refuses to issue a Let's Encrypt certificate
@@ -80,18 +80,18 @@ openssl rand -hex 32                                                            
 |-----------------------------|------------------------------------------------------------------------------|
 | `DATABASE_URL`              | `postgres://vericlick:YOUR_STRONG_PASSWORD@db:5432/vericlick` (single DB value) |
 | `SECRET_KEY`                | random Django key from above                                                 |
-| `ALLOWED_HOSTS`             | `getvericlick.site,www.getvericlick.site`                                              |
-| `CORS_ALLOWED_ORIGINS`      | `https://getvericlick.site,https://www.getvericlick.site`                              |
-| `CSRF_TRUSTED_ORIGINS`      | `https://getvericlick.site,https://www.getvericlick.site`                              |
-| `PUBLIC_TRACKING_BASE_URL`  | `https://getvericlick.site`                                                       |
+| `ALLOWED_HOSTS`             | `vericlick.site,www.vericlick.site`                                              |
+| `CORS_ALLOWED_ORIGINS`      | `https://vericlick.site,https://www.vericlick.site`                              |
+| `CSRF_TRUSTED_ORIGINS`      | `https://vericlick.site,https://www.vericlick.site`                              |
+| `PUBLIC_TRACKING_BASE_URL`  | `https://vericlick.site`                                                       |
 | `GOOGLE_CLIENT_ID`          | your OAuth client ID (same string as `VITE_GOOGLE_CLIENT_ID`); blank disables |
-| `VITE_API_BASE_URL`         | `https://getvericlick.site/api`                                                   |
-| `VITE_SITE_URL`             | `https://getvericlick.site`                                                       |
+| `VITE_API_BASE_URL`         | `https://vericlick.site/api`                                                   |
+| `VITE_SITE_URL`             | `https://vericlick.site`                                                       |
 | `VITE_GOOGLE_CLIENT_ID`     | same client ID as `GOOGLE_CLIENT_ID`                                         |
-| `SITE_ADDRESSES`            | `getvericlick.site www.getvericlick.site` (space-separated — Caddy syntax)            |
+| `SITE_ADDRESSES`            | `vericlick.site www.vericlick.site` (space-separated — Caddy syntax)            |
 | `RESEND_API_KEY`            | transactional-email API key from Resend; blank skips all emails            |
-| `RESEND_FROM_EMAIL`         | `VeriClick <noreply@getvericlick.site>` (must be a verified sender in Resend)    |
-| `SITE_URL`                  | `https://getvericlick.site` (base URL used in email links)                       |
+| `RESEND_FROM_EMAIL`         | `VeriClick <noreply@vericlick.site>` (must be a verified sender in Resend)    |
+| `SITE_URL`                  | `https://vericlick.site` (base URL used in email links)                       |
 
 > ⚠️ The two Google client-ID variables **must match**. The `VITE_GOOGLE_CLIENT_ID`
 > is baked into the frontend at **build time** — if you change it later you must
@@ -174,10 +174,10 @@ docker compose exec frontend ls /data/caddy/certificates
 Then, from your **local machine**:
 
 ```bash
-curl -I https://getvericlick.site                                  # HTTP/2 200
-curl -s https://getvericlick.site/api/health/                      # {"status":"ok",...}
-curl -sI https://getvericlick.site/admin/                          # 200 (Jazzmin login)
-curl -sI https://getvericlick.site/pricing                         # 200 (SPA, no 404)
+curl -I https://vericlick.site                                  # HTTP/2 200
+curl -s https://vericlick.site/api/health/                      # {"status":"ok",...}
+curl -sI https://vericlick.site/admin/                          # 200 (Jazzmin login)
+curl -sI https://vericlick.site/pricing                         # 200 (SPA, no 404)
 ```
 
 > If `curl -I https://...` fails but `docker compose ps` looks fine, it's almost
@@ -198,7 +198,7 @@ bash deploy/deploy.sh admin
 # Password: a STRONG one you haven't used for the dev server
 ```
 
-Log in at `https://getvericlick.site/admin/` and change the password if you set a
+Log in at `https://vericlick.site/admin/` and change the password if you set a
 temporary one. Do **not** reuse the old `VeriClickAdmin!2026`.
 
 ---
@@ -207,8 +207,8 @@ temporary one. Do **not** reuse the old `VeriClickAdmin!2026`.
 
 1. Go to Google Cloud Console → APIs & Services → Credentials → your OAuth Web client.
 2. Under **Authorized JavaScript origins**, add:
-   - `https://getvericlick.site`
-   - `https://www.getvericlick.site`
+   - `https://vericlick.site`
+   - `https://www.vericlick.site`
    - (keep your dev origin, e.g. `http://localhost:5173`, only if you still run local dev)
 3. Save.
 
@@ -222,7 +222,7 @@ first deploy, run `bash deploy.sh up` again to rebuild with the new value.
 
 ## Step 9 — Configure the product in the admin
 
-At `https://getvericlick.site/admin/vericlick/siteconfig/`:
+At `https://vericlick.site/admin/vericlick/siteconfig/`:
 
 - Set **beta mode / free tier** and **sign-ups open** to the launch configuration.
 - Confirm the neutral/suspicious destination and workspace defaults.
@@ -237,7 +237,7 @@ normally no restart is needed since `site-config` is read per request.
 1. Register a new account (or use your admin).
 2. Create a workspace and a short link.
 3. Copy the shareable link (`PUBLIC_TRACKING_BASE_URL` should appear — e.g.
-   `https://getvericlick.site/r/<slug>`).
+   `https://vericlick.site/r/<slug>`).
 4. Open it in an incognito tab → lands on the destination; visit `/suspicious/`
    → neutral redirect works.
 5. Check the dashboard shows the click.
@@ -256,7 +256,7 @@ or redeploying, thanks to Caddy on-demand TLS:
    ownership step protects let's-encrypt from abuse — a domain must be `verified`
    before we'll mint a cert for it).
 2. The customer points DNS at this server:
-   - **Subdomain (recommended)** → `CNAME go → getvericlick.site`
+   - **Subdomain (recommended)** → `CNAME go → vericlick.site`
    - **Apex domain** → `A @ → <VPS IP>`
 3. Caddy sees the new host and asks the backend
    (`/api/internal/tls-allowed/`) whether it's a registered+verified domain.
@@ -342,7 +342,7 @@ bash deploy/deploy.sh update     # git pull --ff-only + rebuild + restart
 | `deploy.sh up` aborts with "missing X in .env" | Fill that key in `.env` and rerun. |
 | `curl https://...` doesn't respond | DNS not propagated / port 80+443 blocked / firewall. Check Step 2 & 4. |
 | Caddy logs show ACME/order/authorization errors | DNS must resolve to this exact IP; retry in a few minutes. |
-| Sign-in popup: `403 origin not allowed` | Add `https://getvericlick.site` to Google's Authorized JS origins (Step 8). |
+| Sign-in popup: `403 origin not allowed` | Add `https://vericlick.site` to Google's Authorized JS origins (Step 8). |
 | Frontend behaves wrong after editing VITE_* | Rebuild: `bash deploy.sh up` (values are baked at build time). |
 | App up but broken / 500s | `docker compose logs backend --tail=100` and `... frontend ...`. |
 | Want a fully clean slate | `docker compose down -v` (deletes **all** data incl. Postgres + certs) then `bash deploy.sh up`. |
@@ -352,11 +352,11 @@ bash deploy/deploy.sh update     # git pull --ff-only + rebuild + restart
 
 ## Checklist (tick through)
 
-- [ ] DNS A records for `getvericlick.site` + `www` → VPS IP
+- [ ] DNS A records for `vericlick.site` + `www` → VPS IP
 - [ ] `.env` created with real secrets and prod origins
 - [ ] Ports 80/443 open (panel + firewall)
 - [ ] `bash deploy.sh up` completes, health check OK
-- [ ] `https://getvericlick.site` serves the SPA with a valid cert
+- [ ] `https://vericlick.site` serves the SPA with a valid cert
 - [ ] `/admin/` logs in with a new superuser
 - [ ] Google JS origin added; sign-in works end to end
 - [ ] SiteConfig toggles set for launch

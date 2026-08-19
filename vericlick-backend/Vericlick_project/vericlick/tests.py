@@ -2922,3 +2922,44 @@ class EdgeEventsBatchClickIncrementTests(APITestCase):
         }, format='json', **self.headers)
         self.route.refresh_from_db()
         self.assertEqual(self.route.clicks_count, 2)
+
+
+class WorkspaceShieldConfigTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='wsc_user', password='pass')
+        self.client.force_authenticate(user=self.user)
+        self.workspace = Workspace.objects.get(owner=self.user)
+
+    def test_get_creates_default_config(self):
+        res = self.client.get('/api/workspace/shield-config/')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.json()['protectionMode'], 'balanced')
+
+    def test_get_returns_existing_config(self):
+        ShieldConfig.objects.create(
+            workspace=self.workspace, protection_mode='strict', bot_action='block',
+        )
+        res = self.client.get('/api/workspace/shield-config/')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.json()['protectionMode'], 'strict')
+
+    def test_patch_updates_config(self):
+        res = self.client.patch('/api/workspace/shield-config/', {
+            'protection_mode': 'monitor',
+            'bot_action': 'honeypot',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.json()['protectionMode'], 'monitor')
+        self.assertEqual(res.json()['botAction'], 'honeypot')
+
+    def test_requires_authentication(self):
+        self.client.force_authenticate(user=None)
+        res = self.client.get('/api/workspace/shield-config/')
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_no_tracker_secret_leak(self):
+        """The response must not contain tracker_secret."""
+        res = self.client.get('/api/workspace/shield-config/')
+        body = res.json()
+        self.assertNotIn('tracker_secret', body)
+        self.assertNotIn('trackerSecret', body)

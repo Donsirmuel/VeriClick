@@ -3,7 +3,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { ShieldIcon, Shield02Icon, Settings01Icon } from '@hugeicons/core-free-icons'
 import toast from 'react-hot-toast'
-import { fetchWorkspace } from '@/api/workspace'
 import { apiClient } from '@/api/client'
 
 type ProtectionMode = 'strict' | 'balanced' | 'monitor'
@@ -32,20 +31,12 @@ const BOT_ACTIONS: { value: BotAction; label: string; description: string }[] = 
 export default function ShieldPage() {
   const queryClient = useQueryClient()
 
-  const { data: workspace } = useQuery({
-    queryKey: ['workspace'],
-    queryFn: fetchWorkspace,
-  })
-
   const { data: config } = useQuery({
-    queryKey: ['shield-config', workspace?.trackerSecret],
+    queryKey: ['workspace-shield-config'],
     queryFn: async () => {
-      const { data } = await apiClient.get<ShieldConfig>('/shield/config/', {
-        params: { api_key: workspace!.trackerSecret },
-      })
+      const { data } = await apiClient.get<ShieldConfig>('/workspace/shield-config/')
       return data
     },
-    enabled: !!workspace,
   })
 
   const [protectionMode, setProtectionMode] = useState<ProtectionMode>('balanced')
@@ -66,13 +57,11 @@ export default function ShieldPage() {
 
   const saveMutation = useMutation({
     mutationFn: async (payload: ShieldConfig) => {
-      const { data } = await apiClient.patch<ShieldConfig>('/shield/config/', payload, {
-        params: { api_key: workspace!.trackerSecret },
-      })
+      const { data } = await apiClient.patch<ShieldConfig>('/workspace/shield-config/', payload)
       return data
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['shield-config'] })
+      queryClient.invalidateQueries({ queryKey: ['workspace-shield-config'] })
       toast.success('Shield configuration saved')
     },
     onError: () => {
@@ -84,7 +73,6 @@ export default function ShieldPage() {
     input.split(',').map(p => p.trim()).filter(Boolean)
 
   const handleSave = () => {
-    if (!workspace) return
     saveMutation.mutate({
       protectionMode,
       botAction,
@@ -102,7 +90,7 @@ export default function ShieldPage() {
       blockedPathsInput !== config.blockedPaths.join(', ')
     : false
 
-  if (!workspace) return null
+  if (!config) return null
 
   return (
     <div>

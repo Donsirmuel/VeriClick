@@ -96,11 +96,11 @@ docker compose down -v             # stop AND delete the database (destructive)
    Required on the VPS:
    - `DEBUG=False`
    - `SECRET_KEY` — strong value, e.g. `python -c "import secrets; print(secrets.token_urlsafe(50))"`
-   - `ALLOWED_HOSTS` — your real domains, e.g. `getvericlick.site,www.getvericlick.site`
-   - `CORS_ALLOWED_ORIGINS` — the SPA origin(s), e.g. `https://getvericlick.site`
-   - `CSRF_TRUSTED_ORIGINS` — same origins (needed for browser POSTs)
-   - `DATABASE_URL` — single PostgreSQL URL, e.g. `postgres://vericlick:pass@db:5432/vericlick`; Postgres runs in Docker and seeds itself from this URL (see `deploy/db-entrypoint.sh`)
-   - `PUBLIC_TRACKING_BASE_URL=https://getvericlick.site`
+    - `ALLOWED_HOSTS` — your real domains, e.g. `vericlick.site,www.vericlick.site`
+    - `CORS_ALLOWED_ORIGINS` — the SPA origin(s), e.g. `https://vericlick.site`
+    - `CSRF_TRUSTED_ORIGINS` — same origins (needed for browser POSTs)
+    - `DATABASE_URL` — single PostgreSQL URL, e.g. `postgres://vericlick:pass@db:5432/vericlick`; Postgres runs in Docker and seeds itself from this URL (see `deploy/db-entrypoint.sh`)
+    - `PUBLIC_TRACKING_BASE_URL=https://vericlick.site`
    - `TRUST_X_FORWARDED_PROTO=True` only when behind a trusted proxy
    - `GOOGLE_CLIENT_ID` — see "Google sign-in setup" below
    - `GEOIP2_DB` — path to a GeoLite2-City.mmdb for real location data
@@ -147,7 +147,7 @@ allow the origin the SPA runs on:
 
 1. Google Cloud Console → **APIs & Services → Credentials → Create credentials → OAuth client ID → Web app**.
 2. **Authorized JavaScript origins** — add the exact origin(s) the SPA runs on:
-   add `https://getvericlick.site` and `https://www.getvericlick.site`.
+   add `https://vericlick.site` and `https://www.vericlick.site`.
    Do **not** add paths — origins only, and the value must match the browser
    URL exactly (scheme + host + port).
 3. Copy the client ID into **both** env files:
@@ -182,8 +182,8 @@ deployment, keep it in code.
 ## 2. Frontend
 
 1. Configure `vericlick-frontend/.env` (see `.env.example`):
-   - `VITE_API_BASE_URL=https://getvericlick.site/api` — the backend URL on the VPS
-   - `VITE_SITE_URL=https://getvericlick.site` — drives the generated `robots.txt`
+   - `VITE_API_BASE_URL=https://vericlick.site/api` — the backend URL on the VPS
+   - `VITE_SITE_URL=https://vericlick.site` — drives the generated `robots.txt`
      and `sitemap.xml` (must match the deployed domain)
    - `VITE_GOOGLE_CLIENT_ID` — the Google OAuth web client ID (see the Google
      sign-in setup section above)
@@ -198,7 +198,7 @@ deployment, keep it in code.
    `sitemap.xml` to Django before the SPA fallback catches the rest.
 
 ### Nginx routing on InterServer
-Use the sample `deploy/nginx/vericlick-getvericlick.site.conf.example` as the
+Use the sample `deploy/nginx/vericlick-vericlick.site.conf.example` as the
 starting point. The critical rule is that `/r/*` must proxy to Django. If the
 frontend handles that path first, tracked links will 404 even though the app
 generated them correctly.

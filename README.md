@@ -6,7 +6,7 @@ Script-first bot protection & smart redirect platform. Customers paste a single 
 
 1. **Install protection** — paste one `<script>` tag into your site's `<head>`. The script runs five detection layers (canvas fingerprint, mouse trajectory, TLS/JA4, proof-of-work, behavioral scoring) and sends signals to the API for a verdict.
 2. **Real visitors pass through** — humans get a clean `allow` verdict and normal page load. Bots, scrapers, and ad fraud are blocked, trapped in a honeypot, or logged — configurable per workspace.
-3. **Smart redirects (optional)** — CNAME your redirect domain to `edge.vericlick.cc` and the edge proxy (Python FastAPI on FlokiNET) handles traffic routing with the same bot detection, geo-rules, and IP blocking.
+3. **Smart redirects (optional)** — CNAME your redirect domain to `edge.vericlick.cc` (external edge proxy on FlokiNET) and it handles traffic routing with the same bot detection, geo-rules, and IP blocking. The control-plane APIs in this repo (`/api/edge/*`) manage route sync, domain validation, and event batching.
 
 ## Repository layout
 
@@ -15,6 +15,11 @@ vericlick-backend/    Django 6 + DRF REST API (JWT auth, shield engine, analytic
 vericlick-frontend/   React 19 + Vite + TypeScript SPA (dashboard, landing, CRUD)
 deploy/               deploy.sh, nginx configs, systemd units, cron examples
 ```
+
+The edge proxy (`edge.vericlick.cc`) is a separate FastAPI + Redis service
+deployed on FlokiNET. It is not in this repo — this repo contains the
+control-plane APIs (`/api/edge/*`) that the edge proxy calls to sync routes,
+validate domains, and batch events.
 
 See `HANDOFF.md` for a deep technical handoff and `DEPLOYMENT.md` for the launch checklist.
 
