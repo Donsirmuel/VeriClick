@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { Activity01Icon, Shield02Icon, ShieldIcon, CheckmarkCircle02Icon, CodeIcon } from '@hugeicons/core-free-icons'
+import { Activity01Icon, Shield02Icon, ShieldIcon, CheckmarkCircle02Icon, CodeIcon, Globe02Icon } from '@hugeicons/core-free-icons'
 import toast from 'react-hot-toast'
 import { StatCard } from '@/components/dashboard/StatCard'
 import { TrafficChart } from '@/components/dashboard/TrafficChart'
@@ -92,11 +92,26 @@ export default function DashboardPage() {
           </div>
           <h1 className="text-2xl font-bold text-slate-900 mb-2">Get started with VeriClick</h1>
           <p className="text-sm text-muted max-w-md mx-auto leading-relaxed">
-            Install the shield script on your website to start protecting it from bots.
+            Register your domain, install the script, and start protecting your site from bots.
           </p>
         </div>
 
         <div className="space-y-3 mb-6">
+          <a
+            href="/app/domains"
+            className="w-full flex items-start gap-4 p-4 bg-white border border-neutral-200 rounded-2xl text-left hover:border-neutral-400 hover:shadow-sm transition-all"
+          >
+            <div className="w-10 h-10 rounded-xl bg-neutral-100 flex items-center justify-center shrink-0">
+              <HugeiconsIcon icon={Globe02Icon} className="w-5 h-5 text-muted" />
+            </div>
+            <div className="flex-1">
+              <span className="font-bold text-sm text-slate-900">1. Add your domain</span>
+              <p className="text-xs text-muted mt-0.5 leading-relaxed">
+                Register the domain you want to protect. No DNS changes needed.
+              </p>
+            </div>
+          </a>
+
           <a
             href="/app/install"
             className="w-full flex items-start gap-4 p-4 bg-white border border-neutral-200 rounded-2xl text-left hover:border-neutral-400 hover:shadow-sm transition-all"
@@ -105,7 +120,7 @@ export default function DashboardPage() {
               <HugeiconsIcon icon={CodeIcon} className="w-5 h-5 text-muted" />
             </div>
             <div className="flex-1">
-              <span className="font-bold text-sm text-slate-900">1. Install the shield script</span>
+              <span className="font-bold text-sm text-slate-900">2. Install the script</span>
               <p className="text-xs text-muted mt-0.5 leading-relaxed">
                 Copy one line of code and paste it into your website's head tag.
               </p>
@@ -120,7 +135,7 @@ export default function DashboardPage() {
               <HugeiconsIcon icon={Shield02Icon} className="w-5 h-5 text-muted" />
             </div>
             <div className="flex-1">
-              <span className="font-bold text-sm text-slate-900">2. Configure protection</span>
+              <span className="font-bold text-sm text-slate-900">3. Configure protection</span>
               <p className="text-xs text-muted mt-0.5 leading-relaxed">
                 Choose how strict the protection should be and what happens to bots.
               </p>
@@ -135,7 +150,7 @@ export default function DashboardPage() {
               <HugeiconsIcon icon={ShieldIcon} className="w-5 h-5 text-muted" />
             </div>
             <div className="flex-1">
-              <span className="font-bold text-sm text-slate-900">3. Choose a plan</span>
+              <span className="font-bold text-sm text-slate-900">4. Choose a plan</span>
               <p className="text-xs text-muted mt-0.5 leading-relaxed">
                 Select a plan to activate protection on your site.
               </p>

@@ -32,14 +32,19 @@ const STEPS: TourStep[] = [
     icon: DashboardSquare02Icon,
   },
   {
+    title: 'Add Your Domain',
+    body: 'Register the domain you want to protect. Your plan covers a set number of domains — add it here first.',
+    icon: Globe02Icon,
+  },
+  {
     title: 'Install the Script',
     body: 'Paste a single script tag on your site. VeriClick starts protecting your website immediately.',
-    icon: Globe02Icon,
+    icon: LinkSquare02Icon,
   },
   {
     title: 'Configure Your Shield',
     body: 'Set your protection mode — strict, balanced, or monitor. Your rules, your site.',
-    icon: LinkSquare02Icon,
+    icon: ShieldIcon,
   },
   {
     title: 'Traffic Rules',
