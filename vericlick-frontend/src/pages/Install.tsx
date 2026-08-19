@@ -9,7 +9,7 @@ import {
   Loading03Icon,
 } from "@hugeicons/core-free-icons";
 import toast from "react-hot-toast";
-import { fetchWorkspace, fetchDomains, testInstallation, getVerifyChallenge } from "@/api/workspace";
+import { fetchWorkspace, fetchDomains, testInstallation } from "@/api/workspace";
 import { apiClient } from "@/api/client";
 import { DashboardSkeleton } from "@/components/ui/DashboardSkeleton";
 
@@ -123,12 +123,6 @@ export default function InstallPage() {
     queryFn: fetchDomains,
   });
 
-  const { data: verificationChallenge } = useQuery({
-    queryKey: ["verify-challenge", selectedDomainId, "html_meta"],
-    queryFn: () => getVerifyChallenge(selectedDomainId, "html_meta"),
-    enabled: !!selectedDomainId,
-  });
-
   const testMutation = useMutation({
     mutationFn: testInstallation,
     onSuccess: (data) => {
@@ -147,22 +141,20 @@ export default function InstallPage() {
 
   const hasDomain = (domains?.length ?? 0) > 0;
   const apiKey = workspace?.trackerSecret || "";
-  const installToken = verificationChallenge?.token || "";
 
   const selectedDomain = domains?.find((d) => d.id === selectedDomainId);
 
   const getSnippet = (platform: Platform) => {
-    const tokenAttr = installToken ? ` data-install-token="${installToken}"` : "";
     const base = `<!-- VeriClick Bot Protection -->
 <script
   src="${API_BASE}/shield.js"
-  data-api-key="${apiKey}"${tokenAttr}
+  data-api-key="${apiKey}"
   defer
 ></script>`;
 
     if (platform === "shopify") {
       return `<!-- VeriClick Bot Protection -->
-<script src="${API_BASE}/shield.js" data-api-key="${apiKey}"${tokenAttr} defer></script>`;
+<script src="${API_BASE}/shield.js" data-api-key="${apiKey}" defer></script>`;
     }
 
     return base;

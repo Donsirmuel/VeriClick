@@ -1,4 +1,5 @@
 import uuid
+import secrets
 from datetime import timedelta
 from django.db import models
 from django.contrib.auth.models import User
@@ -551,7 +552,9 @@ class RedirectRoute(models.Model):
 
     class BotAction(models.TextChoices):
         HONEYPOT = 'honeypot', 'Honeypot (trap bots)'
-        BLOCK = 'block', 'Block (403)'
+        BLOCK = 'block', 'Block (404)'
+        NEUTRAL = 'neutral', 'Neutral (empty page)'
+        REDIRECT = 'redirect', 'Redirect to fallback'
 
     class AbuseStatus(models.TextChoices):
         NONE = 'none', 'No abuse'
@@ -562,8 +565,8 @@ class RedirectRoute(models.Model):
     workspace = models.ForeignKey(
         Workspace, on_delete=models.CASCADE, related_name='redirect_routes',
     )
-    domain = models.ForeignKey(
-        DomainRegistry, on_delete=models.CASCADE, related_name='redirect_routes',
+    domain = models.OneToOneField(
+        DomainRegistry, on_delete=models.CASCADE, related_name='redirect_route',
     )
     slug = models.SlugField(
         max_length=100, blank=True, default='',
@@ -596,7 +599,6 @@ class RedirectRoute(models.Model):
     class Meta:
         db_table = 'redirect_routes'
         ordering = ['-created_at']
-        # One active route per (domain, slug)
         constraints = [
             models.UniqueConstraint(
                 fields=['domain', 'slug'],
@@ -621,9 +623,13 @@ class EdgeSyncCredential(models.Model):
         max_length=100, default='default',
         help_text='Human label for this edge node (e.g. "FlokiNET DE").',
     )
-    api_secret = models.CharField(
-        max_length=128,
-        help_text='Shared secret. Shown once on creation.',
+    key_hash = models.CharField(
+        max_length=64, unique=True, default='',
+        help_text='SHA-256 of the raw key. Never stored in plaintext.',
+    )
+    key_prefix = models.CharField(
+        max_length=12, default='',
+        help_text='First 12 chars for display (ek_a1b2c3d4...).',
     )
     is_active = models.BooleanField(default=True)
     last_sync_at = models.DateTimeField(null=True, blank=True)
@@ -637,8 +643,66 @@ class EdgeSyncCredential(models.Model):
         return f'{self.label} ({self.workspace_id})'
 
     @staticmethod
-    def generate_secret():
-        return secrets.token_urlsafe(48)
+    def create_for_workspace(workspace, label='default'):
+        """Generate a new edge credential. Returns (raw_key, instance).
+        Raw key is shown once and never stored."""
+        import hashlib
+        raw_key = 'ek_' + secrets.token_urlsafe(36)
+        key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
+        key_prefix = raw_key[:12]
+        instance = EdgeSyncCredential.objects.create(
+            workspace=workspace,
+            label=label,
+            key_hash=key_hash,
+            key_prefix=key_prefix,
+        )
+        return raw_key, instance
+
+    @staticmethod
+    def verify_key(raw_key):
+        """Look up an active credential by raw key. Returns (workspace, instance) or (None, None)."""
+        import hashlib
+        try:
+            key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
+            cred = EdgeSyncCredential.objects.select_related('workspace').get(
+                key_hash=key_hash, is_active=True,
+            )
+            cred.last_sync_at = now()
+            cred.save(update_fields=['last_sync_at'])
+            return cred.workspace, cred
+        except EdgeSyncCredential.DoesNotExist:
+            return None, None
+
+
+class RedirectEvent(models.Model):
+    """Click/visit event logged by the edge proxy and batch-pushed to the
+    control plane. Stores redirect analytics data."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace = models.ForeignKey(
+        Workspace, on_delete=models.CASCADE, related_name='redirect_events',
+    )
+    redirect_route = models.ForeignKey(
+        RedirectRoute, on_delete=models.CASCADE, related_name='events',
+    )
+    domain = models.CharField(max_length=253, db_index=True)
+    slug = models.CharField(max_length=100, blank=True, default='')
+    ip = models.GenericIPAddressField()
+    user_agent = models.TextField(blank=True, default='')
+    destination = models.URLField(max_length=2048)
+    verdict = models.CharField(max_length=20)
+    is_bot = models.BooleanField(default=False)
+    country_code = models.CharField(max_length=2, blank=True, default='')
+    country = models.CharField(max_length=64, blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'redirect_events'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['workspace', 'created_at']),
+            models.Index(fields=['domain', 'created_at']),
+        ]
 
 
 class SiteConfig(models.Model):

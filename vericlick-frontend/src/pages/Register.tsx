@@ -58,7 +58,7 @@ export default function Register() {
               Protect your traffic<br />in under 2 minutes.
             </h2>
             <p className="text-neutral-400 text-lg leading-relaxed max-w-md">
-              Add a domain, prove you own it, create your first link — you'll be set up in minutes.
+              Add a domain, prove you own it, install protection — you'll be set up in minutes.
             </p>
           </div>
 

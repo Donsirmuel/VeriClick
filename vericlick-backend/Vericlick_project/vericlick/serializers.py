@@ -5,7 +5,7 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from .models import (
     Workspace, IPRule, CountryRule,
     DevicePolicy, TrackerEvent, Plan, DiscountCode, SiteConfig, BillingEvent,
-    ShieldConfig, DomainRegistry, InstallToken,
+    ShieldConfig, DomainRegistry, InstallToken, RedirectRoute, EdgeSyncCredential,
 )
 
 

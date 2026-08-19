@@ -951,6 +951,8 @@ def serve_tracker_script(request):
 @permission_classes([AllowAny])
 @throttle_classes([TrackerEventThrottle])
 def receive_tracker_event(request):
+    """DEPRECATED: Legacy tracker.js endpoint. Use shield_verify + shield_telemetry instead.
+    Kept for backward compatibility with existing tracker.js installs."""
     site_id = request.data.get('site_id')
     if not site_id:
         return Response(
@@ -1955,46 +1957,61 @@ class CountryRuleViewSet(viewsets.ModelViewSet):
 # Edge Sync — edge proxy polls this for routes + site configs
 # ---------------------------------------------------------------------------
 
-@api_view(['POST'])
+@api_view(['GET'])
 @permission_classes([AllowAny])
 def edge_routes_sync(request):
-    """Edge proxy sends its api_secret; backend returns all active routes
-    for the workspace's redirect domains. The edge polls this every 60s."""
-    from .models import EdgeSyncCredential, RedirectRoute
+    """Edge proxy polls this for routes + site configs. Authenticated via
+    X-Edge-Api-Key header."""
+    from .models import EdgeSyncCredential, RedirectRoute, IPRule, CountryRule
 
-    api_secret = request.data.get('api_secret', '')
-    if not api_secret:
-        return Response({'error': 'api_secret required'}, status=status.HTTP_401_UNAUTHORIZED)
+    api_key = request.headers.get('X-Edge-Api-Key', '')
+    if not api_key:
+        return Response({'error': 'X-Edge-Api-Key header required'}, status=status.HTTP_401_UNAUTHORIZED)
 
-    cred = EdgeSyncCredential.objects.filter(
-        api_secret=api_secret, is_active=True,
-    ).select_related('workspace').first()
-    if not cred:
-        return Response({'error': 'Invalid api_secret'}, status=status.HTTP_401_UNAUTHORIZED)
+    workspace, cred = EdgeSyncCredential.verify_key(api_key)
+    if not workspace:
+        return Response({'error': 'Invalid API key'}, status=status.HTTP_401_UNAUTHORIZED)
 
-    cred.last_sync_at = timezone.now()
-    cred.save(update_fields=['last_sync_at'])
+    # Optional domain filter
+    domain_filter = request.query_params.get('domain', '')
 
-    workspace = cred.workspace
-    routes = RedirectRoute.objects.filter(
+    routes_qs = RedirectRoute.objects.filter(
         workspace=workspace,
         is_active=True,
         domain__purpose='redirect',
         domain__is_active=True,
     ).select_related('domain')
 
+    if domain_filter:
+        routes_qs = routes_qs.filter(domain__domain=domain_filter)
+
     route_data = []
-    for r in routes:
+    for r in routes_qs:
         route_data.append({
             'domain': r.domain.domain,
             'slug': r.slug,
             'destination_url': r.destination_url,
+            'is_active': r.is_active,
             'bot_action': r.bot_action,
             'fallback_url': r.fallback_url,
             'expires_at': r.expires_at.isoformat() if r.expires_at else None,
         })
 
-    # Also return site configs for the workspace
+    # Blocked IPs
+    blocked_ips = list(
+        IPRule.objects.filter(
+            workspace=workspace, action='deny', is_active=True,
+        ).values_list('ip_or_cidr', flat=True)
+    )
+
+    # Country rules
+    country_rules = list(
+        CountryRule.objects.filter(
+            workspace=workspace, is_active=True,
+        ).values('country_code', 'action')
+    )
+
+    # Site configs
     from .models import ShieldConfig
     site_configs = ShieldConfig.objects.filter(workspace=workspace)
     config_data = []
@@ -2009,10 +2026,181 @@ def edge_routes_sync(request):
         })
 
     return Response({
+        'sync_token': int(timezone.now().timestamp()),
         'routes': route_data,
+        'blocked_ips': blocked_ips,
+        'country_rules': country_rules,
         'site_configs': config_data,
-        'synced_at': timezone.now().isoformat(),
     })
+
+
+# ---------------------------------------------------------------------------
+# Edge Validate Domain — Caddy on-demand TLS check
+# ---------------------------------------------------------------------------
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def edge_validate_domain(request):
+    """Caddy calls this before issuing a TLS certificate for a domain.
+    Returns 200 if the domain is known (has an active redirect route),
+    404 otherwise (Caddy won't issue a cert)."""
+    from .models import RedirectRoute
+
+    domain = request.query_params.get('domain', '')
+    if not domain:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    # vericlick.cc itself is always valid
+    if domain == 'vericlick.cc':
+        return Response(status=status.HTTP_200_OK)
+
+    # Check if any active redirect route exists for this domain
+    exists = RedirectRoute.objects.filter(
+        is_active=True,
+        domain__domain=domain,
+        domain__purpose='redirect',
+        domain__is_active=True,
+    ).exists()
+
+    return Response(status=status.HTTP_200_OK if exists else status.HTTP_404_NOT_FOUND)
+
+
+# ---------------------------------------------------------------------------
+# Edge Events — batch push from edge proxy
+# ---------------------------------------------------------------------------
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def edge_events_batch(request):
+    """Edge proxy batch-pushes click events every 60 seconds."""
+    from .models import EdgeSyncCredential, RedirectRoute, RedirectEvent
+
+    api_key = request.headers.get('X-Edge-Api-Key', '')
+    if not api_key:
+        return Response({'error': 'X-Edge-Api-Key header required'}, status=status.HTTP_401_UNAUTHORIZED)
+
+    workspace, _ = EdgeSyncCredential.verify_key(api_key)
+    if not workspace:
+        return Response({'error': 'Invalid API key'}, status=status.HTTP_401_UNAUTHORIZED)
+
+    events_data = request.data.get('events', [])
+    if not isinstance(events_data, list):
+        return Response({'error': 'events must be a list'}, status=status.HTTP_400_BAD_REQUEST)
+
+    created = 0
+    for ev in events_data[:500]:  # cap at 500 per batch
+        domain = ev.get('domain', '')
+        slug = ev.get('slug', '')
+        ip = ev.get('ip', '')
+        user_agent = ev.get('user_agent', '')
+        destination = ev.get('destination', '')
+        verdict = ev.get('verdict', 'allowed')
+        is_bot = ev.get('is_bot', False)
+        country_code = ev.get('country_code', '')
+        country = ev.get('country', '')
+
+        if not domain or not ip:
+            continue
+
+        # Find the route
+        route = RedirectRoute.objects.filter(
+            domain__domain=domain,
+            workspace=workspace,
+        ).first()
+
+        if not route:
+            continue
+
+        RedirectEvent.objects.create(
+            workspace=workspace,
+            redirect_route=route,
+            domain=domain,
+            slug=slug,
+            ip=ip,
+            user_agent=user_agent[:1000],
+            destination=destination[:2048],
+            verdict=verdict,
+            is_bot=is_bot,
+            country_code=country_code[:2],
+            country=country[:64],
+        )
+        # Increment route click counter
+        RedirectRoute.objects.filter(id=route.id).update(
+            clicks_count=models.F('clicks_count') + 1,
+        )
+        created += 1
+
+    return Response({'created': created})
+
+
+# ---------------------------------------------------------------------------
+# Edge Credential Management (admin)
+# ---------------------------------------------------------------------------
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def edge_credential_list_create(request):
+    """List or create edge sync credentials for the workspace."""
+    workspace = get_user_workspace(request.user)
+    if not workspace:
+        return Response({'error': 'No workspace found'}, status=status.HTTP_404_NOT_FOUND)
+
+    from .models import EdgeSyncCredential
+
+    if request.method == 'GET':
+        creds = EdgeSyncCredential.objects.filter(workspace=workspace)
+        return Response([
+            {
+                'id': str(c.id),
+                'label': c.label,
+                'keyPrefix': c.key_prefix,
+                'isActive': c.is_active,
+                'lastSyncAt': c.last_sync_at,
+                'createdAt': c.created_at,
+            }
+            for c in creds
+        ])
+
+    # POST
+    active_count = EdgeSyncCredential.objects.filter(workspace=workspace, is_active=True).count()
+    if active_count >= 2:
+        return Response(
+            {'errors': [{'field': 'credential', 'detail': 'Maximum 2 active credentials per workspace. Revoke one first.'}]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    label = request.data.get('label', 'default')
+    raw_key, instance = EdgeSyncCredential.create_for_workspace(workspace, label=label)
+
+    return Response({
+        'id': str(instance.id),
+        'key': raw_key,
+        'keyPrefix': instance.key_prefix,
+        'label': instance.label,
+        'createdAt': instance.created_at,
+    }, status=status.HTTP_201_CREATED)
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def edge_credential_revoke(request, credential_id):
+    """Revoke an edge sync credential."""
+    workspace = get_user_workspace(request.user)
+    if not workspace:
+        return Response({'error': 'No workspace found'}, status=status.HTTP_404_NOT_FOUND)
+
+    from .models import EdgeSyncCredential
+
+    try:
+        cred = EdgeSyncCredential.objects.get(id=credential_id, workspace=workspace)
+    except EdgeSyncCredential.DoesNotExist:
+        return Response(
+            {'errors': [{'field': 'credential', 'detail': 'Credential not found.'}]},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    cred.is_active = False
+    cred.save(update_fields=['is_active'])
+    return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 # ---------------------------------------------------------------------------

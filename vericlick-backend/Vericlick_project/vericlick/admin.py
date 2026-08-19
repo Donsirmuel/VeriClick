@@ -10,6 +10,7 @@ from .models import (
     BillingEvent, PLAN_PERIOD_DAYS,
     BlockedDestination, UserProfile,
     ShieldConfig, DomainRegistry, InstallToken, RedirectRoute, EdgeSyncCredential,
+    RedirectEvent,
 )
 
 
@@ -296,3 +297,13 @@ class EdgeSyncCredentialAdmin(admin.ModelAdmin):
     search_fields = ('label', 'workspace__name')
     autocomplete_fields = ['workspace']
     readonly_fields = ('created_at', 'last_sync_at')
+
+
+@admin.register(RedirectEvent)
+class RedirectEventAdmin(admin.ModelAdmin):
+    list_display = ('domain', 'slug', 'ip', 'verdict', 'is_bot', 'country_code', 'created_at')
+    list_filter = ('verdict', 'is_bot', 'created_at')
+    search_fields = ('domain', 'ip', 'user_agent')
+    readonly_fields = ('id', 'created_at')
+    autocomplete_fields = ['workspace', 'redirect_route']
+    date_hierarchy = 'created_at'

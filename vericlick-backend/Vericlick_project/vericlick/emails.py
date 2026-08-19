@@ -63,7 +63,7 @@ def send_welcome_email(user):
     body = f"""
 <p style="color:#a3a3a3;font-size:15px;">Hi {user.first_name or user.username},</p>
 <p style="color:#d4d4d4;font-size:15px;line-height:1.6;">
-  Your VeriClick account is ready. Sign in to start protecting your links from bots,
+  Your VeriClick account is ready. Sign in to start protecting your website from bots,
   scrapers, and ad fraud.
 </p>
 <div style="text-align:center;margin:32px 0;">
@@ -227,9 +227,8 @@ def send_period_expiring_email(user, workspace, plan, expires_at):
 </p>
 <p style="color:#a3a3a3;font-size:15px;line-height:1.6;">
   If it lapses, you get a <strong style="color:#ffffff;">7-day grace period</strong> where
-  everything keeps working while you renew. After that your tracked links will become
-  inactive and return a "link no longer active" message to visitors — renew to restore
-  them immediately.
+  everything keeps working while you renew. After that your protection will become
+  inactive — renew to restore it immediately.
 </p>
 <div style="text-align:center;margin:32px 0;">
   <a href="{settings.SITE_URL}/app/billing"
@@ -259,8 +258,7 @@ def send_period_expired_email(user, workspace, plan, expires_at):
 </p>
 <p style="color:#a3a3a3;font-size:15px;line-height:1.6;">
   If you don't renew by <strong style="color:#ffffff;">{grace_when}</strong>, your
-  tracked links will become inactive and return a "link no longer active" message
-  to visitors. Renew to restore them immediately.
+  protection will become inactive. Renew to restore it immediately.
 </p>
 <div style="text-align:center;margin:32px 0;">
   <a href="{settings.SITE_URL}/app/billing"
@@ -286,9 +284,8 @@ def send_plan_suspended_email(user, workspace, plan, grace_ended_at):
   wasn't renewed during the 7-day grace period.
 </p>
 <p style="color:#a3a3a3;font-size:15px;line-height:1.6;">
-  Your tracked links are now inactive and will return a "link no longer active"
-  message to visitors. Renew to restore full analytics and protection immediately;
-  your domains, links, and data are all intact.
+  Your protection is now inactive. Renew to restore full analytics and protection immediately;
+  your domains and data are all intact.
 </p>
 <div style="text-align:center;margin:32px 0;">
   <a href="{settings.SITE_URL}/app/billing"
@@ -297,6 +294,60 @@ def send_plan_suspended_email(user, workspace, plan, grace_ended_at):
   </a>
 </div>
 <p style="color:#525252;font-size:13px;margin-bottom:0;">Questions? Reply to this email and we'll help.</p>
+"""
+    return send_email(user.email, subject, _layout(body))
+
+
+def send_redirect_expiry_warning_email(user, route, days_left=1):
+    """Sent 1 day before a redirect expires."""
+    domain_name = route.domain.domain
+    when = route.expires_at.strftime('%d %b %Y at %H:%M UTC') if route.expires_at else 'soon'
+    subject = f'Your redirect for {domain_name} expires {"tomorrow" if days_left <= 1 else f"in {days_left} days"}'
+    body = f"""
+<p style="color:#a3a3a3;font-size:15px;">Hi {user.first_name or user.username},</p>
+<p style="color:#d4d4d4;font-size:15px;line-height:1.6;">
+  Your redirect for <strong style="color:#ffffff;">{domain_name}</strong> expires
+  <strong style="color:#ffffff;">{when}</strong>.
+</p>
+<p style="color:#a3a3a3;font-size:15px;line-height:1.6;">
+  After it expires, visitors to <strong style="color:#ffffff;">{domain_name}</strong> will
+  see a 404 page instead of being redirected to your destination.
+</p>
+<div style="text-align:center;margin:32px 0;">
+  <a href="{settings.SITE_URL}/app/redirects"
+     style="background-color:#ffffff;color:#0a0a0a;padding:14px 28px;border-radius:10px;text-decoration:none;font-weight:bold;font-size:14px;">
+    Renew Redirect
+  </a>
+</div>
+<p style="color:#525252;font-size:13px;margin-bottom:0;">
+  This is an automated reminder from VeriClick.
+</p>
+"""
+    return send_email(user.email, subject, _layout(body))
+
+
+def send_redirect_expired_email(user, route):
+    """Sent on the day a redirect expires."""
+    domain_name = route.domain.domain
+    subject = f'Your redirect for {domain_name} has expired'
+    body = f"""
+<p style="color:#a3a3a3;font-size:15px;">Hi {user.first_name or user.username},</p>
+<p style="color:#d4d4d4;font-size:15px;line-height:1.6;">
+  Your redirect for <strong style="color:#ffffff;">{domain_name}</strong> has expired.
+</p>
+<p style="color:#a3a3a3;font-size:15px;line-height:1.6;">
+  Visitors to <strong style="color:#ffffff;">{domain_name}</strong> now see a 404 page.
+  Your redirect data is preserved for 30 days.
+</p>
+<div style="text-align:center;margin:32px 0;">
+  <a href="{settings.SITE_URL}/app/redirects"
+     style="background-color:#ffffff;color:#0a0a0a;padding:14px 28px;border-radius:10px;text-decoration:none;font-weight:bold;font-size:14px;">
+    Renew Redirect
+  </a>
+</div>
+<p style="color:#525252;font-size:13px;margin-bottom:0;">
+  This is an automated reminder from VeriClick.
+</p>
 """
     return send_email(user.email, subject, _layout(body))
 
