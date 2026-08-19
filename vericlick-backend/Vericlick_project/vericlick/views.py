@@ -1,6 +1,6 @@
 from datetime import timedelta
 import logging
-from django.db.models import Count, Q
+from django.db.models import Count, F, Q
 from django.db.models.functions import TruncDate
 from django.conf import settings
 from django.utils import timezone
@@ -1227,16 +1227,17 @@ def shield_telemetry(request):
     """Receive batch telemetry from the script for analytics. Separate from
     verify to keep the verify endpoint fast and focused."""
     api_key = request.data.get('api_key') or ''
-    if not api_key:
-        return Response(
-            {'errors': [{'field': 'api_key', 'detail': 'api_key is required'}]},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+    install_token_raw = request.data.get('install_token') or ''
 
-    workspace = Workspace.objects.filter(tracker_secret=api_key).first()
+    workspace = None
+    if install_token_raw:
+        workspace, _ = InstallToken.verify_token(install_token_raw)
+    elif api_key:
+        workspace = Workspace.objects.filter(tracker_secret=api_key).first()
+
     if not workspace:
         return Response(
-            {'errors': [{'field': 'api_key', 'detail': 'Invalid API key'}]},
+            {'errors': [{'field': 'api_key', 'detail': 'Valid api_key or install_token is required'}]},
             status=status.HTTP_401_UNAUTHORIZED,
         )
 
@@ -2130,7 +2131,7 @@ def edge_events_batch(request):
         )
         # Increment route click counter
         RedirectRoute.objects.filter(id=route.id).update(
-            clicks_count=models.F('clicks_count') + 1,
+            clicks_count=F('clicks_count') + 1,
         )
         created += 1
 

@@ -1,16 +1,24 @@
 # VeriClick frontend + reverse proxy (Caddy).
 #
 # Product domain serves the SPA + API + shield endpoints.
-# No customer domains, no on-demand TLS, no /r/* redirects.
-# The script model means customers embed shield.js from their own domain.
+# TLS terminated via Cloudflare Origin CA (manual cert, no ACME).
+# Visitors hit Cloudflare's public HTTPS; Cloudflare talks to this origin
+# over HTTPS using the Origin Certificate.
+#
+# To switch back to Let's Encrypt after the rate limit clears:
+# 1. Remove the tls directive below
+# 2. Restore: acme_ca https://acme-v02.api.letsencrypt.org/directory
+#    in the global block
+# 3. Rebuild: docker compose up -d --build
 
 {
-	acme_ca https://acme-v02.api.letsencrypt.org/directory
 	order ja3_ja4 before reverse_proxy
 }
 
 # ---- Static product domain (SPA + API + admin) ----
 {$SITE_ADDRESSES} {
+	tls /etc/caddy/certs/origin.crt /etc/caddy/certs/origin.key
+
 	encode gzip
 
 	# Layer 3: JA4 TLS fingerprinting — extract and forward to Django
@@ -47,7 +55,7 @@
 	}
 }
 
-# ---- Port 80: redirect to HTTPS, keeping ACME http-01 challenges working ----
+# ---- Port 80: redirect to HTTPS ----
 :80 {
 	redir https://{host}{uri} permanent
 }

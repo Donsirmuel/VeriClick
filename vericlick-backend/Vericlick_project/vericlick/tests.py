@@ -2792,3 +2792,133 @@ class DomainRegistryModelTests(TestCase):
         self.assertEqual(len(token), 32)
         d.refresh_from_db()
         self.assertEqual(d.verification_token, token)
+
+
+# ---------------------------------------------------------------------------
+# Additional Edge Cases
+# ---------------------------------------------------------------------------
+
+class EdgeEventsBatchInvalidCredentialTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='ev_badcred', password='pass')
+        self.workspace = Workspace.objects.get(owner=self.user)
+
+    def test_invalid_edge_api_key_returns_401(self):
+        res = self.client.post('/api/edge/events/', {
+            'events': [{'domain': 'x', 'ip': '1.2.3.4', 'destination': 'y'}],
+        }, format='json', HTTP_X_EDGE_API_KEY='invalid_key_here')
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_missing_edge_api_key_returns_401(self):
+        res = self.client.post('/api/edge/events/', {
+            'events': [{'domain': 'x', 'ip': '1.2.3.4', 'destination': 'y'}],
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+class ShieldTelemetryTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='telem_user', password='pass')
+        self.workspace = Workspace.objects.get(owner=self.user)
+        self.domain = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='example.com', purpose='protection',
+        )
+        self.raw_token, self.install_token = InstallToken.create_for_workspace(self.workspace)
+
+    def test_telemetry_with_api_key(self):
+        res = self.client.post('/api/shield/telemetry/', {
+            'api_key': str(self.workspace.tracker_secret),
+            'page_url': 'https://example.com/',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.json()['status'], 'ok')
+
+    def test_telemetry_with_install_token(self):
+        res = self.client.post('/api/shield/telemetry/', {
+            'install_token': self.raw_token,
+            'page_url': 'https://example.com/',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.json()['status'], 'ok')
+
+    def test_telemetry_invalid_token(self):
+        res = self.client.post('/api/shield/telemetry/', {
+            'install_token': 'vc_nonexistent',
+            'page_url': 'https://example.com/',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_telemetry_missing_both_keys(self):
+        res = self.client.post('/api/shield/telemetry/', {
+            'page_url': 'https://example.com/',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_telemetry_unregistered_domain_silently_ignored(self):
+        res = self.client.post('/api/shield/telemetry/', {
+            'api_key': str(self.workspace.tracker_secret),
+            'page_url': 'https://unknown.com/',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.json()['status'], 'ok')
+
+    def test_telemetry_suspended_workspace_returns_ok(self):
+        self.workspace.plan_status = 'suspended'
+        self.workspace.save(update_fields=['plan_status'])
+        res = self.client.post('/api/shield/telemetry/', {
+            'api_key': str(self.workspace.tracker_secret),
+            'page_url': 'https://example.com/',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+
+
+class InstallTokenExpiredTests(APITestCase):
+    def test_verify_expired_token(self):
+        user = User.objects.create_user(username='tok_exp', password='pass')
+        ws = Workspace.objects.get(owner=user)
+        raw_token, token = InstallToken.create_for_workspace(ws)
+        token.expires_at = timezone.now() - timedelta(hours=1)
+        token.save(update_fields=['expires_at'])
+        found_ws, found_token = InstallToken.verify_token(raw_token)
+        self.assertIsNone(found_ws)
+        self.assertIsNone(found_token)
+
+
+class EdgeEventsBatchClickIncrementTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='ev_f', password='pass')
+        self.workspace = Workspace.objects.get(owner=self.user)
+        self.raw_key, self.cred = EdgeSyncCredential.create_for_workspace(self.workspace)
+        self.domain = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='f.example.com',
+            purpose='redirect', verified=True,
+        )
+        self.route = RedirectRoute.objects.create(
+            workspace=self.workspace, domain=self.domain,
+            destination_url='https://target.example.com',
+        )
+        self.headers = {'HTTP_X_EDGE_API_KEY': self.raw_key}
+
+    def test_click_count_uses_F_expression(self):
+        """Verify F() expression works for atomic click increment."""
+        self.route.refresh_from_db()
+        self.assertEqual(self.route.clicks_count, 0)
+        self.client.post('/api/edge/events/', {
+            'events': [{
+                'domain': 'f.example.com',
+                'ip': '1.2.3.4',
+                'destination': 'https://target.example.com',
+            }],
+        }, format='json', **self.headers)
+        self.route.refresh_from_db()
+        self.assertEqual(self.route.clicks_count, 1)
+        # Second event should increment to 2, not overwrite
+        self.client.post('/api/edge/events/', {
+            'events': [{
+                'domain': 'f.example.com',
+                'ip': '5.6.7.8',
+                'destination': 'https://target.example.com',
+            }],
+        }, format='json', **self.headers)
+        self.route.refresh_from_db()
+        self.assertEqual(self.route.clicks_count, 2)

@@ -9,7 +9,7 @@ import {
   Loading03Icon,
 } from "@hugeicons/core-free-icons";
 import toast from "react-hot-toast";
-import { fetchWorkspace, fetchDomains, testInstallation } from "@/api/workspace";
+import { fetchWorkspace, fetchDomains, fetchInstallTokens, createInstallToken, testInstallation } from "@/api/workspace";
 import { apiClient } from "@/api/client";
 import { DashboardSkeleton } from "@/components/ui/DashboardSkeleton";
 
@@ -106,6 +106,7 @@ export default function InstallPage() {
   const [selectedPlatform, setSelectedPlatform] = useState<Platform>("html");
   const [selectedDomainId, setSelectedDomainId] = useState<string>("");
   const [copiedSnippet, setCopiedSnippet] = useState(false);
+  const [activeToken, setActiveToken] = useState<string>("");
   const [testResult, setTestResult] = useState<{
     installed: boolean;
     hasScriptTag?: boolean;
@@ -122,6 +123,28 @@ export default function InstallPage() {
     queryKey: ["domains"],
     queryFn: fetchDomains,
   });
+
+  const { data: tokens, isLoading: tokensLoading } = useQuery({
+    queryKey: ["install-tokens"],
+    queryFn: fetchInstallTokens,
+  });
+
+  const createTokenMutation = useMutation({
+    mutationFn: (label: string) => createInstallToken(label),
+    onSuccess: (data) => {
+      setActiveToken(data.token);
+    },
+  });
+
+  // Auto-create first install token if none exist
+  if (!tokensLoading && tokens && tokens.length === 0 && !activeToken && !createTokenMutation.isPending) {
+    createTokenMutation.mutate("Primary");
+  }
+
+  // Set active token from existing tokens
+  if (!tokensLoading && tokens && tokens.length > 0 && !activeToken && !createTokenMutation.isPending) {
+    setActiveToken(tokens[0].tokenPrefix + "…");
+  }
 
   const testMutation = useMutation({
     mutationFn: testInstallation,
@@ -145,16 +168,20 @@ export default function InstallPage() {
   const selectedDomain = domains?.find((d) => d.id === selectedDomainId);
 
   const getSnippet = (platform: Platform) => {
+    const tokenAttr = activeToken
+      ? `data-token="${activeToken}"`
+      : `data-api-key="${apiKey}"`;
+
     const base = `<!-- VeriClick Bot Protection -->
 <script
   src="${API_BASE}/shield.js"
-  data-api-key="${apiKey}"
+  ${tokenAttr}
   defer
 ></script>`;
 
     if (platform === "shopify") {
       return `<!-- VeriClick Bot Protection -->
-<script src="${API_BASE}/shield.js" data-api-key="${apiKey}" defer></script>`;
+<script src="${API_BASE}/shield.js" ${tokenAttr} defer></script>`;
     }
 
     return base;
@@ -192,7 +219,7 @@ export default function InstallPage() {
     },
   ];
 
-  if (isLoading || domainsLoading) {
+  if (isLoading || domainsLoading || tokensLoading) {
     return <DashboardSkeleton />;
   }
 
@@ -288,6 +315,41 @@ export default function InstallPage() {
             )}
           </div>
         )}
+      </div>
+
+      {/* Install token management */}
+      <div className="bg-white rounded-2xl border border-neutral-200 p-6 shadow-sm">
+        <h2 className="text-sm font-bold text-slate-900 mb-3">Install Token</h2>
+        <p className="text-xs text-muted mb-4">
+          Each site gets a scoped install token instead of your workspace secret.
+          Tokens are shown once on creation — copy the snippet above before closing this page.
+        </p>
+        <div className="flex items-center gap-3">
+          {activeToken && tokens && tokens.length > 0 ? (
+            <div className="flex-1 bg-slate-50 border border-neutral-200 rounded-xl px-4 py-3 text-xs font-mono text-slate-600">
+              {tokens[0].tokenPrefix}… <span className="text-muted">(active)</span>
+            </div>
+          ) : activeToken ? (
+            <div className="flex-1 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 text-xs font-mono text-emerald-700">
+              {activeToken.slice(0, 12)}… <span className="text-emerald-600">(new — copy the snippet above)</span>
+            </div>
+          ) : (
+            <div className="flex-1 bg-slate-50 border border-neutral-200 rounded-xl px-4 py-3 text-xs text-muted">
+              Generating token…
+            </div>
+          )}
+          <button
+            onClick={() => {
+              if (tokens && tokens.length > 0) {
+                createTokenMutation.mutate(`Token ${tokens.length + 1}`);
+              }
+            }}
+            disabled={createTokenMutation.isPending}
+            className="bg-white hover:bg-neutral-100 text-slate-700 border border-neutral-200 px-4 py-3 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors disabled:opacity-50"
+          >
+            Generate New Token
+          </button>
+        </div>
       </div>
 
       {/* Platform selector */}

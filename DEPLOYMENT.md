@@ -17,7 +17,7 @@ A single Compose file builds and runs the whole stack on the VPS:
 
 ### Steps (InterServer VPS — everything happens on the server)
 
-1. **Prereqs:** Docker + Compose plugin installed on the VPS; `getvericlick.site` + `www` A records point at the VPS's public IP; ports **80 and 443 are open** (80 is used for the ACME HTTP challenge).
+1. **Prereqs:** Docker + Compose plugin installed on the VPS; `vericlick.site` + `www` A records point at the VPS's public IP; Cloudflare proxy enabled (orange-cloud) with SSL/TLS mode set to Full (strict); ports **80 and 443 are open**.
 2. **Clone the repo** onto the server and `cd` into it.
 3. **Create the environment:**
    ```bash
@@ -32,14 +32,13 @@ A single Compose file builds and runs the whole stack on the VPS:
    ```bash
    docker compose up -d --build
    ```
-   First run pulls images and runs migrations automatically. Caddy then obtains
-   the HTTPS certificate for `SITE_ADDRESSES` on its own.
+   First run pulls images and runs migrations automatically. Caddy starts with
+   the Cloudflare Origin Certificate from `certs/cloudflare/`.
 5. **Verify:**
    ```bash
    docker compose ps                          # all three services 'Up' / 'healthy'
-   docker compose exec frontend ls /data/caddy/certificates   # ACME certs present
-   curl -I https://getvericlick.site               # 200 (HTTP/2 over TLS)
-   curl -s https://getvericlick.site/api/health/   # {"status":"ok",...}
+   curl -I https://vericlick.site               # 200 (HTTP/2 over TLS)
+   curl -s https://vericlick.site/api/health/   # {"status":"ok",...}
    ```
 6. **Keep it running across reboots:** InterServer's services manager or a
    systemd unit runs `docker compose up -d`. Rebuilds deploy as
@@ -58,17 +57,23 @@ docker compose down -v             # stop AND delete the database (destructive)
 > Data lives in the named `pgdata` volume, so `docker compose down` and rebuilds
 > do not lose your database. Back it up: `docker compose exec -T db pg_dump -U vericlick vericlick > backup.sql`. Certificates live in `caddy_data` — back that up too.
 
-> **TLS, self-contained (no need for InterServer's shared SSL):** Caddy handles
-> `443` for you and auto-provisions Let's Encrypt certificates for the
-> `SITE_ADDRESSES` you set. Requirements: the domain's A records point at the
-> VPS and ports 80/443 are open. Once provisioned, `caddy_data` keeps the keys
-> and Caddy renews automatically, so there is no manual cert step before launch.
+> **TLS via Cloudflare Origin CA:** The origin server uses a Cloudflare Origin
+> Certificate (15-year validity, no rate limits) instead of Let's Encrypt ACME.
+> Visitors connect to Cloudflare over its public HTTPS cert; Cloudflare talks to
+> the VPS over HTTPS using the Origin Certificate.
 >
-> **Before DNS is live** (e.g. smoke-testing behind a `<IP>:443` or a not-yet-public
-> hostname), point `frontend`'s Caddyfile at `tls internal` instead — swap
-> `{$SITE_ADDRESSES} {` for `{$SITE_ADDRESSES} { tls internal` in
-> `vericlick-frontend/Caddyfile` to use Caddy's own internal CA (self-signed) and
-> accept the cert in your browser. Revert that line for the real public launch.
+> **Setup:**
+> 1. Proxy `vericlick.site` + `www.vericlick.site` in Cloudflare DNS (orange-cloud)
+> 2. Set SSL/TLS mode to **Full (strict)**
+> 3. Create an Origin Certificate in SSL/TLS → Origin Server for both domains
+> 4. Save the cert as `certs/cloudflare/origin.crt` and key as `certs/cloudflare/origin.key`
+> 5. `docker compose up -d --build`
+>
+> **Switching back to Let's Encrypt:** After the rate limit clears, restore the
+> ACME config in the Caddyfile and rebuild. Keep Cloudflare proxied if desired.
+>
+> **Before DNS is live** (smoke-testing behind `<IP>:443`), use `tls internal`
+> in the Caddyfile for a self-signed cert. Revert for production.
 
 ---
 

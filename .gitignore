@@ -6,3 +6,8 @@
 .env
 .env.*
 !.env.example
+
+# TLS certificates (secret, never commit)
+certs/**/*.crt
+certs/**/*.key
+certs/**/*.pem

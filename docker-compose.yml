@@ -57,11 +57,11 @@ services:
       - "80:80"
       - "443:443"
     environment:
-      # Public hostname(s) this server answers for; Caddy auto-issues the
-      # Let's Encrypt certificates for them.
       SITE_ADDRESSES: ${SITE_ADDRESSES:?set SITE_ADDRESSES in .env}
     volumes:
-      # ACME certs + config persist across container restarts/updates.
+      # Cloudflare Origin TLS cert + key (manual cert, no ACME).
+      - ./certs/cloudflare:/etc/caddy/certs:ro
+      # Caddy state persists across restarts.
       - caddy_data:/data
       - caddy_config:/config
     depends_on:

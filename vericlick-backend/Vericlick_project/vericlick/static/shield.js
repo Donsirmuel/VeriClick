@@ -1,13 +1,15 @@
 (function () {
+  var installToken = null;
   var apiKey = null;
   var scripts = document.getElementsByTagName('script');
   for (var i = 0; i < scripts.length; i++) {
     if (/\/shield\.js/.test(scripts[i].src || '')) {
+      installToken = scripts[i].getAttribute('data-token');
       apiKey = scripts[i].getAttribute('data-api-key');
       break;
     }
   }
-  if (!apiKey) return;
+  if (!installToken && !apiKey) return;
 
   var API = '__API_BASE_URL__';
   var started = Date.now();
@@ -190,6 +192,7 @@
 
     var payload = {
       api_key: apiKey,
+      install_token: installToken,
       page_url: window.location.href,
       referrer: document.referrer,
       signals: {
@@ -302,6 +305,7 @@
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       api_key: apiKey,
+      install_token: installToken,
       page_url: window.location.href,
       referrer: document.referrer
     }),
