@@ -1,5 +1,5 @@
 import { apiClient } from './client'
-import type { BillingHistory, BillingMode, CheckoutSession, PaymentMethod, Workspace, Domain, InstallToken, RedirectRoute, RedirectDomain } from '@/types'
+import type { BillingHistory, BillingMode, CheckoutSession, PaymentMethod, Workspace, Domain, RedirectRoute, RedirectDomain, ShieldConfig } from '@/types'
 
 interface WorkspaceUpdateInput {
   name?: string
@@ -93,29 +93,6 @@ export async function recheckDomain(domainId: string): Promise<{
   return data
 }
 
-// --- Install Tokens ---
-
-export async function fetchInstallTokens(): Promise<InstallToken[]> {
-  const { data } = await apiClient.get<InstallToken[]>('/install-tokens/')
-  return data
-}
-
-export async function createInstallToken(label: string = 'Primary'): Promise<{
-  id: string
-  token: string
-  tokenPrefix: string
-  label: string
-  expiresAt: string
-  createdAt: string
-}> {
-  const { data } = await apiClient.post('/install-tokens/', { label })
-  return data
-}
-
-export async function revokeInstallToken(tokenId: string): Promise<void> {
-  await apiClient.delete(`/install-tokens/${tokenId}/`)
-}
-
 // --- Redirect Domains ---
 
 export async function fetchRedirectDomains(): Promise<RedirectDomain[]> {
@@ -130,15 +107,6 @@ export async function addRedirectDomain(domain: string): Promise<RedirectDomain>
 
 export async function deleteRedirectDomain(domainId: string): Promise<void> {
   await apiClient.delete(`/redirect-domains/${domainId}/`)
-}
-
-export async function verifyRedirectDomainCname(domainId: string): Promise<{
-  cname_ok: boolean
-  target: string | null
-  detail: string
-}> {
-  const { data } = await apiClient.post(`/redirect-domains/${domainId}/verify-cname/`)
-  return data
 }
 
 // --- Redirect Routes ---
@@ -201,5 +169,36 @@ export async function testInstallation(domainId: string): Promise<{
   error?: string
 }> {
   const { data } = await apiClient.post('/test-installation/', { domain_id: domainId })
+  return data
+}
+
+// --- Onboarding ---
+
+export async function completeOnboarding(type: 'shield' | 'redirect', domain: string): Promise<{
+  domain: { id: string; domain: string; purpose: string }
+  workspace: Workspace
+}> {
+  const { data } = await apiClient.post('/workspace/onboarding/', { type, domain })
+  return data
+}
+
+export async function fetchSnippet(domain: string): Promise<{
+  snippet: string
+  domain: string
+  apiKey: string
+  apiBase: string
+}> {
+  const { data } = await apiClient.get('/workspace/snippet/', { params: { domain } })
+  return data
+}
+
+export async function updateShieldConfig(payload: {
+  protectionMode: string
+  botAction: string
+  rateLimitPerHour: number
+  protectedPaths: string[]
+  blockedPaths: string[]
+}): Promise<ShieldConfig> {
+  const { data } = await apiClient.patch<ShieldConfig>('/workspace/shield-config/', payload)
   return data
 }

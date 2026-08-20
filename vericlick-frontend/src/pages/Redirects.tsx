@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
@@ -11,7 +12,7 @@ import {
   renewRedirectRoute, updateRedirectRoute,
   fetchRedirectDomains, addRedirectDomain,
   getVerifyChallenge, confirmVerification,
-  verifyRedirectDomainCname,
+  verifyRedirectDomainCname, fetchWorkspace,
 } from '@/api/workspace'
 import type { RedirectRoute } from '@/types'
 import { parseApiError } from '@/lib/errors'
@@ -22,11 +23,12 @@ function daysUntil(dateStr: string | null): number {
   return Math.max(0, Math.ceil((new Date(dateStr).getTime() - Date.now()) / 86400000))
 }
 
-function RouteCard({ route, onRenew, onDeactivate, onDelete }: {
+function RouteCard({ route, onRenew, onDeactivate, onDelete, hasPlan }: {
   route: RedirectRoute
   onRenew: () => void
   onDeactivate: () => void
   onDelete: () => void
+  hasPlan: boolean
 }) {
   const days = daysUntil(route.expiresAt)
   const isExpired = route.expiresAt && new Date(route.expiresAt) < new Date()
@@ -65,19 +67,22 @@ function RouteCard({ route, onRenew, onDeactivate, onDelete }: {
       <div className="flex items-center gap-2">
         <button
           onClick={onRenew}
-          className="bg-black hover:bg-neutral-800 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all"
+          disabled={!hasPlan}
+          className="bg-black hover:bg-neutral-800 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Renew 7 Days
         </button>
         <button
           onClick={onDeactivate}
-          className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-xs font-bold transition-colors"
+          disabled={!hasPlan}
+          className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-xs font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Deactivate
         </button>
         <button
           onClick={onDelete}
-          className="text-neutral-400 hover:text-red-500 transition-colors p-2 ml-auto"
+          disabled={!hasPlan}
+          className="text-neutral-400 hover:text-red-500 transition-colors p-2 ml-auto disabled:opacity-50 disabled:cursor-not-allowed"
           title="Delete"
         >
           <HugeiconsIcon icon={Delete01Icon} className="w-4 h-4" />
@@ -444,8 +449,15 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
 }
 
 export default function RedirectsPage() {
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [showWizard, setShowWizard] = useState(false)
+
+  const { data: workspace } = useQuery({
+    queryKey: ['workspace'],
+    queryFn: fetchWorkspace,
+  })
+  const hasPlan = !!workspace?.planName
 
   const { data: routes, isLoading } = useQuery({
     queryKey: ['redirect-routes'],
@@ -492,7 +504,7 @@ export default function RedirectsPage() {
           </p>
         </div>
         <button
-          onClick={() => setShowWizard(true)}
+          onClick={() => hasPlan ? setShowWizard(true) : navigate('/app/billing')}
           className="bg-black hover:bg-neutral-800 text-white px-5 py-3 rounded-xl text-sm font-bold flex items-center gap-2 transition-all"
         >
           <HugeiconsIcon icon={Add01Icon} className="w-4 h-4" />
@@ -506,6 +518,7 @@ export default function RedirectsPage() {
             <RouteCard
               key={route.id}
               route={route}
+              hasPlan={hasPlan}
               onRenew={() => renewMutation.mutate(route.id)}
               onDeactivate={() => {
                 if (window.confirm('Deactivate this redirect?')) deactivateMutation.mutate(route.id)
@@ -524,7 +537,7 @@ export default function RedirectsPage() {
             Create a redirect to send visitors through your custom domain.
           </p>
           <button
-            onClick={() => setShowWizard(true)}
+            onClick={() => hasPlan ? setShowWizard(true) : navigate('/app/billing')}
             className="bg-black hover:bg-neutral-800 text-white px-5 py-3 rounded-xl text-sm font-bold transition-all"
           >
             Create your first redirect

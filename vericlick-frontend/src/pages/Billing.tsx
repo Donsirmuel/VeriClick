@@ -179,11 +179,11 @@ export default function Billing() {
         <div className="bg-white border border-neutral-200 rounded-2xl p-5">
           <div className="text-xs font-bold text-muted uppercase tracking-wider mb-1">Domains</div>
           <div className="text-xl font-bold text-slate-900">
-            {workspace?.planName ? `${workspace.domainsUsed ?? 0} / ${workspace.domainLimit ?? 3}` : '—'}
+            {workspace?.planName ? `${workspace.domainsUsed ?? 0} / ${workspace.domainLimit ?? 0}` : '—'}
           </div>
           <div className="text-xs text-muted mt-1">
             {workspace?.planName
-              ? `${(workspace.domainLimit ?? 3) - (workspace.domainsUsed ?? 0)} remaining`
+              ? `${(workspace.domainLimit ?? 0) - (workspace.domainsUsed ?? 0)} remaining`
               : 'Pick a plan to register domains'}
           </div>
         </div>

@@ -51,6 +51,8 @@ export interface Workspace {
   trialActive: boolean
   domainsUsed: number
   domainLimit: number
+  onboardingComplete: boolean
+  onboardingType: 'shield' | 'redirect' | null
 }
 
 export interface Domain {

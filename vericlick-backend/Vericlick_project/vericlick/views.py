@@ -111,6 +111,82 @@ def workspace_shield_config(request):
     return Response(serializer.data)
 
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def workspace_onboarding(request):
+    """Complete the onboarding wizard. Creates domain and marks workspace as onboarded."""
+    workspace = Workspace.objects.get(owner=request.user)
+    onboarding_type = request.data.get('type')  # 'shield' or 'redirect'
+    domain_name = request.data.get('domain', '').strip().lower()
+
+    if onboarding_type not in ('shield', 'redirect'):
+        return Response({'errors': [{'field': 'type', 'detail': 'Must be shield or redirect'}]}, status=400)
+    if not domain_name:
+        return Response({'errors': [{'field': 'domain', 'detail': 'Domain is required'}]}, status=400)
+
+    # Check plan (require plan for onboarding)
+    if not workspace.has_plan_access():
+        return Response({'errors': [{'field': 'detail', 'detail': 'Subscribe to a plan before onboarding'}]}, status=403)
+
+    # Check domain limit
+    active_plan = workspace.active_plan
+    current_count = workspace.domains.filter(is_active=True).count()
+    if current_count >= active_plan.domain_limit:
+        return Response({'errors': [{'field': 'domain', 'detail': f'Domain limit reached ({active_plan.domain_limit})'}]}, status=400)
+
+    # Check domain not already taken
+    if DomainRegistry.objects.filter(domain=domain_name, is_active=True).exists():
+        return Response({'errors': [{'field': 'domain', 'detail': 'This domain is already registered'}]}, status=400)
+
+    # Create domain
+    purpose = 'protection' if onboarding_type == 'shield' else 'redirect'
+    domain = DomainRegistry.objects.create(
+        workspace=workspace,
+        domain=domain_name,
+        purpose=purpose,
+    )
+
+    # Mark onboarding complete
+    workspace.onboarding_complete = True
+    workspace.onboarding_type = onboarding_type
+    workspace.save(update_fields=['onboarding_complete', 'onboarding_type'])
+
+    return Response({
+        'domain': {'id': str(domain.id), 'domain': domain.domain, 'purpose': domain.purpose},
+        'workspace': WorkspaceSerializer(workspace).data,
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def workspace_snippet(request):
+    """Return the shield.js snippet for a given domain."""
+    workspace = Workspace.objects.get(owner=request.user)
+    domain_name = request.query_params.get('domain', '').strip().lower()
+
+    if not domain_name:
+        return Response({'errors': [{'field': 'domain', 'detail': 'Domain query param required'}]}, status=400)
+
+    domain = DomainRegistry.objects.filter(workspace=workspace, domain=domain_name, is_active=True).first()
+    if not domain:
+        return Response({'errors': [{'field': 'domain', 'detail': 'Domain not found'}]}, status=404)
+
+    api_key = str(workspace.tracker_secret)
+    api_base = request.build_absolute_uri('/api/').rstrip('/')
+
+    snippet = (
+        f'<!-- VeriClick — anti-bot protection -->\n'
+        f'<script src="{api_base}/shield.js" data-api-key="{api_key}" defer></script>'
+    )
+
+    return Response({
+        'snippet': snippet,
+        'domain': domain.domain,
+        'apiKey': api_key,
+        'apiBase': api_base,
+    })
+
+
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
 def domain_list_create(request):
@@ -136,11 +212,6 @@ def domain_list_create(request):
 
     # Check limit
     active_plan = workspace.active_plan
-    if not active_plan:
-        return Response(
-            {'errors': [{'field': 'domain', 'detail': 'Subscribe to a plan before adding domains.'}]},
-            status=status.HTTP_403_FORBIDDEN,
-        )
     current_count = DomainRegistry.objects.filter(workspace=workspace, is_active=True).count()
     limit = active_plan.domain_limit
     if current_count >= limit:
@@ -379,11 +450,6 @@ def install_token_list_create(request):
         return Response(InstallTokenSerializer(tokens, many=True).data)
 
     # POST — generate new token
-    if not workspace.has_plan_access():
-        return Response(
-            {'errors': [{'field': 'token', 'detail': 'Subscribe to a plan before generating install tokens.'}]},
-            status=status.HTTP_403_FORBIDDEN,
-        )
     active_count = InstallToken.objects.filter(workspace=workspace, is_active=True).count()
     if active_count >= MAX_INSTALL_TOKENS:
         return Response(
@@ -458,11 +524,6 @@ def redirect_domain_list_create(request):
 
     # Check limit (redirect domains count toward the same domain limit)
     active_plan = workspace.active_plan
-    if not active_plan:
-        return Response(
-            {'errors': [{'field': 'domain', 'detail': 'Subscribe to a plan before adding redirect domains.'}]},
-            status=status.HTTP_403_FORBIDDEN,
-        )
     current_count = DomainRegistry.objects.filter(workspace=workspace, is_active=True).count()
     limit = active_plan.domain_limit
     if current_count >= limit:
@@ -1181,14 +1242,23 @@ def shield_verify(request):
     if check_domain and not DomainRegistry.objects.filter(
         workspace=workspace, domain=check_domain, is_active=True,
     ).exists():
-        # Domain not registered — silently ignore (don't reveal whether domain
-        # is registered to unauthenticated callers).
-        return Response({
-            'verdict': 'allow',
-            'is_bot': False,
-            'reason': 'unregistered-domain',
-            'reason_label': '',
-        })
+        # Auto-verify: check if domain exists but is unverified
+        unverified = DomainRegistry.objects.filter(
+            workspace=workspace, domain=check_domain, verified=False, is_active=True
+        ).first()
+        if unverified:
+            unverified.verified = True
+            unverified.verified_at = timezone.now()
+            unverified.save(update_fields=['verified', 'verified_at'])
+            domain_obj = unverified
+        else:
+            return Response({
+                'verdict': 'allow',
+                'is_bot': False,
+                'reason': 'unregistered-domain',
+                'reason_label': 'Unregistered domain',
+                'bot_action': 'log',
+            })
 
     def _allow(reason=''):
         return Response({

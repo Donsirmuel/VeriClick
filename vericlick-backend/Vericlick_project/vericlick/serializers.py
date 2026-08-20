@@ -76,12 +76,14 @@ class WorkspaceSerializer(serializers.ModelSerializer):
             'created_at', 'plan', 'plan_name',
             'plan_billing_mode', 'plan_expires_at', 'plan_status', 'grace_expires_at',
             'trial_expires_at', 'trial_active', 'domains_used', 'domain_limit',
+            'onboarding_complete', 'onboarding_type',
         ]
         read_only_fields = [
             'id', 'tracker_secret', 'created_at',
             'plan', 'plan_name', 'plan_billing_mode', 'plan_expires_at',
             'plan_status', 'grace_expires_at',
             'trial_expires_at', 'trial_active', 'domains_used', 'domain_limit',
+            'onboarding_complete', 'onboarding_type',
         ]
 
     def get_plan(self, obj):
@@ -103,7 +105,7 @@ class WorkspaceSerializer(serializers.ModelSerializer):
 
     def get_domain_limit(self, obj):
         active = obj.active_plan
-        return active.domain_limit if active else 3
+        return active.domain_limit if active else 0
 
 
 class PlanSerializer(serializers.ModelSerializer):

@@ -1,7 +1,7 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useQuery } from '@tanstack/react-query'
-import { DashboardSquare01Icon, Shield02Icon, ShieldIcon, Settings01Icon, Logout01Icon, HelpCircleIcon, ChevronRightIcon, BlockedIcon, Wallet01Icon, Cancel01Icon, CodeIcon, Globe02Icon, LinkSquare02Icon } from '@hugeicons/core-free-icons'
+import { DashboardSquare01Icon, Shield02Icon, ShieldIcon, Settings01Icon, Logout01Icon, HelpCircleIcon, ChevronRightIcon, BlockedIcon, Wallet01Icon, Cancel01Icon, Globe02Icon, LinkSquare02Icon } from '@hugeicons/core-free-icons'
 import { cn } from '@/lib/utils'
 import { Logo } from '@/components/Logo'
 import { fetchWorkspace } from '@/api/workspace'
@@ -75,13 +75,6 @@ export function Sidebar({ onClose }: { onClose: () => void }) {
           icon={DashboardSquare01Icon} 
           label="Dashboard" 
           active={location.pathname === '/app/dashboard'} 
-          onClick={onClose}
-        />
-        <NavItem 
-          to="/app/install" 
-          icon={CodeIcon} 
-          label="Install" 
-          active={location.pathname === '/app/install'} 
           onClick={onClose}
         />
         <NavItem 

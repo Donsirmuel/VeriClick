@@ -1,16 +1,16 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { Globe02Icon, Delete01Icon, CheckmarkCircle02Icon, Add01Icon, Copy01Icon, Key01Icon } from '@hugeicons/core-free-icons'
+import { Globe02Icon, Delete01Icon, CheckmarkCircle02Icon, Add01Icon, Copy01Icon } from '@hugeicons/core-free-icons'
 import toast from 'react-hot-toast'
 import {
-  fetchDomains, addDomain, deleteDomain, fetchWorkspace,
-  getVerifyChallenge, confirmVerification, recheckDomain,
-  fetchInstallTokens, createInstallToken, revokeInstallToken,
+  fetchDomains, addDomain, deleteDomain, fetchWorkspace, recheckDomain,
 } from '@/api/workspace'
 import type { Domain } from '@/types'
 import { parseApiError } from '@/lib/errors'
 import { DashboardSkeleton } from '@/components/ui/DashboardSkeleton'
+import { Link } from 'react-router-dom'
 
 function HealthBadge({ status }: { status: string }) {
   if (status === 'healthy') return (
@@ -43,26 +43,7 @@ function VerificationBadge({ verified }: { verified: boolean }) {
 }
 
 function VerifyModal({ domain, onClose }: { domain: Domain; onClose: () => void }) {
-  const queryClient = useQueryClient()
-  const [method, setMethod] = useState<'html_meta' | 'dns_txt'>('html_meta')
-  const [verifying, setVerifying] = useState(false)
-  const [result, setResult] = useState<{ verified: boolean; error?: string; detail?: string } | null>(null)
-
-  const { data: challenge } = useQuery({
-    queryKey: ['verify-challenge', domain.id, method],
-    queryFn: () => getVerifyChallenge(domain.id, method),
-  })
-
-  const confirmMutation = useMutation({
-    mutationFn: () => confirmVerification(domain.id),
-    onSuccess: (data) => {
-      setResult(data)
-      if (data.verified) {
-        queryClient.invalidateQueries({ queryKey: ['domains'] })
-      }
-    },
-    onSettled: () => setVerifying(false),
-  })
+  const [method, setMethod] = useState<'dns_txt'>('dns_txt')
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text)
@@ -78,109 +59,36 @@ function VerifyModal({ domain, onClose }: { domain: Domain; onClose: () => void 
             Prove you own this domain so VeriClick can protect it.
           </p>
 
-          <div className="flex gap-2 mb-5">
-            <button
-              onClick={() => { setMethod('html_meta'); setResult(null) }}
-              className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${method === 'html_meta' ? 'bg-black text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
-            >
-              HTML Meta Tag
-            </button>
-            <button
-              onClick={() => { setMethod('dns_txt'); setResult(null) }}
-              className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${method === 'dns_txt' ? 'bg-black text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
-            >
-              DNS TXT Record
-            </button>
-          </div>
-
-          {challenge && (
+          {domain.purpose === 'protection' ? (
             <div className="space-y-4">
-              {method === 'html_meta' ? (
-                <>
-                  <div>
-                    <p className="text-sm font-bold text-slate-900 mb-1">1. Add this tag to your homepage &lt;head&gt;</p>
-                    <div className="relative">
-                      <code className="block bg-slate-900 text-emerald-400 text-xs p-3 rounded-xl break-all pr-10">
-                        {challenge.metaTag}
-                      </code>
-                      <button
-                        onClick={() => copyToClipboard(challenge.metaTag)}
-                        className="absolute top-2 right-2 p-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-white transition-colors"
-                      >
-                        <HugeiconsIcon icon={Copy01Icon} className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                  <p className="text-xs text-muted">
-                    Or use the combined snippet on the <strong>Install</strong> page — it includes both the
-                    verification meta tag and the anti-bot script in one paste.
-                  </p>
-                </>
-              ) : (
-                <>
-                  <div>
-                    <p className="text-sm font-bold text-slate-900 mb-1">1. Add a TXT record to your DNS</p>
-                    <div className="space-y-2">
-                      <div className="relative">
-                        <label className="text-xs text-muted">Name / Host</label>
-                        <code className="block bg-slate-900 text-emerald-400 text-xs p-2 rounded-lg pr-10">
-                          {challenge.dnsName}
-                        </code>
-                        <button
-                          onClick={() => copyToClipboard(challenge.dnsName)}
-                          className="absolute top-6 right-2 p-1 rounded bg-slate-700 hover:bg-slate-600 text-white"
-                        >
-                          <HugeiconsIcon icon={Copy01Icon} className="w-3 h-3" />
-                        </button>
-                      </div>
-                      <div className="relative">
-                        <label className="text-xs text-muted">Value</label>
-                        <code className="block bg-slate-900 text-emerald-400 text-xs p-2 rounded-lg break-all pr-10">
-                          {challenge.dnsValue}
-                        </code>
-                        <button
-                          onClick={() => copyToClipboard(challenge.dnsValue)}
-                          className="absolute top-6 right-2 p-1 rounded bg-slate-700 hover:bg-slate-600 text-white"
-                        >
-                          <HugeiconsIcon icon={Copy01Icon} className="w-3 h-3" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                  <p className="text-xs text-muted">
-                    DNS changes may take up to 48 hours to propagate.
-                  </p>
-                </>
-              )}
-
-              {result && (
-                <div className={`p-3 rounded-xl text-sm ${result.verified ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
-                  {result.verified ? (
-                    <div className="space-y-2">
-                      <span className="font-bold">Domain verified successfully!</span>
-                      <a
-                        href="/app/install"
-                        className="block w-full text-center bg-black hover:bg-neutral-800 text-white py-2.5 rounded-xl text-sm font-bold transition-all"
-                      >
-                        Next: Install Script
-                      </a>
-                    </div>
-                  ) : (
-                    <span>{result.detail || result.error || 'Verification failed.'}</span>
-                  )}
-                </div>
-              )}
-
-              <button
-                onClick={() => {
-                  setVerifying(true)
-                  confirmMutation.mutate()
-                }}
-                disabled={verifying || result?.verified}
-                className="w-full bg-black hover:bg-neutral-800 text-white py-3 rounded-xl text-sm font-bold transition-all disabled:opacity-50"
+              <div className="bg-slate-50 border border-neutral-200 rounded-xl p-4">
+                <p className="text-sm text-slate-700 leading-relaxed">
+                  Your domain will be verified automatically when the script first loads on your site.
+                  Just paste the VeriClick script in your &lt;head&gt; and you're done.
+                </p>
+              </div>
+              <Link
+                to="/app/install"
+                className="block w-full text-center bg-black hover:bg-neutral-800 text-white py-3 rounded-xl text-sm font-bold transition-all"
               >
-                {verifying ? 'Verifying…' : result?.verified ? 'Verified' : 'Verify Now'}
-              </button>
+                Next: Install Script
+              </Link>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <p className="text-sm font-bold text-slate-900">Add a CNAME record to your DNS</p>
+              <p className="text-xs text-muted">
+                Add the following CNAME record to verify ownership of this redirect domain.
+              </p>
+              <p className="text-xs text-muted">
+                DNS changes may take up to 48 hours to propagate.
+              </p>
+              <Link
+                to="/app/install"
+                className="block w-full text-center bg-black hover:bg-neutral-800 text-white py-3 rounded-xl text-sm font-bold transition-all"
+              >
+                Next: Install Script
+              </Link>
             </div>
           )}
         </div>
@@ -195,144 +103,8 @@ function VerifyModal({ domain, onClose }: { domain: Domain; onClose: () => void 
   )
 }
 
-function InstallTokenSection() {
-  const queryClient = useQueryClient()
-  const [showRawToken, setShowRawToken] = useState<string | null>(null)
-
-  const { data: workspace } = useQuery({
-    queryKey: ['workspace'],
-    queryFn: fetchWorkspace,
-  })
-  const hasPlan = !!workspace?.planName
-
-  const { data: tokens, isLoading } = useQuery({
-    queryKey: ['install-tokens'],
-    queryFn: fetchInstallTokens,
-    retry: false,
-    enabled: hasPlan,
-  })
-
-  const createMutation = useMutation({
-    mutationFn: () => createInstallToken('Primary'),
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['install-tokens'] })
-      setShowRawToken(data.token)
-    },
-    onError: (err) => toast.error(parseApiError(err) || 'Failed to create token'),
-  })
-
-  const revokeMutation = useMutation({
-    mutationFn: revokeInstallToken,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['install-tokens'] })
-      toast.success('Token revoked')
-    },
-    onError: (err) => toast.error(parseApiError(err) || 'Failed to revoke token'),
-  })
-
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text)
-    toast.success('Copied to clipboard')
-  }
-
-  if (isLoading) return null
-
-  if (!hasPlan) {
-    return (
-      <div className="bg-white rounded-2xl border border-neutral-200 p-6 shadow-sm">
-        <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2 mb-2">
-          <HugeiconsIcon icon={Key01Icon} className="w-4 h-4 text-muted" />
-          Install Tokens
-        </h3>
-        <p className="text-xs text-muted">
-          A plan is required to generate install tokens. Choose a plan to get started.
-        </p>
-      </div>
-    )
-  }
-
-  return (
-    <div className="bg-white rounded-2xl border border-neutral-200 p-6 shadow-sm">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-            <HugeiconsIcon icon={Key01Icon} className="w-4 h-4 text-muted" />
-            Install Tokens
-          </h3>
-          <p className="text-xs text-muted mt-0.5">
-            Tokens authenticate your script. The raw value is shown once.
-          </p>
-        </div>
-        <button
-          onClick={() => createMutation.mutate()}
-          disabled={createMutation.isPending}
-          className="bg-black hover:bg-neutral-800 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all disabled:opacity-50"
-        >
-          {createMutation.isPending ? 'Creating…' : 'Generate Token'}
-        </button>
-      </div>
-
-      {showRawToken && (
-        <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-xl">
-          <p className="text-xs font-bold text-amber-700 mb-2">Your new install token (copy it now — it won't be shown again):</p>
-          <div className="relative">
-            <code className="block bg-slate-900 text-emerald-400 text-xs p-3 rounded-lg break-all pr-10">
-              {showRawToken}
-            </code>
-            <button
-              onClick={() => copyToClipboard(showRawToken)}
-              className="absolute top-2 right-2 p-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-white"
-            >
-              <HugeiconsIcon icon={Copy01Icon} className="w-3.5 h-3.5" />
-            </button>
-          </div>
-          <button
-            onClick={() => setShowRawToken(null)}
-            className="mt-2 text-xs font-bold text-amber-700 hover:text-amber-900"
-          >
-            I've copied it
-          </button>
-        </div>
-      )}
-
-      {tokens && tokens.length > 0 ? (
-        <div className="divide-y divide-neutral-100">
-          {tokens.map((t) => (
-            <div key={t.id} className="flex items-center justify-between py-3">
-              <div>
-                <div className="text-sm font-bold text-slate-900">{t.label}</div>
-                <div className="text-xs text-muted font-mono">{t.tokenPrefix}…</div>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className={`text-xs font-bold ${t.isActive ? 'text-emerald-600' : 'text-red-500'}`}>
-                  {t.isActive ? 'Active' : 'Revoked'}
-                </span>
-                {t.isActive && (
-                  <button
-                    onClick={() => {
-                      if (window.confirm('Revoke this token? The script will stop working on your site.')) {
-                        revokeMutation.mutate(t.id)
-                      }
-                    }}
-                    className="text-xs font-bold text-red-500 hover:text-red-700 transition-colors"
-                  >
-                    Revoke
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <p className="text-sm text-muted py-4 text-center">
-          No install tokens yet. Generate one to get started.
-        </p>
-      )}
-    </div>
-  )
-}
-
 export default function Domains() {
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [newDomain, setNewDomain] = useState('')
   const [verifyDomain, setVerifyDomain] = useState<Domain | null>(null)
@@ -386,9 +158,10 @@ export default function Domains() {
   }
 
   const activeDomains = domains?.filter((d) => d.isActive) ?? []
-  const limit = workspace?.domainLimit ?? 3
+  const limit = workspace?.domainLimit ?? 0
   const used = workspace?.domainsUsed ?? 0
-  const canAdd = used < limit
+  const hasPlan = !!workspace?.planName
+  const canAdd = hasPlan && used < limit
 
   if (domainsLoading || workspaceLoading) return <DashboardSkeleton />
 
@@ -459,7 +232,7 @@ export default function Domains() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0 ml-4">
-                  {!d.verified && (
+                  {hasPlan && !d.verified && (
                     <button
                       onClick={() => setVerifyDomain(d)}
                       className="text-xs font-bold text-black bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition-colors"
@@ -467,7 +240,7 @@ export default function Domains() {
                       Verify
                     </button>
                   )}
-                  {d.verified && (
+                  {hasPlan && d.verified && (
                     <button
                       onClick={() => recheckMutation.mutate(d.id)}
                       disabled={recheckMutation.isPending}
@@ -476,17 +249,19 @@ export default function Domains() {
                       Recheck
                     </button>
                   )}
-                  <button
-                    onClick={() => {
-                      if (window.confirm(`Remove ${d.domain}?`)) {
-                        deleteMutation.mutate(d.id)
-                      }
-                    }}
-                    className="text-neutral-400 hover:text-red-500 transition-colors p-1"
-                    title="Remove domain"
-                  >
-                    <HugeiconsIcon icon={Delete01Icon} className="w-4 h-4" />
-                  </button>
+                  {hasPlan && (
+                    <button
+                      onClick={() => {
+                        if (window.confirm(`Remove ${d.domain}?`)) {
+                          deleteMutation.mutate(d.id)
+                        }
+                      }}
+                      className="text-neutral-400 hover:text-red-500 transition-colors p-1"
+                      title="Remove domain"
+                    >
+                      <HugeiconsIcon icon={Delete01Icon} className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -502,8 +277,6 @@ export default function Domains() {
         )}
       </div>
 
-      {workspace && <InstallTokenSection />}
-
       <div className="bg-white rounded-2xl border border-neutral-200 p-6 shadow-sm">
         <h3 className="text-sm font-bold text-slate-900 mb-2 flex items-center gap-2">
           <HugeiconsIcon icon={CheckmarkCircle02Icon} className="w-4 h-4 text-muted" />
@@ -512,19 +285,15 @@ export default function Domains() {
         <ul className="text-sm text-muted space-y-2 leading-relaxed">
           <li className="flex items-start gap-2">
             <span className="text-xs mt-1.5">1.</span>
-            Add your domain, then verify ownership via meta tag or DNS record.
+            Add your domain, then verify ownership.
           </li>
           <li className="flex items-start gap-2">
             <span className="text-xs mt-1.5">2.</span>
-            Generate an install token and paste the VeriClick anti-bot script into your site.
+            Paste the VeriClick anti-bot script into your site's &lt;head&gt;.
           </li>
           <li className="flex items-start gap-2">
             <span className="text-xs mt-1.5">3.</span>
-            Use "Test Installation" on the Install page to confirm the script loads.
-          </li>
-          <li className="flex items-start gap-2">
-            <span className="text-xs mt-1.5">4.</span>
-            Each plan covers 1 domain with 7-day access. Renew manually when ready.
+            Protection activates automatically on the first page load.
           </li>
         </ul>
       </div>

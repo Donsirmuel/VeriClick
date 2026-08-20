@@ -170,8 +170,8 @@ export default function SettingsPage() {
                   : workspace?.planStatus === 'grace'
                     ? `Grace period — your ${workspace?.planName ?? 'plan'} period ended, but everything keeps working until ${formatDate(workspace.graceExpiresAt)}. Renew to keep full access.`
                     : `${workspace?.planName ?? (workspace?.trialActive ? 'Free trial' : 'Free')} — ${
-                         workspace?.planBillingMode === 'subscription' ? 'monthly subscription' :
-                         workspace?.planBillingMode === 'period' ? '30-day period' :
+                         workspace?.planBillingMode === 'subscription' ? 'weekly subscription' :
+                         workspace?.planBillingMode === 'period' ? '7-day period' :
                          workspace?.trialActive ? `trial ends ${formatDate(workspace.trialExpiresAt)}` : 'no active plan'
                        }${workspace?.planBillingMode === 'period' && workspace?.planExpiresAt
                          ? `, renews by ${formatDate(workspace.planExpiresAt)}`

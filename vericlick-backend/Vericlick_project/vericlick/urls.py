@@ -38,6 +38,8 @@ urlpatterns = [
     path('workspace/', views.workspace_detail, name='workspace-detail'),
     path('workspace/billing-history/', views.billing_history, name='billing-history'),
     path('workspace/shield-config/', views.workspace_shield_config, name='workspace-shield-config'),
+    path('workspace/onboarding/', views.workspace_onboarding, name='workspace-onboarding'),
+    path('workspace/snippet/', views.workspace_snippet, name='workspace-snippet'),
     # Domains
     path('domains/', views.domain_list_create, name='domain-list-create'),
     path('domains/<uuid:domain_id>/', views.domain_delete, name='domain-delete'),
@@ -49,7 +51,6 @@ urlpatterns = [
     path('install-tokens/<uuid:token_id>/', views.install_token_revoke, name='install-token-revoke'),
     # Redirect Domains
     path('redirect-domains/', views.redirect_domain_list_create, name='redirect-domain-list-create'),
-    path('redirect-domains/<uuid:domain_id>/verify-cname/', views.redirect_domain_verify_cname, name='redirect-domain-verify-cname'),
     # Redirect Routes
     path('redirect-routes/', views.redirect_route_list_create, name='redirect-route-list-create'),
     path('redirect-routes/<uuid:route_id>/', views.redirect_route_detail, name='redirect-route-detail'),

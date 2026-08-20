@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { Navigate, useNavigate } from 'react-router-dom'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Activity01Icon, Shield02Icon, ShieldIcon, CheckmarkCircle02Icon, CodeIcon, Globe02Icon } from '@hugeicons/core-free-icons'
 import toast from 'react-hot-toast'
@@ -18,6 +19,7 @@ import type { TimeRange } from '@/types'
 const SHIELD_TOAST_KEY = 'vericlick-first-bot-blocked-toast'
 
 export default function DashboardPage() {
+  const navigate = useNavigate()
   const [range, setRange] = useState<TimeRange>('7d')
   const [selectedDomain, setSelectedDomain] = useState('')
 
@@ -80,6 +82,10 @@ export default function DashboardPage() {
       { duration: 7000, id: 'first-bot-blocked' },
     )
   }, [activity])
+
+  if (workspace && !workspace.onboardingComplete) {
+    return <Navigate to="/app/onboarding" replace />
+  }
 
   const canManageRules = !workspace
     ? false
@@ -146,7 +152,7 @@ export default function DashboardPage() {
             <div className="flex-1">
               <span className="font-bold text-sm text-slate-900">3. Install the script</span>
               <p className="text-xs text-muted mt-0.5 leading-relaxed">
-                Copy the combined snippet (verification + anti-bot) and paste it into your site.
+                Copy the snippet and paste it into your site's &lt;head&gt;.
               </p>
             </div>
           </a>
@@ -220,6 +226,25 @@ export default function DashboardPage() {
           color="primary"
         />
       </div>
+
+      {workspace?.onboardingType === 'shield' && (
+        <div className="bg-white rounded-2xl border border-neutral-200 p-6 mb-6">
+          <h3 className="text-sm font-bold text-slate-900 mb-1">Also protect your ad links</h3>
+          <p className="text-xs text-muted mb-3">Set up smart redirects to filter bot traffic from your campaigns.</p>
+          <button onClick={() => navigate('/app/redirects')} className="text-xs font-bold text-slate-900 underline">
+            Set up redirects →
+          </button>
+        </div>
+      )}
+      {workspace?.onboardingType === 'redirect' && (
+        <div className="bg-white rounded-2xl border border-neutral-200 p-6 mb-6">
+          <h3 className="text-sm font-bold text-slate-900 mb-1">Also protect your website</h3>
+          <p className="text-xs text-muted mb-3">Add anti-bot protection to your main website with a single script.</p>
+          <button onClick={() => navigate('/app/install')} className="text-xs font-bold text-slate-900 underline">
+            Get your script →
+          </button>
+        </div>
+      )}
 
       <div className="grid lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">

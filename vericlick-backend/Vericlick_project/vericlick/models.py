@@ -70,6 +70,13 @@ class Workspace(models.Model):
             'treated as having no active plan until it pays again.'
         ),
     )
+    onboarding_complete = models.BooleanField(default=False)
+    onboarding_type = models.CharField(
+        max_length=20,
+        choices=[('shield', 'Site Shield'), ('redirect', 'Smart Redirect')],
+        null=True,
+        blank=True,
+    )
 
     class Meta:
         ordering = ['-created_at']
@@ -749,7 +756,7 @@ class Plan(models.Model):
         max_digits=8, decimal_places=2, help_text='One-time price in USD (1-week access).',
     )
     domain_limit = models.PositiveIntegerField(
-        default=1,
+        default=5,
         help_text='How many domains a workspace on this plan may register.',
     )
     features = models.JSONField(default=list, blank=True, help_text='Extra bullet points shown on the pricing page.')

@@ -3,14 +3,12 @@ import { Sidebar } from './Sidebar'
 import { TopBar } from './TopBar'
 import { useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ProductTour, hasCompletedTour } from '@/components/ProductTour'
 import { fetchWorkspace } from '@/api/workspace'
 
 const SWIPE_THRESHOLD = 80
 
 export default function DashboardLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [tourDone, setTourDone] = useState(hasCompletedTour())
   const token = localStorage.getItem('token')
   const touchStart = useRef<{ x: number; y: number; at: number } | null>(null)
 
@@ -20,10 +18,12 @@ export default function DashboardLayout() {
     enabled: !!token,
   })
 
-  const showTour = !tourDone && workspace?.planStatus === 'none'
-
   if (!token) {
     return <Navigate to="/auth/login" replace />
+  }
+
+  if (workspace && !workspace.onboardingComplete) {
+    return <Navigate to="/app/onboarding" replace />
   }
 
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -48,8 +48,6 @@ export default function DashboardLayout() {
 
   return (
     <div className="min-h-screen bg-background flex" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
-      {showTour && <ProductTour onComplete={() => setTourDone(true)} />}
-
       {sidebarOpen && (
         <div
           className="fixed inset-0 bg-black/50 z-40 lg:hidden"
