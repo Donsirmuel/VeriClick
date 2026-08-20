@@ -49,7 +49,12 @@ function ScriptBadge({ installed }: { installed: boolean }) {
   ) : null
 }
 
-function VerifyModal({ domain, onClose }: { domain: Domain; onClose: () => void }) {
+function VerifyModal({ domain, onClose, onCheck, isChecking }: {
+  domain: Domain
+  onClose: () => void
+  onCheck: () => void
+  isChecking: boolean
+}) {
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl border border-neutral-200 shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
@@ -67,6 +72,13 @@ function VerifyModal({ domain, onClose }: { domain: Domain; onClose: () => void 
                   Just paste the VeriClick script in your &lt;head&gt; and you're done.
                 </p>
               </div>
+              <button
+                onClick={onCheck}
+                disabled={isChecking}
+                className="block w-full bg-black hover:bg-neutral-800 text-white py-3 rounded-xl text-sm font-bold transition-all disabled:opacity-50"
+              >
+                {isChecking ? 'Checking…' : 'Check installed script'}
+              </button>
               <Link
                 to="/app/shield"
                 className="block w-full text-center bg-black hover:bg-neutral-800 text-white py-3 rounded-xl text-sm font-bold transition-all"
@@ -151,7 +163,17 @@ export default function Domains() {
   const installationMutation = useMutation({
     mutationFn: testInstallation,
     onSuccess: (result) => {
+      queryClient.setQueryData<Domain[]>(['domains'], (current) => current?.map((domain) => (
+        domain.id === installationMutation.variables
+          ? {
+              ...domain,
+              scriptInstalled: result.installed,
+              verified: result.verified ?? (result.installed ? true : domain.verified),
+            }
+          : domain
+      )))
       queryClient.invalidateQueries({ queryKey: ['domains'] })
+      setVerifyDomain(null)
       if (result.installed) {
         toast.success('VeriClick script found on the website')
       } else {
@@ -254,7 +276,7 @@ export default function Domains() {
                       {installationMutation.isPending ? 'Checking…' : d.scriptInstalled ? 'Check' : 'Verify script'}
                     </button>
                   )}
-                  {!d.verified && (
+                  {!d.verified && d.purpose !== 'protection' && (
                     <button
                       onClick={() => setVerifyDomain(d)}
                       className="text-xs font-bold text-black bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition-colors"
@@ -319,7 +341,12 @@ export default function Domains() {
       </div>
 
       {verifyDomain && (
-        <VerifyModal domain={verifyDomain} onClose={() => setVerifyDomain(null)} />
+        <VerifyModal
+          domain={verifyDomain}
+          onClose={() => setVerifyDomain(null)}
+          onCheck={() => installationMutation.mutate(verifyDomain.id)}
+          isChecking={installationMutation.isPending}
+        />
       )}
     </div>
   )

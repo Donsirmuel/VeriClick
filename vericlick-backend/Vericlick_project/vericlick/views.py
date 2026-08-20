@@ -2445,6 +2445,7 @@ def test_installation(request):
             ))
 
             installed = has_script or has_init
+            domain_obj.script_installed = installed
             if installed and domain_obj.purpose == 'protection' and not domain_obj.verified:
                 domain_obj.verified = True
                 domain_obj.verified_at = timezone.now()
