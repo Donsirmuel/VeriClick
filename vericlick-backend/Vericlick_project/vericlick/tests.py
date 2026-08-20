@@ -2692,6 +2692,8 @@ class TestInstallationTests(APITestCase):
         }, format='json')
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         self.assertTrue(res.json()['installed'])
+        self.domain.refresh_from_db()
+        self.assertTrue(self.domain.script_installed)
 
     @patch('urllib.request.urlopen')
     def test_not_installed(self, mock_urlopen):
@@ -2703,6 +2705,8 @@ class TestInstallationTests(APITestCase):
         }, format='json')
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         self.assertFalse(res.json()['installed'])
+        self.domain.refresh_from_db()
+        self.assertFalse(self.domain.script_installed)
 
     def test_requires_auth(self):
         self.client.force_authenticate(user=None)

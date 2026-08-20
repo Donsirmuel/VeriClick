@@ -41,6 +41,14 @@ function VerificationBadge({ verified }: { verified: boolean }) {
   )
 }
 
+function ScriptBadge({ installed }: { installed: boolean }) {
+  return installed ? (
+    <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+      <HugeiconsIcon icon={CheckmarkCircle02Icon} className="w-3 h-3" /> Script installed
+    </span>
+  ) : null
+}
+
 function VerifyModal({ domain, onClose }: { domain: Domain; onClose: () => void }) {
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
@@ -143,6 +151,7 @@ export default function Domains() {
   const installationMutation = useMutation({
     mutationFn: testInstallation,
     onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['domains'] })
       if (result.installed) {
         toast.success('VeriClick script found on the website')
       } else {
@@ -223,25 +232,26 @@ export default function Domains() {
         {activeDomains.length > 0 ? (
           <div className="divide-y divide-neutral-100">
             {activeDomains.map((d) => (
-              <div key={d.id} className="flex items-center justify-between px-6 py-4 hover:bg-neutral-50/50 transition-colors">
-                <div className="flex items-center gap-3 min-w-0">
+              <div key={d.id} className="flex flex-col gap-3 px-4 sm:px-6 py-4 hover:bg-neutral-50/50 transition-colors sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-start gap-3 min-w-0">
                   <HugeiconsIcon icon={Globe02Icon} className="w-5 h-5 text-muted shrink-0" />
                   <div className="min-w-0">
                     <div className="text-sm font-bold text-slate-900 truncate">{d.domain}</div>
-                    <div className="flex items-center gap-2 mt-0.5">
+                    <div className="flex flex-wrap items-center gap-2 mt-0.5">
                       <VerificationBadge verified={d.verified} />
                       <HealthBadge status={d.healthStatus} />
+                      <ScriptBadge installed={d.scriptInstalled} />
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0 ml-4">
+                <div className="flex flex-wrap items-center justify-end gap-2 sm:ml-4">
                   {d.purpose === 'protection' && (
                     <button
                       onClick={() => installationMutation.mutate(d.id)}
                       disabled={installationMutation.isPending}
                       className="text-xs font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
                     >
-                      {installationMutation.isPending ? 'Checking…' : 'Verify script'}
+                      {installationMutation.isPending ? 'Checking…' : d.scriptInstalled ? 'Check' : 'Verify script'}
                     </button>
                   )}
                   {!d.verified && (

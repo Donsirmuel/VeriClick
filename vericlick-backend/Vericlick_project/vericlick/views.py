@@ -2417,6 +2417,8 @@ def test_installation(request):
         )
         with urllib.request.urlopen(req, timeout=15) as resp:
             if resp.status != 200:
+                domain_obj.script_installed = False
+                domain_obj.save(update_fields=['script_installed'])
                 return Response({
                     'installed': False,
                     'error': f'HTTP {resp.status} received from {domain_obj.domain}',
@@ -2435,13 +2437,19 @@ def test_installation(request):
                 html, re.IGNORECASE,
             ))
 
+            installed = has_script or has_init
+            domain_obj.script_installed = installed
+            domain_obj.save(update_fields=['script_installed'])
+
             return Response({
-                'installed': has_script or has_init,
+                'installed': installed,
                 'has_script_tag': has_script,
                 'has_init_call': has_init,
                 'domain': domain_obj.domain,
             })
     except (urllib.error.URLError, OSError, ValueError) as exc:
+        domain_obj.script_installed = False
+        domain_obj.save(update_fields=['script_installed'])
         return Response({
             'installed': False,
             'error': f'Could not reach {domain_obj.domain}: {exc}',

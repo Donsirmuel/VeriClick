@@ -64,6 +64,7 @@ export interface Domain {
   verifiedAt: string | null
   healthStatus: 'healthy' | 'unhealthy' | 'unknown'
   lastHealthCheck: string | null
+  scriptInstalled: boolean
   isActive: boolean
   createdAt: string
 }

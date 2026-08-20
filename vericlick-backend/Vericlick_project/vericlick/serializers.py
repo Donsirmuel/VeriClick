@@ -267,12 +267,12 @@ class DomainRegistrySerializer(serializers.ModelSerializer):
         model = DomainRegistry
         fields = [
             'id', 'domain', 'purpose', 'verification_method', 'verified',
-            'verified_at', 'health_status', 'last_health_check',
+            'verified_at', 'health_status', 'last_health_check', 'script_installed',
             'is_active', 'created_at',
         ]
         read_only_fields = [
             'id', 'verification_method', 'verified', 'verified_at',
-            'health_status', 'last_health_check', 'is_active', 'created_at',
+            'health_status', 'last_health_check', 'script_installed', 'is_active', 'created_at',
         ]
 
     def validate_domain(self, value):

@@ -471,6 +471,7 @@ class DomainRegistry(models.Model):
     health_status = models.CharField(
         max_length=10, choices=HealthStatus.choices, default=HealthStatus.UNKNOWN,
     )
+    script_installed = models.BooleanField(default=False)
 
     # Soft delete
     is_active = models.BooleanField(
