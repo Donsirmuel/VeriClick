@@ -7,8 +7,6 @@
 {
     on_demand_tls {
         ask https://vericlick.site/api/edge/validate-domain/
-        interval 1m
-        burst 10
     }
 }
 

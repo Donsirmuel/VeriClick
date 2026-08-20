@@ -32,6 +32,8 @@ services:
       - "80:80"
       - "443:443"
       - "443:443/udp"
+    environment:
+      EDGE_HOSTNAME: ${EDGE_HOSTNAME:-edge.vericlick.cc}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
