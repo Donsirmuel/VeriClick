@@ -79,6 +79,8 @@ urlpatterns = [
     path('edge/events/', views.edge_events_batch, name='edge-events-batch'),
     path('edge/credentials/', views.edge_credential_list_create, name='edge-credential-list-create'),
     path('edge/credentials/<uuid:credential_id>/', views.edge_credential_revoke, name='edge-credential-revoke'),
+    # Redirect domain CNAME verification
+    path('redirect-domains/<uuid:domain_id>/verify-cname/', views.redirect_domain_verify_cname, name='redirect-domain-verify-cname'),
     # Test installation
     path('test-installation/', views.test_installation, name='test-installation'),
     # CRUD

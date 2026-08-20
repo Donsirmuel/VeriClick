@@ -1,8 +1,7 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { Globe02Icon, Delete01Icon, CheckmarkCircle02Icon, Add01Icon, Copy01Icon } from '@hugeicons/core-free-icons'
+import { Globe02Icon, Delete01Icon, CheckmarkCircle02Icon, Add01Icon } from '@hugeicons/core-free-icons'
 import toast from 'react-hot-toast'
 import {
   fetchDomains, addDomain, deleteDomain, fetchWorkspace, recheckDomain,
@@ -43,13 +42,6 @@ function VerificationBadge({ verified }: { verified: boolean }) {
 }
 
 function VerifyModal({ domain, onClose }: { domain: Domain; onClose: () => void }) {
-  const [method, setMethod] = useState<'dns_txt'>('dns_txt')
-
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text)
-    toast.success('Copied to clipboard')
-  }
-
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl border border-neutral-200 shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
@@ -104,7 +96,6 @@ function VerifyModal({ domain, onClose }: { domain: Domain; onClose: () => void 
 }
 
 export default function Domains() {
-  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [newDomain, setNewDomain] = useState('')
   const [verifyDomain, setVerifyDomain] = useState<Domain | null>(null)

@@ -141,7 +141,7 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
 
   const cnameVerifyMutation = useMutation({
     mutationFn: () => verifyRedirectDomainCname(domainId),
-    onSuccess: (data) => {
+    onSuccess: (data: { cname_ok: boolean; target: string | null; detail: string }) => {
       setCnameResult(data)
       if (data.cname_ok) {
         toast.success('CNAME verified!')
