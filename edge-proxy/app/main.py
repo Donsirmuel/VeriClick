@@ -31,8 +31,9 @@ class StripServerHeadersMiddleware(BaseHTTPMiddleware):
     """Remove Server and X-Powered-By headers from all responses."""
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
-        response.headers.pop("server", None)
-        response.headers.pop("x-powered-by", None)
+        for h in ("server", "x-powered-by"):
+            if h in response.headers:
+                del response.headers[h]
         return response
 
 
