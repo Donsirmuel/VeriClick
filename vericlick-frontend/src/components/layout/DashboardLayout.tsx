@@ -35,10 +35,6 @@ export default function DashboardLayout() {
     )
   }
 
-  if (workspace && !workspace.onboardingComplete && location.pathname !== '/app/onboarding') {
-    return <Navigate to="/app/onboarding" replace />
-  }
-
   const handleTouchStart = (e: React.TouchEvent) => {
     const t = e.touches[0]
     touchStart.current = { x: t.clientX, y: t.clientY, at: Date.now() }

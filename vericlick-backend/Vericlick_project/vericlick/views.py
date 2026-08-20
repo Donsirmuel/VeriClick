@@ -114,7 +114,7 @@ def workspace_shield_config(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def workspace_onboarding(request):
-    """Complete the onboarding wizard. Creates domain and marks workspace as onboarded."""
+    """Complete the onboarding wizard. Marks workspace as onboarded and optionally registers the first domain."""
     workspace = Workspace.objects.get(owner=request.user)
     onboarding_type = request.data.get('type')  # 'shield' or 'redirect'
     domain_name = request.data.get('domain', '').strip().lower()
@@ -124,35 +124,39 @@ def workspace_onboarding(request):
     if not domain_name:
         return Response({'errors': [{'field': 'domain', 'detail': 'Domain is required'}]}, status=400)
 
-    # Check plan (require plan for onboarding)
-    if not workspace.has_plan_access():
-        return Response({'errors': [{'field': 'detail', 'detail': 'Subscribe to a plan before onboarding'}]}, status=403)
-
-    # Check domain limit
-    active_plan = workspace.active_plan
-    current_count = workspace.domains.filter(is_active=True).count()
-    if current_count >= active_plan.domain_limit:
-        return Response({'errors': [{'field': 'domain', 'detail': f'Domain limit reached ({active_plan.domain_limit})'}]}, status=400)
-
-    # Check domain not already taken
-    if DomainRegistry.objects.filter(domain=domain_name, is_active=True).exists():
-        return Response({'errors': [{'field': 'domain', 'detail': 'This domain is already registered'}]}, status=400)
-
-    # Create domain
-    purpose = 'protection' if onboarding_type == 'shield' else 'redirect'
-    domain = DomainRegistry.objects.create(
-        workspace=workspace,
-        domain=domain_name,
-        purpose=purpose,
-    )
-
-    # Mark onboarding complete
-    workspace.onboarding_complete = True
+    # Mark onboarding complete regardless of plan
     workspace.onboarding_type = onboarding_type
+
+    # If user has a plan, also register the domain
+    if workspace.has_plan_access():
+        active_plan = workspace.active_plan
+        current_count = workspace.domains.filter(is_active=True).count()
+        if current_count >= active_plan.domain_limit:
+            workspace.save(update_fields=['onboarding_type'])
+            return Response({'errors': [{'field': 'domain', 'detail': f'Domain limit reached ({active_plan.domain_limit})'}]}, status=400)
+
+        if DomainRegistry.objects.filter(domain=domain_name, is_active=True).exists():
+            workspace.save(update_fields=['onboarding_type'])
+            return Response({'errors': [{'field': 'domain', 'detail': 'This domain is already registered'}]}, status=400)
+
+        purpose = 'protection' if onboarding_type == 'shield' else 'redirect'
+        domain = DomainRegistry.objects.create(
+            workspace=workspace,
+            domain=domain_name,
+            purpose=purpose,
+        )
+        workspace.onboarding_complete = True
+        workspace.save(update_fields=['onboarding_complete', 'onboarding_type'])
+        return Response({
+            'domain': {'id': str(domain.id), 'domain': domain.domain, 'purpose': domain.purpose},
+            'workspace': WorkspaceSerializer(workspace).data,
+        })
+
+    # No plan — just mark onboarding as complete so user can browse the app
+    workspace.onboarding_complete = True
     workspace.save(update_fields=['onboarding_complete', 'onboarding_type'])
 
     return Response({
-        'domain': {'id': str(domain.id), 'domain': domain.domain, 'purpose': domain.purpose},
         'workspace': WorkspaceSerializer(workspace).data,
     })
 
