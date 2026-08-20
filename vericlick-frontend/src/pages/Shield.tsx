@@ -76,10 +76,12 @@ export default function ShieldPage() {
   const [botAction, setBotAction] = useState<BotAction>('block')
   const [safeDestination, setSafeDestination] = useState('')
 
+  const selectedDomain = domains?.find((d) => d.id === selectedDomainId)
+
   const { data: snippetData, isLoading: snippetLoading } = useQuery({
-    queryKey: ['snippet', selectedDomainId],
-    queryFn: () => fetchSnippet(selectedDomainId),
-    enabled: !!selectedDomainId,
+    queryKey: ['snippet', selectedDomain?.domain],
+    queryFn: () => fetchSnippet(selectedDomain!.domain),
+    enabled: !!selectedDomain,
   })
 
   useEffect(() => {
@@ -156,10 +158,10 @@ export default function ShieldPage() {
               onChange={(e) => setSelectedDomainId(e.target.value)}
               className="w-full bg-slate-50 border border-neutral-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-black transition-colors"
             >
-              <option value="">Choose a verified domain…</option>
+              <option value="">Choose a domain…</option>
               {domains?.map((d) => (
-                <option key={d.id} value={d.id} disabled={!d.verified}>
-                  {d.domain} {!d.verified ? '(unverified)' : ''}
+                <option key={d.id} value={d.id}>
+                  {d.domain} {!d.verified ? ' (unverified)' : ''}
                 </option>
               ))}
             </select>

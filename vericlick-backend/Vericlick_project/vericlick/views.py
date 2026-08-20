@@ -178,8 +178,13 @@ def workspace_snippet(request):
     api_key = str(workspace.tracker_secret)
     api_base = request.build_absolute_uri('/api/').rstrip('/')
 
+    if not domain.verification_token:
+        domain.generate_verification_token()
+    verification_token = domain.verification_token
+
     snippet = (
-        f'<!-- VeriClick — anti-bot protection -->\n'
+        f'<!-- VeriClick — anti-bot protection + domain verification -->\n'
+        f'<meta name="vericlick-verification" content="{verification_token}">\n'
         f'<script src="{api_base}/shield.js" data-api-key="{api_key}" defer></script>'
     )
 
