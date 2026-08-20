@@ -52,8 +52,6 @@ export default function ShieldPage() {
       return data
     },
   })
-  const hasPlan = !!workspace?.planName
-
   const [protectionMode, setProtectionMode] = useState<ProtectionMode>('balanced')
   const [botAction, setBotAction] = useState<BotAction>('block')
   const [safeDestination, setSafeDestination] = useState('')
@@ -175,7 +173,7 @@ export default function ShieldPage() {
           )}
           <button
             onClick={handleSave}
-            disabled={!isDirty || saveMutation.isPending || !hasPlan}
+            disabled={!isDirty || saveMutation.isPending}
             className="bg-black hover:bg-neutral-800 text-white px-6 py-2.5 rounded-xl text-sm font-bold transition-all disabled:opacity-50"
           >
             {saveMutation.isPending ? 'Saving…' : 'Save'}

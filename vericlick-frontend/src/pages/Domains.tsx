@@ -223,7 +223,7 @@ export default function Domains() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0 ml-4">
-                  {hasPlan && !d.verified && (
+                  {!d.verified && (
                     <button
                       onClick={() => setVerifyDomain(d)}
                       className="text-xs font-bold text-black bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition-colors"
@@ -231,7 +231,7 @@ export default function Domains() {
                       Verify
                     </button>
                   )}
-                  {hasPlan && d.verified && (
+                  {d.verified && (
                     <button
                       onClick={() => recheckMutation.mutate(d.id)}
                       disabled={recheckMutation.isPending}
@@ -240,19 +240,17 @@ export default function Domains() {
                       Recheck
                     </button>
                   )}
-                  {hasPlan && (
-                    <button
-                      onClick={() => {
-                        if (window.confirm(`Remove ${d.domain}?`)) {
-                          deleteMutation.mutate(d.id)
-                        }
-                      }}
-                      className="text-neutral-400 hover:text-red-500 transition-colors p-1"
-                      title="Remove domain"
-                    >
-                      <HugeiconsIcon icon={Delete01Icon} className="w-4 h-4" />
-                    </button>
-                  )}
+                  <button
+                    onClick={() => {
+                      if (window.confirm(`Remove ${d.domain}?`)) {
+                        deleteMutation.mutate(d.id)
+                      }
+                    }}
+                    className="text-neutral-400 hover:text-red-500 transition-colors p-1"
+                    title="Remove domain"
+                  >
+                    <HugeiconsIcon icon={Delete01Icon} className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
             ))}

@@ -1,17 +1,20 @@
-import { Outlet, Navigate, useLocation } from 'react-router-dom'
+import { Outlet, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { TopBar } from './TopBar'
 import { useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchWorkspace } from '@/api/workspace'
+import { ProductTour, hasCompletedTour } from '@/components/ProductTour'
 
 const SWIPE_THRESHOLD = 80
 
 export default function DashboardLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [tourDone, setTourDone] = useState(() => hasCompletedTour())
   const token = localStorage.getItem('token')
   const touchStart = useRef<{ x: number; y: number; at: number } | null>(null)
   const location = useLocation()
+  const navigate = useNavigate()
 
   const { data: workspace } = useQuery({
     queryKey: ['workspace'],
@@ -21,6 +24,15 @@ export default function DashboardLayout() {
 
   if (!token) {
     return <Navigate to="/auth/login" replace />
+  }
+
+  if (workspace && !workspace.onboardingComplete && !tourDone && location.pathname !== '/app/onboarding') {
+    return (
+      <ProductTour onComplete={() => {
+        setTourDone(true)
+        navigate('/app/onboarding')
+      }} />
+    )
   }
 
   if (workspace && !workspace.onboardingComplete && location.pathname !== '/app/onboarding') {

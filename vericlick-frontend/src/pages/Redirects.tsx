@@ -23,12 +23,11 @@ function daysUntil(dateStr: string | null): number {
   return Math.max(0, Math.ceil((new Date(dateStr).getTime() - Date.now()) / 86400000))
 }
 
-function RouteCard({ route, onRenew, onDeactivate, onDelete, hasPlan }: {
+function RouteCard({ route, onRenew, onDeactivate, onDelete }: {
   route: RedirectRoute
   onRenew: () => void
   onDeactivate: () => void
   onDelete: () => void
-  hasPlan: boolean
 }) {
   const days = daysUntil(route.expiresAt)
   const isExpired = route.expiresAt && new Date(route.expiresAt) < new Date()
@@ -67,22 +66,19 @@ function RouteCard({ route, onRenew, onDeactivate, onDelete, hasPlan }: {
       <div className="flex items-center gap-2">
         <button
           onClick={onRenew}
-          disabled={!hasPlan}
-          className="bg-black hover:bg-neutral-800 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          className="bg-black hover:bg-neutral-800 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all"
         >
           Renew 7 Days
         </button>
         <button
           onClick={onDeactivate}
-          disabled={!hasPlan}
-          className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-xs font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-xs font-bold transition-colors"
         >
           Deactivate
         </button>
         <button
           onClick={onDelete}
-          disabled={!hasPlan}
-          className="text-neutral-400 hover:text-red-500 transition-colors p-2 ml-auto disabled:opacity-50 disabled:cursor-not-allowed"
+          className="text-neutral-400 hover:text-red-500 transition-colors p-2 ml-auto"
           title="Delete"
         >
           <HugeiconsIcon icon={Delete01Icon} className="w-4 h-4" />
@@ -506,9 +502,10 @@ export default function RedirectsPage() {
         <button
           onClick={() => hasPlan ? setShowWizard(true) : navigate('/app/billing')}
           className="bg-black hover:bg-neutral-800 text-white px-5 py-3 rounded-xl text-sm font-bold flex items-center gap-2 transition-all"
+          title={hasPlan ? 'Create a new redirect' : 'Choose a plan to get started'}
         >
           <HugeiconsIcon icon={Add01Icon} className="w-4 h-4" />
-          Create Redirect
+          {hasPlan ? 'Create Redirect' : 'Choose a plan'}
         </button>
       </div>
 
@@ -518,7 +515,6 @@ export default function RedirectsPage() {
             <RouteCard
               key={route.id}
               route={route}
-              hasPlan={hasPlan}
               onRenew={() => renewMutation.mutate(route.id)}
               onDeactivate={() => {
                 if (window.confirm('Deactivate this redirect?')) deactivateMutation.mutate(route.id)
@@ -540,7 +536,7 @@ export default function RedirectsPage() {
             onClick={() => hasPlan ? setShowWizard(true) : navigate('/app/billing')}
             className="bg-black hover:bg-neutral-800 text-white px-5 py-3 rounded-xl text-sm font-bold transition-all"
           >
-            Create your first redirect
+            {hasPlan ? 'Create your first redirect' : 'Choose a plan'}
           </button>
         </div>
       )}

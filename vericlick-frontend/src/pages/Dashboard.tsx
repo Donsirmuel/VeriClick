@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Navigate, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Activity01Icon, Shield02Icon, ShieldIcon, CheckmarkCircle02Icon, CodeIcon, Globe02Icon } from '@hugeicons/core-free-icons'
 import toast from 'react-hot-toast'
@@ -82,10 +82,6 @@ export default function DashboardPage() {
       { duration: 7000, id: 'first-bot-blocked' },
     )
   }, [activity])
-
-  if (workspace && !workspace.onboardingComplete) {
-    return <Navigate to="/app/onboarding" replace />
-  }
 
   const canManageRules = !workspace
     ? false

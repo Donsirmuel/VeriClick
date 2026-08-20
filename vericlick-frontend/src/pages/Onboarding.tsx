@@ -29,6 +29,7 @@ export default function Onboarding() {
   const [snippetData, setSnippetData] = useState<{ snippet: string; apiKey: string; apiBase: string } | null>(null)
   const [protectionMode, setProtectionMode] = useState<ProtectionMode>('balanced')
   const [completed, setCompleted] = useState(false)
+  const [planNotice, setPlanNotice] = useState(false)
 
   const onboardingMutation = useMutation({
     mutationFn: ({ type, domain }: { type: OnboardingType; domain: string }) => completeOnboarding(type, domain),
@@ -46,11 +47,10 @@ export default function Onboarding() {
     onError: (err: unknown) => {
       const status = (err as { response?: { status?: number } })?.response?.status
       if (status === 403) {
-        toast.error('You need a plan first — redirecting to billing…')
-        navigate('/app/billing')
+        setPlanNotice(true)
         return
       }
-      toast.error(parseApiError(err) || 'Failed to complete setup')
+      toast.error(parseApiError(err) || 'Something went wrong. Please try again.')
     },
   })
 
@@ -229,6 +229,19 @@ export default function Onboarding() {
               </div>
               {snippetMutation.isError && (
                 <p className="text-xs text-red-500">Failed to fetch snippet. Try again.</p>
+              )}
+              {planNotice && (
+                <div className="mt-3 p-4 bg-blue-50 border border-blue-200 rounded-xl">
+                  <p className="text-sm text-blue-700 mb-3">
+                    A plan is required to register domains. Pick a plan to get started — it only takes a minute.
+                  </p>
+                  <button
+                    onClick={() => navigate('/app/billing')}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors"
+                  >
+                    Choose a Plan
+                  </button>
+                </div>
               )}
             </div>
           )}
