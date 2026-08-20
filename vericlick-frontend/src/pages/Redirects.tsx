@@ -133,6 +133,7 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
         toast.error(data.detail || 'Verification failed')
       }
     },
+    onError: (err) => toast.error(parseApiError(err) || 'Verification failed'),
   })
 
   const cnameVerifyMutation = useMutation({
@@ -165,6 +166,12 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
   })
 
   const selectedDomain = redirectDomains?.find((d) => d.id === domainId)
+  const canLeaveStep1 = !!destinationUrl && (botAction !== 'redirect' || !!fallbackUrl)
+
+  // CNAME host: apex domains use "@", subdomains use the leftmost label.
+  const cnameHost = selectedDomain
+    ? (selectedDomain.domain.split('.').length > 2 ? selectedDomain.domain.split('.')[0] : '@')
+    : ''
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text)
@@ -254,8 +261,8 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
                 </div>
               </div>
               <button
-                onClick={() => destinationUrl && setStep(2)}
-                disabled={!destinationUrl}
+                onClick={() => canLeaveStep1 && setStep(2)}
+                disabled={!canLeaveStep1}
                 className="w-full bg-black hover:bg-neutral-800 text-white py-3 rounded-xl text-sm font-bold transition-all disabled:opacity-50"
               >
                 Continue
@@ -268,6 +275,13 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
               <p className="text-sm text-muted">
                 This is the domain visitors will access. It must be a domain you own.
               </p>
+
+              {redirectDomains && redirectDomains.length === 0 && (
+                <div className="p-3 bg-slate-50 border border-neutral-200 rounded-xl text-xs text-muted">
+                  You don't have any redirect domains yet. Redirect domains are separate from the
+                  protected domains on your Domains page — add one below to get started.
+                </div>
+              )}
 
               {redirectDomains && redirectDomains.length > 0 && (
                 <div>
@@ -361,7 +375,7 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
               )}
 
               <div className="flex gap-2">
-                <button onClick={() => setStep(3)} className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-3 rounded-xl text-sm font-bold transition-colors">
+                <button onClick={() => setStep(1)} className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-3 rounded-xl text-sm font-bold transition-colors">
                   Back
                 </button>
                 <button
@@ -390,7 +404,7 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
                   Add a CNAME record in your DNS settings for <strong>{selectedDomain?.domain}</strong>:
                 </p>
                 <div className="bg-slate-900 text-emerald-400 text-xs font-mono p-3 rounded-lg space-y-1">
-                  <div><span className="text-muted">Host:</span> {selectedDomain?.domain?.split('.')[0]}</div>
+                  <div><span className="text-muted">Host:</span> {cnameHost}</div>
                   <div><span className="text-muted">Value:</span> edge.vericlick.cc</div>
                   <div><span className="text-muted">TTL:</span> 300 (or Auto)</div>
                 </div>
@@ -415,14 +429,15 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
                 </button>
                 <button
                   onClick={() => cnameVerifyMutation.mutate()}
-                  disabled={cnameVerifyMutation.isPending}
+                  disabled={!selectedDomain || cnameVerifyMutation.isPending}
                   className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-3 rounded-xl text-sm font-bold transition-colors disabled:opacity-50"
                 >
                   {cnameVerifyMutation.isPending ? 'Checking…' : 'Verify CNAME'}
                 </button>
                 <button
                   onClick={() => setStep(4)}
-                  className="flex-1 bg-black hover:bg-neutral-800 text-white py-3 rounded-xl text-sm font-bold transition-all"
+                  disabled={!selectedDomain?.verified}
+                  className="flex-1 bg-black hover:bg-neutral-800 text-white py-3 rounded-xl text-sm font-bold transition-all disabled:opacity-50"
                 >
                   Continue
                 </button>
@@ -440,7 +455,7 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
                 <div className="flex justify-between"><span className="text-muted">Valid for</span><span className="font-bold">7 days</span></div>
               </div>
               <div className="flex gap-2">
-                <button onClick={() => setStep(2)} className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-3 rounded-xl text-sm font-bold transition-colors">
+                <button onClick={() => setStep(3)} className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-3 rounded-xl text-sm font-bold transition-colors">
                   Back
                 </button>
                 <button

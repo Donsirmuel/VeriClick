@@ -273,7 +273,9 @@ export default function Domains() {
                       disabled={installationMutation.isPending}
                       className="text-xs font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
                     >
-                      {installationMutation.isPending ? 'Checking…' : d.scriptInstalled ? 'Check' : 'Verify script'}
+                      {installationMutation.isPending && installationMutation.variables === d.id
+                        ? 'Checking…'
+                        : d.scriptInstalled ? 'Recheck script' : 'Verify script'}
                     </button>
                   )}
                   {!d.verified && d.purpose !== 'protection' && (
@@ -289,8 +291,11 @@ export default function Domains() {
                       onClick={() => recheckMutation.mutate(d.id)}
                       disabled={recheckMutation.isPending}
                       className="text-xs font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                      title="Re-run the uptime/health probe for this domain"
                     >
-                      Recheck
+                      {recheckMutation.isPending && recheckMutation.variables === d.id
+                        ? 'Checking…'
+                        : 'Check health'}
                     </button>
                   )}
                   <button
