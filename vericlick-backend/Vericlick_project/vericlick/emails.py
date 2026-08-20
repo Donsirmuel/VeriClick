@@ -163,7 +163,7 @@ def send_payment_admin_notification(workspace, plan, user, charge_id=''):
 <table style="width:100%;color:#d4d4d4;font-size:14px;line-height:1.8;margin:16px 0;">
   <tr><td style="color:#525252;width:120px;">Workspace</td><td style="color:#ffffff;font-weight:bold;">{workspace.name}</td></tr>
   <tr><td style="color:#525252;">Account</td><td style="color:#ffffff;">{user.email} ({user.username})</td></tr>
-  <tr><td style="color:#525252;">Plan</td><td style="color:#ffffff;">{plan.name} — ${plan.monthly_price}/month</td></tr>
+  <tr><td style="color:#525252;">Plan</td><td style="color:#ffffff;">{plan.name} — ${plan.price_for(workspace.plan_billing_period)}/{workspace.plan_billing_period.replace('ly', '')}</td></tr>
   <tr><td style="color:#525252;">Charge</td><td style="color:#ffffff;">{charge_id or 'n/a'}</td></tr>
 </table>
 <p style="color:#525252;font-size:13px;margin-bottom:0;">
@@ -185,7 +185,7 @@ def send_payment_receipt_email(user, workspace, plan, charge_id='', occurred_at=
     # first purchase (that gets its own "welcome to the plan" email instead).
     from django.utils import timezone
     subject = f'VeriClick receipt: {plan.name}'
-    charged_line = _amount_line(plan.monthly_price)
+    charged_line = _amount_line(plan.price_for(workspace.plan_billing_period))
     when = (occurred_at or timezone.now()).strftime('%d %b %Y')
     body = f"""
 <p style="color:#a3a3a3;font-size:15px;">Hi {user.first_name or user.username},</p>

@@ -1,5 +1,5 @@
 export type TimeRange = '7d' | '30d' | '90d'
-export type BillingMode = 'subscription' | 'period'
+export type BillingMode = 'period'
 export type PaymentMethod = 'card' | 'crypto' | 'bank_transfer' | 'mobile_money'
 export type CountryRuleAction = 'allow' | 'deny'
 export type BotAction = 'safe' | 'not_found' | 'block'
@@ -44,6 +44,7 @@ export interface Workspace {
   plan: string | null
   planName: string | null
   planBillingMode: BillingMode | null
+  planBillingPeriod: BillingPeriod | null
   planExpiresAt: string | null
   planStatus: 'active' | 'grace' | 'suspended' | 'none' | null
   graceExpiresAt: string | null
@@ -105,10 +106,16 @@ export interface RedirectDomain {
   createdAt: string
 }
 
+/** How long one purchase buys: weekly = 7 days, monthly = 30 days. */
+export type BillingPeriod = 'weekly' | 'monthly'
+
 export interface Plan {
   code: string
   name: string
+  weeklyPrice: number
   monthlyPrice: number
+  /** Monthly needs its own Bachs product; false means this tier is weekly-only. */
+  monthlyAvailable: boolean
   domainLimit: number
   features: string[]
   sortOrder: number

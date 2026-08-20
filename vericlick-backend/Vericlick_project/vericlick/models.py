@@ -56,6 +56,11 @@ class Workspace(models.Model):
             'destination. Allow rules still always win.'
         ),
     )
+    plan_billing_period = models.CharField(
+        max_length=16, choices=[('weekly', 'Weekly (7 days)'), ('monthly', 'Monthly (30 days)')],
+        default='weekly',
+        help_text='Cadence of the last purchase — sets how long each period runs.',
+    )
     plan_billing_mode = models.CharField(
         max_length=16, choices=BillingMode.choices, default=BillingMode.PERIOD,
         help_text=(
@@ -148,16 +153,23 @@ class Workspace(models.Model):
         return self.plan if self.has_plan_access() else None
 
     @property
+    def period_days(self):
+        # How long one paid period runs for this workspace, from the cadence it
+        # last bought. Falls back to the legacy 30-day period.
+        return BILLING_PERIOD_DAYS.get(self.plan_billing_period, PLAN_PERIOD_DAYS)
+
+    @property
     def current_period_start(self):
-        # The date the current counting period began. Paid workspaces advance a
-        # 30-day period (lazily, from when the plan was assigned). Workspaces
+        # The date the current counting period began. Paid workspaces advance one
+        # period at a time (lazily, from when the plan was assigned). Workspaces
         # with no plan return None (no active period). Soft-deleted domains/links
         # stop counting once their removal predates this boundary.
         if self.has_plan_access():
+            span = timedelta(days=self.period_days)
             base = self.plan_started_at or now()
             period = base
-            while period + timedelta(days=PLAN_PERIOD_DAYS) <= now():
-                period += timedelta(days=PLAN_PERIOD_DAYS)
+            while period + span <= now():
+                period += span
             return period
         return None
 
@@ -370,8 +382,12 @@ class TrackerEvent(models.Model):
 
 
 FREE_TRIAL_DAYS = 7
+# Legacy default for workspaces bought before weekly/monthly existed.
 PLAN_PERIOD_DAYS = 30
 PLAN_GRACE_DAYS = 7
+
+# How much access one purchase buys, per billing period.
+BILLING_PERIOD_DAYS = {'weekly': 7, 'monthly': 30}
 
 
 class ShieldConfig(models.Model):
@@ -749,13 +765,24 @@ class SiteConfig(models.Model):
 
 
 class Plan(models.Model):
-    # Paid tiers shown on the pricing page. Plans differ by domain count.
-    # Basic=1 domain $30, Plus=1 domain $50, Pro=1 domain $100.
-    # All plans: 1-week access, one-time payment, manual renewal, crypto only.
+    # Paid tiers shown on the pricing page. Plans differ by domain count only —
+    # the feature set is identical across tiers and across billing periods.
+    # Weekly: Basic $30, Plus $50, Pro $100 (7 days access).
+    # Monthly: Basic $100, Plus $150, Pro $200 (30 days access).
+    # All plans: one-time payment, manual renewal, crypto only.
+
+    class BillingPeriod(models.TextChoices):
+        WEEKLY = 'weekly', 'Weekly (7 days)'
+        MONTHLY = 'monthly', 'Monthly (30 days)'
+
     code = models.SlugField(max_length=50, unique=True, help_text='e.g. basic, plus, pro')
     name = models.CharField(max_length=100, help_text='Display name, e.g. Basic')
+    weekly_price = models.DecimalField(
+        max_digits=8, decimal_places=2, help_text='One-time price in USD for 7 days of access.',
+    )
     monthly_price = models.DecimalField(
-        max_digits=8, decimal_places=2, help_text='One-time price in USD (1-week access).',
+        max_digits=8, decimal_places=2, default=0,
+        help_text='One-time price in USD for 30 days of access.',
     )
     domain_limit = models.PositiveIntegerField(
         default=5,
@@ -789,6 +816,15 @@ class Plan(models.Model):
             'Leave blank to fall back to bachs_product_id.'
         ),
     )
+    bachs_monthly_product_id = models.CharField(
+        max_length=64, blank=True, default='',
+        help_text=(
+            'The Bachs ONE-TIME product ID (prod_...) sold when a customer buys '
+            'a MONTHLY period of this plan. Bachs holds the price, so weekly and '
+            'monthly need separate products. Leave blank to disable monthly for '
+            'this plan.'
+        ),
+    )
     is_active = models.BooleanField(default=True, help_text='Inactive plans are hidden from the pricing endpoint.')
     sort_order = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -797,7 +833,24 @@ class Plan(models.Model):
         ordering = ['sort_order', 'code']
 
     def __str__(self):
-        return f'{self.name} (${self.monthly_price}/week)'
+        return f'{self.name} (${self.weekly_price}/week, ${self.monthly_price}/month)'
+
+    def price_for(self, period):
+        """Price for a billing period, defaulting to weekly for unknown values."""
+        if period == self.BillingPeriod.MONTHLY:
+            return self.monthly_price
+        return self.weekly_price
+
+    def bachs_product_for(self, period):
+        """The Bachs product that sells this plan for the given period.
+
+        Bachs stores the price on the product, so each period needs its own
+        one-time product. Weekly falls back to the recurring product id for
+        plans configured before one-time products existed.
+        """
+        if period == self.BillingPeriod.MONTHLY:
+            return self.bachs_monthly_product_id
+        return self.bachs_ot_product_id or self.bachs_product_id
 
 
 class CheckoutIntent(models.Model):
@@ -828,6 +881,11 @@ class CheckoutIntent(models.Model):
     billing_mode = models.CharField(
         max_length=16, choices=BillingMode.choices, default=BillingMode.PERIOD,
         help_text='One-time period payment (crypto), renewed manually.',
+    )
+    billing_period = models.CharField(
+        max_length=16, choices=Plan.BillingPeriod.choices,
+        default=Plan.BillingPeriod.WEEKLY,
+        help_text='Length of access this purchase buys: weekly (7d) or monthly (30d).',
     )
     payment_method = models.CharField(
         max_length=24, blank=True, default='',

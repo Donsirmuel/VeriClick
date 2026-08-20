@@ -7,7 +7,10 @@ import toast from 'react-hot-toast'
 import { PublicNav } from '@/components/PublicNav'
 import { PublicFooter } from '@/components/PublicFooter'
 import { fetchPricing, validateDiscountCode } from '@/api/pricing'
-import type { Plan } from '@/types'
+import {
+  BillingPeriodToggle, bestMonthlySavings, monthlySavings, periodLabel, priceFor, PERIOD_DAYS,
+} from '@/components/shared/BillingPeriodToggle'
+import type { BillingPeriod, Plan } from '@/types'
 
 const COMMON_FEATURES = [
   'Unlimited page protection',
@@ -25,7 +28,13 @@ const HIGHLIGHTS = [
   { icon: Chart03Icon, title: 'Live dashboard', desc: 'Traffic chart, activity feed, site health, and a blocked-IP review queue — all explained in plain language.' },
 ]
 
-function PlanCard({ plan, popular }: { plan: Plan; popular?: boolean }) {
+function PlanCard({ plan, popular, period }: { plan: Plan; popular?: boolean; period: BillingPeriod }) {
+  const price = priceFor(plan, period)
+  const saving = monthlySavings(plan)
+  // What the same 30 days would cost bought week by week — the anchor that
+  // makes the monthly price legible as a saving.
+  const weeklyEquivalent = Math.round(plan.weeklyPrice * (PERIOD_DAYS.monthly / PERIOD_DAYS.weekly))
+
   return (
     <div
       className={`relative flex flex-col bg-neutral-950 border rounded-3xl p-6 sm:p-8 ${
@@ -40,10 +49,18 @@ function PlanCard({ plan, popular }: { plan: Plan; popular?: boolean }) {
       <div className="flex items-center gap-2 mb-4">
         <h3 className="text-xl font-bold">{plan.name}</h3>
       </div>
-      <div className="text-4xl font-bold mb-1">
-        ${plan.monthlyPrice}
-        <span className="text-base text-neutral-500 font-normal">/week</span>
+      <div className="flex flex-wrap items-baseline gap-x-2 mb-1">
+        <span className="text-4xl font-bold">${price}</span>
+        <span className="text-base text-neutral-500 font-normal">/{periodLabel(period)}</span>
+        {period === 'monthly' && saving > 0 && (
+          <span className="text-sm text-neutral-500 line-through">${weeklyEquivalent}</span>
+        )}
       </div>
+      <p className="text-xs text-neutral-500 mb-1 min-h-[1rem]">
+        {period === 'monthly' && saving > 0
+          ? `Save ${saving}% vs paying weekly`
+          : 'One-time payment, renew when you choose'}
+      </p>
       <div className="grid grid-cols-2 gap-2 mb-6">
         <div className="rounded-xl bg-neutral-800/50 border border-neutral-700/60 px-4 py-3">
           <div className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 mb-1">Domains</div>
@@ -133,6 +150,7 @@ export default function Pricing() {
   const { data: pricing, isLoading, isError, refetch } = useQuery({ queryKey: ['pricing'], queryFn: fetchPricing })
   const plans = pricing?.plans ?? []
 
+  const [period, setPeriod] = useState<BillingPeriod>('weekly')
   const [discountCode, setDiscountCode] = useState('')
   const [checking, setChecking] = useState(false)
   const [applied, setApplied] = useState<{ code: string; percent: number } | null>(null)
@@ -172,7 +190,8 @@ export default function Pricing() {
             Simple plans.<br />Clear pricing.
           </h1>
           <p className="text-lg text-neutral-400 max-w-2xl mx-auto mb-4 leading-relaxed">
-            Pick the plan that fits your needs — 1-week access, pay once with crypto, renew manually.
+            Pick the plan that fits your needs. Pay once with crypto for a week or a
+            month of access, then renew whenever you choose.
           </p>
         </div>
       </section>
@@ -195,17 +214,26 @@ export default function Pricing() {
           {!isLoading && !isError && (
           <>
             <LimitsBand plans={plans} />
+            <div className="flex justify-center mb-8">
+              <BillingPeriodToggle
+                value={period}
+                onChange={setPeriod}
+                savings={bestMonthlySavings(plans)}
+                tone="dark"
+              />
+            </div>
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {plans.map((plan) => (
-                <PlanCard key={plan.code} plan={plan} popular={plan.code === 'plus'} />
+                <PlanCard key={plan.code} plan={plan} popular={plan.code === 'plus'} period={period} />
               ))}
             </div>
           </>
           )}
 
           <p className="text-center text-sm text-neutral-500 mt-8">
-            Every plan includes 1 domain, unlimited protected pages, and 1-week access.
-            Pay once with crypto, renew manually when you're ready.
+            Every plan includes unlimited protected pages and the same full feature set —
+            tiers differ only by how many domains you can protect. Pay once with crypto for
+            {period === 'monthly' ? ' 30 days' : ' 7 days'} of access, renew when you're ready.
           </p>
         </div>
       </section>

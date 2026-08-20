@@ -81,7 +81,7 @@ class WorkspaceAdmin(admin.ModelAdmin):
                     kind=kind,
                     plan=ws_plan,
                     plan_name=ws_plan.name,
-                    amount=amount if amount is not None else ws_plan.monthly_price,
+                    amount=amount if amount is not None else ws_plan.price_for(ws.plan_billing_period),
                     currency=currency,
                     charge_id=charge_id,
                     checkout_id='',
@@ -89,14 +89,12 @@ class WorkspaceAdmin(admin.ModelAdmin):
                     occurred_at=now,
                 )
                 if activate:
+                    # Subscriptions were removed, so every activation extends a
+                    # one-time period by the workspace's own cadence.
                     ws.plan = ws_plan
-                    if kind == BillingEvent.Kind.PLAN_PERIOD_PAID:
-                        ws.plan_billing_mode = Workspace.BillingMode.PERIOD
-                        base = ws.plan_expires_at or now
-                        ws.plan_expires_at = base + timedelta(days=PLAN_PERIOD_DAYS)
-                    else:
-                        ws.plan_billing_mode = Workspace.BillingMode.SUBSCRIPTION
-                        ws.plan_expires_at = None
+                    ws.plan_billing_mode = Workspace.BillingMode.PERIOD
+                    base = ws.plan_expires_at or now
+                    ws.plan_expires_at = base + timedelta(days=ws.period_days)
                     ws.save()
                 recorded += 1
 
@@ -165,10 +163,10 @@ class TrackerEventAdmin(admin.ModelAdmin):
 
 @admin.register(Plan)
 class PlanAdmin(admin.ModelAdmin):
-    list_display = ('code', 'name', 'monthly_price', 'bachs_product_id', 'bachs_ot_product_id', 'features_preview', 'is_active', 'sort_order')
+    list_display = ('code', 'name', 'weekly_price', 'monthly_price', 'bachs_ot_product_id', 'bachs_monthly_product_id', 'features_preview', 'is_active', 'sort_order')
     list_filter = ('is_active',)
     search_fields = ('code', 'name', 'bachs_product_id', 'bachs_ot_product_id', 'bachs_payment_link')
-    list_editable = ('monthly_price', 'bachs_product_id', 'bachs_ot_product_id', 'is_active', 'sort_order')
+    list_editable = ('weekly_price', 'monthly_price', 'bachs_ot_product_id', 'bachs_monthly_product_id', 'is_active', 'sort_order')
 
     @admin.display(description='Features')
     def features_preview(self, obj):

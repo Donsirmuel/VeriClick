@@ -8,38 +8,25 @@ import { fetchPricing } from '@/api/pricing'
 import { fetchWorkspace, fetchBillingHistory, startCheckout } from '@/api/workspace'
 import { parseApiError } from '@/lib/errors'
 import { formatDate, formatCurrency } from '@/lib/utils'
-import type { BillingMode, Plan } from '@/types'
-
-function ModeToggle({ value, onChange }: { value: BillingMode; onChange: (m: BillingMode) => void }) {
-  return (
-    <div className="inline-flex rounded-xl border border-neutral-200 bg-neutral-50 p-1">
-      <button
-        type="button"
-        onClick={() => onChange('period')}
-        className={`px-4 py-2 rounded-lg text-xs font-bold transition-colors ${
-          value === 'period' ? 'bg-white text-slate-900 shadow-sm' : 'text-muted hover:text-slate-700'
-        }`}
-      >
-        One-time 7 days
-      </button>
-    </div>
-  )
-}
+import {
+  BillingPeriodToggle, bestMonthlySavings, monthlySavings, periodLabel, priceFor, PERIOD_DAYS,
+} from '@/components/shared/BillingPeriodToggle'
+import type { BillingPeriod, Plan } from '@/types'
 
 export default function Billing() {
   const queryClient = useQueryClient()
   const [justPaid, setJustPaid] = useState(false)
-  const [billingMode, setBillingMode] = useState<BillingMode>('period')
+  const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('weekly')
 
   const { data: pricing } = useQuery({ queryKey: ['pricing'], queryFn: fetchPricing })
   const { data: workspace } = useQuery({ queryKey: ['workspace'], queryFn: fetchWorkspace })
   const { data: history } = useQuery({ queryKey: ['billing-history'], queryFn: fetchBillingHistory })
 
   const checkoutMutation = useMutation({
-    mutationFn: ({ planCode, billingMode }: {
+    mutationFn: ({ planCode, billingPeriod }: {
       planCode: string
-      billingMode: BillingMode
-    }) => startCheckout(planCode, billingMode, ['crypto']),
+      billingPeriod: BillingPeriod
+    }) => startCheckout(planCode, billingPeriod, ['crypto']),
     onSuccess: (session) => {
       toast.success('Opening secure checkout…')
       window.location.href = session.checkoutUrl
@@ -67,12 +54,8 @@ export default function Billing() {
 
   const isCurrent = (code: string) => current === code
 
-  const handleModeChange = (mode: BillingMode) => {
-    setBillingMode(mode)
-  }
-
   const beginCheckout = (planCode: string) => {
-    checkoutMutation.mutate({ planCode, billingMode })
+    checkoutMutation.mutate({ planCode, billingPeriod })
   }
 
   return (
@@ -196,14 +179,32 @@ export default function Billing() {
 
       {/* Plans */}
       <div>
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-          <h2 className="text-lg font-bold text-slate-900">Choose your plan</h2>
-          <ModeToggle value={billingMode} onChange={handleModeChange} />
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+          <div>
+            <h2 className="text-lg font-bold text-slate-900">Choose your plan</h2>
+            <p className="text-sm text-muted mt-0.5">
+              Every tier has the same features — pick by how many domains you protect.
+            </p>
+          </div>
+          <BillingPeriodToggle
+            value={billingPeriod}
+            onChange={setBillingPeriod}
+            savings={bestMonthlySavings(plans)}
+            tone="light"
+          />
         </div>
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {plans.map((plan: Plan) => {
             const isCurrentPlan = isCurrent(plan.code)
+            const price = priceFor(plan, billingPeriod)
+            const saving = monthlySavings(plan)
+            const weeklyEquivalent = Math.round(
+              plan.weeklyPrice * (PERIOD_DAYS.monthly / PERIOD_DAYS.weekly),
+            )
+            // Monthly needs its own Bachs product; without one, checkout would
+            // 400. Surface that here instead of failing after the click.
+            const unavailable = billingPeriod === 'monthly' && !plan.monthlyAvailable
             return (
               <div
                 key={plan.code}
@@ -217,10 +218,18 @@ export default function Billing() {
                   </span>
                 )}
                 <h3 className="text-lg font-bold text-slate-900 mb-2">{plan.name}</h3>
-                <div className="text-3xl font-bold text-slate-900 mb-1">
-                  ${plan.monthlyPrice}
-                  <span className="text-sm text-muted font-normal">/week</span>
+                <div className="flex flex-wrap items-baseline gap-x-2 mb-1">
+                  <span className="text-3xl font-bold text-slate-900">${price}</span>
+                  <span className="text-sm text-muted font-normal">/{periodLabel(billingPeriod)}</span>
+                  {billingPeriod === 'monthly' && saving > 0 && (
+                    <span className="text-sm text-muted line-through">${weeklyEquivalent}</span>
+                  )}
                 </div>
+                <p className="text-xs text-muted mb-4">
+                  {billingPeriod === 'monthly'
+                    ? `${PERIOD_DAYS.monthly} days of access${saving > 0 ? ` — save ${saving}%` : ''}`
+                    : `${PERIOD_DAYS.weekly} days of access`}
+                </p>
                 <div className="grid grid-cols-2 gap-2 mb-5">
                   <div className="rounded-xl bg-neutral-50 border border-neutral-200 px-3 py-2.5">
                     <div className="text-[10px] font-bold text-muted uppercase tracking-wider mb-1">Domains</div>
@@ -259,10 +268,14 @@ export default function Billing() {
                 ) : (
                   <button
                     onClick={() => beginCheckout(plan.code)}
-                    disabled={checkoutMutation.isPending}
-                    className="bg-black hover:bg-neutral-800 disabled:bg-neutral-300 text-white px-4 py-3 rounded-xl text-sm font-bold transition-all"
+                    disabled={checkoutMutation.isPending || unavailable}
+                    className="bg-black hover:bg-neutral-800 disabled:bg-neutral-300 disabled:cursor-not-allowed text-white px-4 py-3 rounded-xl text-sm font-bold transition-all"
                   >
-                    {checkoutMutation.isPending ? 'Opening checkout…' : `Choose ${plan.name}`}
+                    {unavailable
+                      ? 'Monthly coming soon'
+                      : checkoutMutation.isPending
+                        ? 'Opening checkout…'
+                        : `Choose ${plan.name}`}
                   </button>
                 )}
               </div>

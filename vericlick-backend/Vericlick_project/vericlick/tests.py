@@ -15,6 +15,7 @@ from rest_framework.test import APITestCase, APIClient
 from rest_framework import status
 from decimal import Decimal
 from .models import (
+    PLAN_GRACE_DAYS,
     Workspace, IPRule, TrackerEvent,
     Plan, DiscountCode, SiteConfig, CheckoutIntent, BillingEvent,
     DomainRegistry, InstallToken, RedirectRoute, EdgeSyncCredential,
@@ -1122,6 +1123,63 @@ class BlockedIPTests(APITestCase):
         self.assertIn(other_ip, ips)
 
 
+class BillingPeriodGrantTests(APITestCase):
+    """A purchase must grant exactly the access it was sold: 7 days weekly,
+    30 days monthly."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='granted', email='g@example.com', password='pw')
+        self.workspace = Workspace.objects.get(owner=self.user)
+        self.plan = Plan.objects.get(code='plus')
+
+    def _pay(self, period):
+        from vericlick.payments import fulfil_paid_checkout
+        intent = CheckoutIntent.objects.create(
+            workspace=self.workspace, plan=self.plan, user=self.user,
+            billing_mode=CheckoutIntent.BillingMode.PERIOD,
+            billing_period=period,
+            checkout_id=f'chk_{period}',
+            status=CheckoutIntent.Status.OPEN,
+        )
+        fulfil_paid_checkout(intent.checkout_id, charge_id=f'ch_{period}')
+        self.workspace.refresh_from_db()
+        return intent
+
+    def _granted_days(self):
+        from django.utils import timezone
+        delta = self.workspace.plan_expires_at - timezone.now()
+        # Round to shed the sub-second drift between grant and assertion.
+        return round(delta.total_seconds() / 86400)
+
+    def test_weekly_grants_seven_days(self):
+        self._pay('weekly')
+        self.assertEqual(self._granted_days(), 7)
+        self.assertEqual(self.workspace.plan_billing_period, 'weekly')
+        self.assertEqual(self.workspace.plan, self.plan)
+
+    def test_monthly_grants_thirty_days(self):
+        self._pay('monthly')
+        self.assertEqual(self._granted_days(), 30)
+        self.assertEqual(self.workspace.plan_billing_period, 'monthly')
+
+    def test_ledger_records_the_price_for_that_period(self):
+        self._pay('monthly')
+        event = BillingEvent.objects.filter(workspace=self.workspace).latest('occurred_at')
+        self.assertEqual(event.amount, self.plan.monthly_price)
+        self.assertEqual(event.data['billing_period'], 'monthly')
+
+    def test_weekly_ledger_uses_the_weekly_price(self):
+        self._pay('weekly')
+        event = BillingEvent.objects.filter(workspace=self.workspace).latest('occurred_at')
+        self.assertEqual(event.amount, self.plan.weekly_price)
+
+    def test_period_days_follows_the_purchase(self):
+        self._pay('weekly')
+        self.assertEqual(self.workspace.period_days, 7)
+        self.workspace.plan_billing_period = 'monthly'
+        self.assertEqual(self.workspace.period_days, 30)
+
+
 class PricingEndpointTests(APITestCase):
     def test_pricing_returns_seeded_plans(self):
         res = self.client.get('/api/pricing/')
@@ -1130,9 +1188,26 @@ class PricingEndpointTests(APITestCase):
         codes = [p['code'] for p in body['plans']]
         self.assertEqual(codes, ['basic', 'plus', 'pro'])
         by_code = {p['code']: p for p in body['plans']}
-        self.assertEqual(by_code['basic']['monthlyPrice'], 25)
-        self.assertEqual(by_code['plus']['monthlyPrice'], 50)
-        self.assertEqual(by_code['pro']['monthlyPrice'], 100)
+        self.assertEqual(by_code['basic']['weeklyPrice'], 25)
+        self.assertEqual(by_code['plus']['weeklyPrice'], 50)
+        self.assertEqual(by_code['pro']['weeklyPrice'], 100)
+
+    def test_pricing_returns_monthly_prices(self):
+        res = self.client.get('/api/pricing/')
+        by_code = {p['code']: p for p in res.json()['plans']}
+        self.assertEqual(by_code['basic']['monthlyPrice'], 100)
+        self.assertEqual(by_code['plus']['monthlyPrice'], 150)
+        self.assertEqual(by_code['pro']['monthlyPrice'], 200)
+
+    def test_monthly_availability_follows_bachs_product(self):
+        res = self.client.get('/api/pricing/')
+        by_code = {p['code']: p for p in res.json()['plans']}
+        # No monthly Bachs product is seeded, so monthly starts unavailable.
+        self.assertFalse(by_code['plus']['monthlyAvailable'])
+        Plan.objects.filter(code='plus').update(bachs_monthly_product_id='prod_m')
+        res = self.client.get('/api/pricing/')
+        by_code = {p['code']: p for p in res.json()['plans']}
+        self.assertTrue(by_code['plus']['monthlyAvailable'])
 
     def test_pricing_hides_inactive_plans(self):
         Plan.objects.filter(code='pro').update(is_active=False)
@@ -1394,7 +1469,8 @@ class PasswordResetEndpointTests(APITestCase):
 class AdminManualPaymentActionTests(TestCase):
     def setUp(self):
         self.plan = Plan.objects.create(
-            code='manual-test-pro', name='Pro', monthly_price='25.00', domain_limit=20, is_active=True,
+            code='manual-test-pro', name='Pro', weekly_price='25.00', monthly_price='90.00',
+            domain_limit=20, is_active=True,
         )
         self.owner = User.objects.create_user(username='owner', email='owner@example.com', password='pw')
         self.ws = Workspace.objects.create(name='Acme', owner=self.owner)
@@ -1572,20 +1648,39 @@ class CheckoutProductSelectionTests(APITestCase):
         self.assertEqual(payload['allowed_payment_method_types'], ['crypto'])
 
     @patch('vericlick.payments._request')
-    def test_subscription_uses_recurring_product_card_only(self, mock_request):
+    def test_monthly_period_uses_the_monthly_product(self, mock_request):
         mock_request.return_value = {
             'checkout_id': 'chk_2', 'checkout_url': 'https://checkout.bachs.io/c/tok2', 'expires_at': 'x',
         }
+        self.plan.bachs_monthly_product_id = 'prod_monthly'
+        self.plan.save()
         from vericlick.payments import create_checkout_session
-        from vericlick.models import CheckoutIntent
+        from vericlick.models import CheckoutIntent, Plan as PlanModel
         intent = CheckoutIntent.objects.create(
             workspace=self.workspace, plan=self.plan, user=self.user,
-            billing_mode=CheckoutIntent.BillingMode.SUBSCRIPTION,
+            billing_mode=CheckoutIntent.BillingMode.PERIOD,
+            billing_period=PlanModel.BillingPeriod.MONTHLY,
         )
         create_checkout_session(intent, self.plan, 'a@b.com', 'a')
         payload = mock_request.call_args.kwargs['payload']
-        self.assertEqual(payload['product_cart'][0]['product_id'], 'prod_recurring')
-        self.assertEqual(payload['allowed_payment_method_types'], ['card'])
+        self.assertEqual(payload['product_cart'][0]['product_id'], 'prod_monthly')
+        self.assertEqual(payload['metadata']['billing_period'], 'monthly')
+
+    @patch('vericlick.payments._request')
+    def test_monthly_without_product_is_rejected(self, mock_request):
+        from vericlick.payments import create_checkout_session, BachsError
+        from vericlick.models import CheckoutIntent, Plan as PlanModel
+        self.plan.bachs_monthly_product_id = ''
+        self.plan.save()
+        intent = CheckoutIntent.objects.create(
+            workspace=self.workspace, plan=self.plan, user=self.user,
+            billing_mode=CheckoutIntent.BillingMode.PERIOD,
+            billing_period=PlanModel.BillingPeriod.MONTHLY,
+        )
+        # Must fail loudly rather than silently charging the weekly price.
+        with self.assertRaises(BachsError):
+            create_checkout_session(intent, self.plan, 'a@b.com', 'a')
+        self.assertFalse(mock_request.called)
 
     @patch('vericlick.payments._request')
     def test_period_falls_back_to_recurring_product_when_no_one_time_set(self, mock_request):
@@ -1959,8 +2054,8 @@ class DomainVerifyChallengeTests(APITestCase):
         body = res.json()
         self.assertEqual(body['method'], 'html_meta')
         self.assertIn('token', body)
-        self.assertIn('meta_tag', body)
-        self.assertIn(body['token'], body['meta_tag'])
+        self.assertIn('metaTag', body)
+        self.assertIn(body['token'], body['metaTag'])
         self.domain.refresh_from_db()
         self.assertEqual(self.domain.verification_token, body['token'])
 
@@ -1969,8 +2064,8 @@ class DomainVerifyChallengeTests(APITestCase):
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         body = res.json()
         self.assertEqual(body['method'], 'dns_txt')
-        self.assertIn('_vericlick-challenge.example.com', body['dns_name'])
-        self.assertIn('vericlick-verify=', body['dns_value'])
+        self.assertIn('_vericlick-challenge.example.com', body['dnsName'])
+        self.assertIn('vericlick-verify=', body['dnsValue'])
 
     def test_challenge_returns_existing_token(self):
         self.domain.generate_verification_token()
@@ -2048,13 +2143,13 @@ class DomainRecheckTests(APITestCase):
         res = self.client.post(f'/api/domains/{self.domain.id}/recheck/')
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         body = res.json()
-        self.assertEqual(body['health_status'], 'healthy')
+        self.assertEqual(body['healthStatus'], 'healthy')
 
     @patch('urllib.request.urlopen', side_effect=OSError('connection refused'))
     def test_unhealthy_domain(self, mock_urlopen):
         res = self.client.post(f'/api/domains/{self.domain.id}/recheck/')
         self.assertEqual(res.status_code, status.HTTP_200_OK)
-        self.assertEqual(res.json()['health_status'], 'unhealthy')
+        self.assertEqual(res.json()['healthStatus'], 'unhealthy')
 
 
 # ---------------------------------------------------------------------------
@@ -2079,7 +2174,7 @@ class InstallTokenTests(APITestCase):
         self.assertTrue(body['token'].startswith('vc_'))
         self.assertEqual(body['label'], 'Test')
         self.assertIn('id', body)
-        self.assertIn('expires_at', body)
+        self.assertIn('expiresAt', body)
 
     def test_token_shown_once(self):
         res = self.client.post('/api/install-tokens/', format='json')
@@ -2267,8 +2362,8 @@ class RedirectRouteTests(APITestCase):
         self.assertEqual(res.status_code, status.HTTP_201_CREATED)
         body = res.json()
         self.assertEqual(body['slug'], 'promo')
-        self.assertEqual(body['destination_url'], 'https://target.example.com')
-        self.assertTrue(body['is_active'])
+        self.assertEqual(body['destinationUrl'], 'https://target.example.com')
+        self.assertTrue(body['isActive'])
 
     def test_create_requires_domain_and_url(self):
         res = self.client.post('/api/redirect-routes/', {}, format='json')
@@ -2306,7 +2401,7 @@ class RedirectRouteTests(APITestCase):
         )
         res = self.client.get(f'/api/redirect-routes/{route.id}/')
         self.assertEqual(res.status_code, status.HTTP_200_OK)
-        self.assertEqual(res.json()['destination_url'], 'https://target.example.com')
+        self.assertEqual(res.json()['destinationUrl'], 'https://target.example.com')
 
     def test_patch_route(self):
         route = RedirectRoute.objects.create(
@@ -2493,8 +2588,8 @@ class EdgeSyncTests(APITestCase):
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         body = res.json()
         self.assertIn('routes', body)
-        self.assertIn('blocked_ips', body)
-        self.assertIn('country_rules', body)
+        self.assertIn('blockedIps', body)
+        self.assertIn('countryRules', body)
         self.assertEqual(len(body['routes']), 1)
         self.assertEqual(body['routes'][0]['domain'], 'go.example.com')
 
@@ -2503,15 +2598,15 @@ class EdgeSyncTests(APITestCase):
             workspace=self.workspace, ip_or_cidr='1.2.3.4', action='deny',
         )
         res = self.client.get('/api/edge/sync/', **self.headers)
-        self.assertIn('1.2.3.4', res.json()['blocked_ips'])
+        self.assertIn('1.2.3.4', res.json()['blockedIps'])
 
     def test_returns_country_rules(self):
         CountryRule.objects.create(
             workspace=self.workspace, country_code='CN', action='deny',
         )
         res = self.client.get('/api/edge/sync/', **self.headers)
-        rules = res.json()['country_rules']
-        self.assertTrue(any(r['country_code'] == 'CN' for r in rules))
+        rules = res.json()['countryRules']
+        self.assertTrue(any(r['countryCode'] == 'CN' for r in rules))
 
     def test_domain_filter(self):
         d1 = DomainRegistry.objects.create(
@@ -2531,7 +2626,7 @@ class EdgeSyncTests(APITestCase):
 
     def test_sync_token_present(self):
         res = self.client.get('/api/edge/sync/', **self.headers)
-        self.assertIn('sync_token', res.json())
+        self.assertIn('syncToken', res.json())
 
 
 # ---------------------------------------------------------------------------
@@ -2708,12 +2803,12 @@ class ShieldConfigInstallTokenTests(APITestCase):
     def test_config_with_api_key(self):
         res = self.client.get(f'/api/shield/config/?api_key={self.workspace.tracker_secret}')
         self.assertEqual(res.status_code, status.HTTP_200_OK)
-        self.assertIn('protection_mode', res.json())
+        self.assertIn('protectionMode', res.json())
 
     def test_config_with_install_token(self):
         res = self.client.get(f'/api/shield/config/?install_token={self.raw_token}')
         self.assertEqual(res.status_code, status.HTTP_200_OK)
-        self.assertIn('protection_mode', res.json())
+        self.assertIn('protectionMode', res.json())
 
     def test_config_invalid_token(self):
         res = self.client.get('/api/shield/config/?install_token=vc_bad')
@@ -2929,8 +3024,12 @@ class ShieldTelemetryTests(APITestCase):
         self.assertEqual(res.json()['status'], 'ok')
 
     def test_telemetry_suspended_workspace_returns_ok(self):
-        self.workspace.plan_status = 'suspended'
-        self.workspace.save(update_fields=['plan_status'])
+        # plan_status is derived: a plan whose period AND grace window have both
+        # lapsed reads as suspended.
+        self.workspace.plan = Plan.objects.get(code='plus')
+        self.workspace.plan_expires_at = timezone.now() - timedelta(days=PLAN_GRACE_DAYS + 1)
+        self.workspace.save(update_fields=['plan', 'plan_expires_at'])
+        self.assertEqual(self.workspace.plan_status, 'suspended')
         res = self.client.post('/api/shield/telemetry/', {
             'api_key': str(self.workspace.tracker_secret),
             'page_url': 'https://example.com/',

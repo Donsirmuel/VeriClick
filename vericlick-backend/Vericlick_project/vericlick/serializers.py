@@ -61,6 +61,7 @@ class WorkspaceSerializer(serializers.ModelSerializer):
     plan = serializers.SerializerMethodField()
     plan_name = serializers.SerializerMethodField()
     plan_billing_mode = serializers.CharField(read_only=True)
+    plan_billing_period = serializers.CharField(read_only=True)
     plan_expires_at = serializers.DateTimeField(read_only=True)
     plan_status = serializers.CharField(read_only=True)
     grace_expires_at = serializers.DateTimeField(read_only=True)
@@ -74,13 +75,13 @@ class WorkspaceSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'tracker_secret', 'safe_destination',
             'created_at', 'plan', 'plan_name',
-            'plan_billing_mode', 'plan_expires_at', 'plan_status', 'grace_expires_at',
+            'plan_billing_mode', 'plan_billing_period', 'plan_expires_at', 'plan_status', 'grace_expires_at',
             'trial_expires_at', 'trial_active', 'domains_used', 'domain_limit',
             'onboarding_complete', 'onboarding_type',
         ]
         read_only_fields = [
             'id', 'tracker_secret', 'created_at',
-            'plan', 'plan_name', 'plan_billing_mode', 'plan_expires_at',
+            'plan', 'plan_name', 'plan_billing_mode', 'plan_billing_period', 'plan_expires_at',
             'plan_status', 'grace_expires_at',
             'trial_expires_at', 'trial_active', 'domains_used', 'domain_limit',
             'onboarding_complete', 'onboarding_type',
@@ -109,11 +110,21 @@ class WorkspaceSerializer(serializers.ModelSerializer):
 
 
 class PlanSerializer(serializers.ModelSerializer):
+    weekly_price = serializers.DecimalField(max_digits=8, decimal_places=2, coerce_to_string=False)
     monthly_price = serializers.DecimalField(max_digits=8, decimal_places=2, coerce_to_string=False)
+    monthly_available = serializers.SerializerMethodField()
 
     class Meta:
         model = Plan
-        fields = ['code', 'name', 'monthly_price', 'domain_limit', 'features', 'sort_order']
+        fields = [
+            'code', 'name', 'weekly_price', 'monthly_price', 'monthly_available',
+            'domain_limit', 'features', 'sort_order',
+        ]
+
+    def get_monthly_available(self, obj):
+        # Monthly needs its own Bachs product; without one the tier is
+        # weekly-only and the UI should say so rather than 400 at checkout.
+        return bool(obj.bachs_monthly_product_id)
 
 
 class DiscountCodeSerializer(serializers.ModelSerializer):

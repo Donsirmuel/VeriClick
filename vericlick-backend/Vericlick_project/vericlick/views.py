@@ -1,5 +1,6 @@
 from datetime import timedelta
 import logging
+import re
 from django.db.models import Count, F, Q
 from django.db.models.functions import TruncDate
 from django.conf import settings
@@ -636,6 +637,52 @@ def redirect_domain_verify_cname(request, domain_id):
 # Redirect Routes
 # ---------------------------------------------------------------------------
 
+# SlugField(max_length=200) with the character set the wizard enforces client-side.
+_SLUG_RE = re.compile(r'^[a-zA-Z0-9_-]*$')
+
+
+def _clean_route_field(field, raw):
+    """Validate one redirect-route field.
+
+    Returns (cleaned_value, error_detail). Shared by create and PATCH so the
+    two paths cannot drift — PATCH previously setattr'd request data straight
+    onto the model, which let an invalid bot_action through and turned a null
+    fallback_url into a 500 on a NOT NULL column.
+    """
+    from .models import RedirectRoute
+
+    if field == 'bot_action':
+        value = (raw or '').strip()
+        if value not in RedirectRoute.BotAction.values:
+            return None, 'Choose a valid bot handling option.'
+        return value, None
+
+    if field == 'slug':
+        value = (raw or '').strip()
+        if len(value) > 200:
+            return None, 'Link path must be 200 characters or fewer.'
+        if not _SLUG_RE.match(value):
+            return None, 'Link path may only contain letters, numbers, hyphens and underscores.'
+        return value, None
+
+    if field in ('destination_url', 'fallback_url'):
+        value = (raw or '').strip()
+        # fallback_url is optional; destination_url is required by the caller.
+        if value:
+            if len(value) > 2048:
+                return None, 'URL is too long.'
+            if not value.startswith(('http://', 'https://')):
+                return None, 'URL must start with http:// or https://.'
+        return value, None
+
+    if field == 'is_active':
+        if isinstance(raw, bool):
+            return raw, None
+        return None, 'is_active must be true or false.'
+
+    return raw, None
+
+
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
 def redirect_route_list_create(request):
@@ -784,9 +831,26 @@ def redirect_route_detail(request, route_id):
     # PATCH
     fields_to_update = []
     for field in ('destination_url', 'bot_action', 'fallback_url', 'slug', 'is_active'):
-        if field in request.data:
-            setattr(route, field, request.data[field])
-            fields_to_update.append(field)
+        if field not in request.data:
+            continue
+        value, error = _clean_route_field(field, request.data[field])
+        if error:
+            return Response(
+                {'errors': [{'field': field, 'detail': error}]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        setattr(route, field, value)
+        fields_to_update.append(field)
+
+    if field_error := (
+        'A destination URL is required.'
+        if 'destination_url' in fields_to_update and not route.destination_url else None
+    ):
+        return Response(
+            {'errors': [{'field': 'destination_url', 'detail': field_error}]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
     if fields_to_update:
         fields_to_update.append('updated_at')
         route.save(update_fields=fields_to_update)
@@ -937,20 +1001,32 @@ def upgrade_workspace(request):
             {'errors': [{'field': 'plan_code', 'detail': 'That plan is not available.'}]},
             status=status.HTTP_400_BAD_REQUEST,
         )
-    billing_mode = (request.data.get('billing_mode') or 'subscription').strip()
+    # Subscriptions were removed; one-time period purchases are the only mode.
+    # Defaulting to the dropped 'subscription' value 400'd every caller that
+    # omitted billing_mode.
+    billing_mode = (request.data.get('billing_mode') or CheckoutIntent.BillingMode.PERIOD).strip()
     if billing_mode not in CheckoutIntent.BillingMode.values:
         return Response(
             {'errors': [{'field': 'billing_mode', 'detail': 'Unknown billing mode.'}]},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    # The right Bachs product depends on the mode: subscriptions sell the
-    # recurring product (card-only); one-time "period" purchases sell the
-    # one-time product so the customer can choose any payment method.
-    product_id = plan.bachs_ot_product_id or plan.bachs_product_id if billing_mode == 'period' else plan.bachs_product_id
+    # Weekly (7 days) or monthly (30 days) of access. Each is a separate Bachs
+    # product because Bachs holds the price on the product.
+    billing_period = (request.data.get('billing_period') or Plan.BillingPeriod.WEEKLY).strip()
+    if billing_period not in Plan.BillingPeriod.values:
+        return Response(
+            {'errors': [{'field': 'billing_period', 'detail': 'Choose either weekly or monthly billing.'}]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    product_id = (
+        plan.bachs_product_for(billing_period)
+        if billing_mode == 'period' else plan.bachs_product_id
+    )
     if not product_id:
         return Response(
-            {'errors': [{'field': 'plan_code', 'detail': f'The {plan.name} plan isn\'t ready to buy yet. Try another plan or contact support.'}]},
+            {'errors': [{'field': 'plan_code', 'detail': f'The {plan.name} plan isn\'t ready to buy on a {billing_period} basis yet. Try the other billing period or contact support.'}]},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
@@ -972,6 +1048,7 @@ def upgrade_workspace(request):
         plan=plan,
         user=request.user,
         billing_mode=billing_mode,
+        billing_period=billing_period,
     )
     try:
         result = create_checkout_session(
