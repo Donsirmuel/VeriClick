@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { ShieldIcon, Shield02Icon, Settings01Icon, CodeIcon, Copy01Icon, CheckmarkCircle02Icon } from '@hugeicons/core-free-icons'
+import { ShieldIcon, Shield02Icon, Settings01Icon, Copy01Icon, CheckmarkCircle02Icon } from '@hugeicons/core-free-icons'
 import toast from 'react-hot-toast'
 import { apiClient } from '@/api/client'
 import { fetchDomains, fetchSnippet } from '@/api/workspace'
