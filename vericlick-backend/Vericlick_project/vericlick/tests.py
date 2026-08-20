@@ -2694,6 +2694,7 @@ class TestInstallationTests(APITestCase):
         self.assertTrue(res.json()['installed'])
         self.domain.refresh_from_db()
         self.assertTrue(self.domain.script_installed)
+        self.assertTrue(self.domain.verified)
 
     @patch('urllib.request.urlopen')
     def test_not_installed(self, mock_urlopen):

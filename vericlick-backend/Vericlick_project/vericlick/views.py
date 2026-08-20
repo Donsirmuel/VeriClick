@@ -1246,28 +1246,35 @@ def shield_verify(request):
     except Exception:
         domain = ''
 
-    # Strip 'www.' prefix for matching
-    check_domain = domain.lower().lstrip('www.') if domain else ''
-    if check_domain and not DomainRegistry.objects.filter(
+    # Strip only a leading 'www.' prefix for matching.
+    check_domain = domain.lower()
+    if check_domain.startswith('www.'):
+        check_domain = check_domain[4:]
+
+    domain_obj = DomainRegistry.objects.filter(
         workspace=workspace, domain=check_domain, is_active=True,
-    ).exists():
-        # Auto-verify: check if domain exists but is unverified
-        unverified = DomainRegistry.objects.filter(
-            workspace=workspace, domain=check_domain, verified=False, is_active=True
-        ).first()
-        if unverified:
-            unverified.verified = True
-            unverified.verified_at = timezone.now()
-            unverified.save(update_fields=['verified', 'verified_at'])
-            domain_obj = unverified
-        else:
-            return Response({
-                'verdict': 'allow',
-                'is_bot': False,
-                'reason': 'unregistered-domain',
-                'reason_label': 'Unregistered domain',
-                'bot_action': 'log',
-            })
+    ).first() if check_domain else None
+    if not domain_obj:
+        return Response({
+            'verdict': 'allow',
+            'is_bot': False,
+            'reason': 'unregistered-domain',
+            'reason_label': 'Unregistered domain',
+            'bot_action': 'log',
+        })
+
+    # Loading the script proves control of the registered protection domain.
+    if domain_obj.purpose == DomainRegistry.Purpose.PROTECTION:
+        update_fields = []
+        if not domain_obj.verified:
+            domain_obj.verified = True
+            domain_obj.verified_at = timezone.now()
+            update_fields.extend(['verified', 'verified_at'])
+        if not domain_obj.script_installed:
+            domain_obj.script_installed = True
+            update_fields.append('script_installed')
+        if update_fields:
+            domain_obj.save(update_fields=update_fields)
 
     def _allow(reason=''):
         return Response({
@@ -2438,11 +2445,16 @@ def test_installation(request):
             ))
 
             installed = has_script or has_init
-            domain_obj.script_installed = installed
-            domain_obj.save(update_fields=['script_installed'])
+            if installed and domain_obj.purpose == 'protection' and not domain_obj.verified:
+                domain_obj.verified = True
+                domain_obj.verified_at = timezone.now()
+                domain_obj.save(update_fields=['script_installed', 'verified', 'verified_at'])
+            else:
+                domain_obj.save(update_fields=['script_installed'])
 
             return Response({
                 'installed': installed,
+                'verified': domain_obj.verified,
                 'has_script_tag': has_script,
                 'has_init_call': has_init,
                 'domain': domain_obj.domain,

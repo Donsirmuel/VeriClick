@@ -172,6 +172,7 @@ export async function renewRedirectRoute(routeId: string): Promise<{ expiresAt: 
 
 export async function testInstallation(domainId: string): Promise<{
   installed: boolean
+  verified?: boolean
   hasScriptTag?: boolean
   hasInitCall?: boolean
   domain?: string
