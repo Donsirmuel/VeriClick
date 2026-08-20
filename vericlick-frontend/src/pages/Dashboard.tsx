@@ -139,7 +139,7 @@ export default function DashboardPage() {
           </a>
 
           <a
-            href="/app/install"
+            href="/app/shield"
             className="w-full flex items-start gap-4 p-4 bg-white border border-neutral-200 rounded-2xl text-left hover:border-neutral-400 hover:shadow-sm transition-all"
           >
             <div className="w-10 h-10 rounded-xl bg-neutral-100 flex items-center justify-center shrink-0">
@@ -236,7 +236,7 @@ export default function DashboardPage() {
         <div className="bg-white rounded-2xl border border-neutral-200 p-6 mb-6">
           <h3 className="text-sm font-bold text-slate-900 mb-1">Also protect your website</h3>
           <p className="text-xs text-muted mb-3">Add anti-bot protection to your main website with a single script.</p>
-          <button onClick={() => navigate('/app/install')} className="text-xs font-bold text-slate-900 underline">
+          <button onClick={() => navigate('/app/shield')} className="text-xs font-bold text-slate-900 underline">
             Get your script →
           </button>
         </div>

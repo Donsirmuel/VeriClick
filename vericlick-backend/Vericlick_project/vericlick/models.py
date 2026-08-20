@@ -573,10 +573,10 @@ class RedirectRoute(models.Model):
     domain = models.OneToOneField(
         DomainRegistry, on_delete=models.CASCADE, related_name='redirect_route',
     )
-    slug = models.SlugField(
-        max_length=100, blank=True, default='',
-        help_text='Short path on the redirect domain. Empty = root.',
-    )
+        slug = models.SlugField(
+            max_length=200, blank=True, default='',
+            help_text='Short path on the redirect domain. Empty = root.',
+        )
     destination_url = models.URLField(max_length=2048)
     bot_action = models.CharField(
         max_length=10, choices=BotAction.choices, default=BotAction.HONEYPOT,

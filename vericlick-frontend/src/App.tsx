@@ -70,6 +70,7 @@ function App() {
             <Route path="onboarding" element={withSuspense(<ErrorBoundary><Onboarding /></ErrorBoundary>)} />
             <Route path="domains" element={withSuspense(<ErrorBoundary><Domains /></ErrorBoundary>)} />
             <Route path="shield" element={withSuspense(<ErrorBoundary><Shield /></ErrorBoundary>)} />
+            <Route path="install" element={<Navigate to="/app/shield" replace />} />
             <Route path="settings" element={withSuspense(<ErrorBoundary><Settings /></ErrorBoundary>)} />
             <Route path="billing" element={withSuspense(<ErrorBoundary><Billing /></ErrorBoundary>)} />
             <Route path="traffic-rules" element={withSuspense(<ErrorBoundary><IpRules /></ErrorBoundary>)} />

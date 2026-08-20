@@ -224,14 +224,34 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
                 </div>
               )}
               <div>
-                <label className="text-sm font-bold text-slate-900 block mb-1">Slug (optional)</label>
+                <label className="text-sm font-bold text-slate-900 block mb-1">Link path (optional)</label>
+                <p className="text-xs text-muted mb-2">
+                  This is the short part after your domain — e.g. <code className="bg-slate-100 px-1 rounded font-mono">yourdomain.com/<strong>{slug || 'sale'}</strong></code>. Leave empty for the root path.
+                </p>
                 <input
                   type="text"
                   value={slug}
-                  onChange={(e) => setSlug(e.target.value)}
-                  placeholder="sale (leave empty for root /)"
-                  className="w-full bg-slate-50 border border-neutral-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-black"
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/[^a-zA-Z0-9_-]/g, '')
+                    if (val.length <= 200) setSlug(val)
+                  }}
+                  placeholder="sale"
+                  className="w-full bg-slate-50 border border-neutral-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-black font-mono"
                 />
+                <div className="flex items-center gap-3 mt-2">
+                  <input
+                    type="range"
+                    min={0}
+                    max={200}
+                    value={slug.length}
+                    onChange={(e) => {
+                      const maxLen = Number(e.target.value)
+                      setSlug((prev) => prev.slice(0, maxLen))
+                    }}
+                    className="flex-1 accent-black h-1.5"
+                  />
+                  <span className="text-xs text-muted font-mono w-14 text-right">{slug.length}/200</span>
+                </div>
               </div>
               <button
                 onClick={() => destinationUrl && setStep(2)}
@@ -414,6 +434,7 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
             <div className="space-y-4">
               <div className="p-4 bg-slate-50 rounded-xl space-y-2 text-sm">
                 <div className="flex justify-between"><span className="text-muted">Domain</span><span className="font-bold">{selectedDomain?.domain}</span></div>
+                {slug && <div className="flex justify-between"><span className="text-muted">Path</span><span className="font-bold font-mono">/{slug}</span></div>}
                 <div className="flex justify-between"><span className="text-muted">Destination</span><span className="font-bold truncate ml-4">{destinationUrl}</span></div>
                 <div className="flex justify-between"><span className="text-muted">Bot handling</span><span className="font-bold capitalize">{botAction}</span></div>
                 <div className="flex justify-between"><span className="text-muted">Valid for</span><span className="font-bold">7 days</span></div>

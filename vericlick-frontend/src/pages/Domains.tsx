@@ -60,7 +60,7 @@ function VerifyModal({ domain, onClose }: { domain: Domain; onClose: () => void 
                 </p>
               </div>
               <Link
-                to="/app/install"
+                to="/app/shield"
                 className="block w-full text-center bg-black hover:bg-neutral-800 text-white py-3 rounded-xl text-sm font-bold transition-all"
               >
                 Next: Install Script
@@ -76,7 +76,7 @@ function VerifyModal({ domain, onClose }: { domain: Domain; onClose: () => void 
                 DNS changes may take up to 48 hours to propagate.
               </p>
               <Link
-                to="/app/install"
+                to="/app/shield"
                 className="block w-full text-center bg-black hover:bg-neutral-800 text-white py-3 rounded-xl text-sm font-bold transition-all"
               >
                 Next: Install Script
