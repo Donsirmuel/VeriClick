@@ -2417,6 +2417,74 @@ class RedirectRouteTests(APITestCase):
         self.assertEqual(route.destination_url, 'https://new.example.com')
         self.assertEqual(route.bot_action, 'block')
 
+    def test_patch_null_fallback_url_is_rejected(self):
+        # Previously setattr'd straight onto a NOT NULL column -> 500.
+        route = RedirectRoute.objects.create(
+            workspace=self.workspace, domain=self.domain,
+            destination_url='https://old.example.com', fallback_url='https://fb.example.com',
+        )
+        res = self.client.patch(f'/api/redirect-routes/{route.id}/', {
+            'fallback_url': None,
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        route.refresh_from_db()
+        self.assertEqual(route.fallback_url, '')
+
+    def test_patch_invalid_bot_action_is_rejected(self):
+        # Previously saved silently, leaving a route the edge cannot interpret.
+        route = RedirectRoute.objects.create(
+            workspace=self.workspace, domain=self.domain,
+            destination_url='https://old.example.com', bot_action='honeypot',
+        )
+        res = self.client.patch(f'/api/redirect-routes/{route.id}/', {
+            'bot_action': 'garbage',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        route.refresh_from_db()
+        self.assertEqual(route.bot_action, 'honeypot')
+
+    def test_patch_invalid_destination_url_is_rejected(self):
+        route = RedirectRoute.objects.create(
+            workspace=self.workspace, domain=self.domain,
+            destination_url='https://old.example.com',
+        )
+        res = self.client.patch(f'/api/redirect-routes/{route.id}/', {
+            'destination_url': 'javascript:alert(1)',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        route.refresh_from_db()
+        self.assertEqual(route.destination_url, 'https://old.example.com')
+
+    def test_patch_invalid_slug_is_rejected(self):
+        route = RedirectRoute.objects.create(
+            workspace=self.workspace, domain=self.domain,
+            destination_url='https://old.example.com', slug='good',
+        )
+        res = self.client.patch(f'/api/redirect-routes/{route.id}/', {
+            'slug': 'bad slug/../etc',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        route.refresh_from_db()
+        self.assertEqual(route.slug, 'good')
+
+    def test_create_route_rejects_invalid_bot_action(self):
+        res = self.client.post('/api/redirect-routes/', {
+            'domain_id': str(self.domain.id),
+            'destination_url': 'https://target.example.com',
+            'bot_action': 'garbage',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_create_route_without_fallback_url_succeeds(self):
+        # The honeypot/block/neutral default path — previously an IntegrityError.
+        res = self.client.post('/api/redirect-routes/', {
+            'domain_id': str(self.domain.id),
+            'destination_url': 'https://target.example.com',
+            'bot_action': 'honeypot',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(RedirectRoute.objects.get(domain=self.domain).fallback_url, '')
+
     def test_delete_route(self):
         route = RedirectRoute.objects.create(
             workspace=self.workspace, domain=self.domain,

@@ -716,13 +716,29 @@ def redirect_route_list_create(request):
             })
         return Response(data)
 
-    # POST — create route
+    # POST — create route. Every field goes through the same validator PATCH
+    # uses, so the two paths cannot accept different things.
     domain_id = request.data.get('domain_id')
-    destination_url = request.data.get('destination_url', '').strip()
-    slug = request.data.get('slug', '').strip()
-    bot_action = request.data.get('bot_action', 'honeypot')
-    # fallback_url is NOT NULL on the model — empty means "no bot fallback".
-    fallback_url = (request.data.get('fallback_url') or '').strip()
+    cleaned = {}
+    for field, raw in (
+        ('destination_url', request.data.get('destination_url')),
+        ('slug', request.data.get('slug')),
+        ('bot_action', request.data.get('bot_action') or 'honeypot'),
+        # fallback_url is NOT NULL on the model — empty means "no bot fallback".
+        ('fallback_url', request.data.get('fallback_url')),
+    ):
+        value, error = _clean_route_field(field, raw)
+        if error:
+            return Response(
+                {'errors': [{'field': field, 'detail': error}]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        cleaned[field] = value
+
+    destination_url = cleaned['destination_url']
+    slug = cleaned['slug']
+    bot_action = cleaned['bot_action']
+    fallback_url = cleaned['fallback_url']
 
     if not domain_id or not destination_url:
         return Response(
