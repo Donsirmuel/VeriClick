@@ -4,7 +4,7 @@ import { HugeiconsIcon } from '@hugeicons/react'
 import { Globe02Icon, Delete01Icon, CheckmarkCircle02Icon, Add01Icon } from '@hugeicons/core-free-icons'
 import toast from 'react-hot-toast'
 import {
-  fetchDomains, addDomain, deleteDomain, fetchWorkspace, recheckDomain,
+  fetchDomains, addDomain, deleteDomain, fetchWorkspace, recheckDomain, testInstallation,
 } from '@/api/workspace'
 import type { Domain } from '@/types'
 import { parseApiError } from '@/lib/errors'
@@ -140,6 +140,18 @@ export default function Domains() {
     onError: (err) => toast.error(parseApiError(err) || 'Health check failed'),
   })
 
+  const installationMutation = useMutation({
+    mutationFn: testInstallation,
+    onSuccess: (result) => {
+      if (result.installed) {
+        toast.success('VeriClick script found on the website')
+      } else {
+        toast.error(result.error || 'VeriClick script was not found on the website')
+      }
+    },
+    onError: (err) => toast.error(parseApiError(err) || 'Script verification failed'),
+  })
+
   const handleAdd = () => {
     if (!newDomain.trim()) {
       toast.error('Enter a domain')
@@ -223,6 +235,15 @@ export default function Domains() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0 ml-4">
+                  {d.purpose === 'protection' && (
+                    <button
+                      onClick={() => installationMutation.mutate(d.id)}
+                      disabled={installationMutation.isPending}
+                      className="text-xs font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                    >
+                      {installationMutation.isPending ? 'Checking…' : 'Verify script'}
+                    </button>
+                  )}
                   {!d.verified && (
                     <button
                       onClick={() => setVerifyDomain(d)}
