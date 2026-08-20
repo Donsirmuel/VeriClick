@@ -1,4 +1,4 @@
-import { Outlet, Navigate } from 'react-router-dom'
+import { Outlet, Navigate, useLocation } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { TopBar } from './TopBar'
 import { useRef, useState } from 'react'
@@ -11,6 +11,7 @@ export default function DashboardLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const token = localStorage.getItem('token')
   const touchStart = useRef<{ x: number; y: number; at: number } | null>(null)
+  const location = useLocation()
 
   const { data: workspace } = useQuery({
     queryKey: ['workspace'],
@@ -22,7 +23,7 @@ export default function DashboardLayout() {
     return <Navigate to="/auth/login" replace />
   }
 
-  if (workspace && !workspace.onboardingComplete) {
+  if (workspace && !workspace.onboardingComplete && location.pathname !== '/app/onboarding') {
     return <Navigate to="/app/onboarding" replace />
   }
 
