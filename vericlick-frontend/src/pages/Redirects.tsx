@@ -23,6 +23,19 @@ function daysUntil(dateStr: string | null): number {
   return Math.max(0, Math.ceil((new Date(dateStr).getTime() - Date.now()) / 86400000))
 }
 
+const SLUG_MAX = 200
+// Backend accepts [a-zA-Z0-9_-]; drop look-alike characters so a generated
+// slug survives being read aloud or copied off a screen.
+const SLUG_ALPHABET = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+
+/** A full-length random pool. The slider slices it, so dragging grows and
+ *  shrinks one stable string instead of rerolling on every pixel. */
+function makeSlugPool(): string {
+  const bytes = new Uint8Array(SLUG_MAX)
+  crypto.getRandomValues(bytes)
+  return Array.from(bytes, (b) => SLUG_ALPHABET[b % SLUG_ALPHABET.length]).join('')
+}
+
 function RouteCard({ route, onRenew, onDeactivate, onDelete }: {
   route: RedirectRoute
   onRenew: () => void
@@ -96,7 +109,11 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
   const [fallbackUrl, setFallbackUrl] = useState('')
   const [domainId, setDomainId] = useState('')
   const [slug, setSlug] = useState('')
+  const [slugPool, setSlugPool] = useState(makeSlugPool)
   const [newRedirectDomain, setNewRedirectDomain] = useState('')
+  const [subPrefix, setSubPrefix] = useState('go')
+  const [subRoot, setSubRoot] = useState('')
+  const [manualDomain, setManualDomain] = useState(false)
   const [verifyMethod, setVerifyMethod] = useState<'html_meta' | 'dns_txt'>('html_meta')
   const [cnameResult, setCnameResult] = useState<{ cname_ok: boolean; target: string | null; detail: string } | null>(null)
 
@@ -166,6 +183,22 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
   })
 
   const selectedDomain = redirectDomains?.find((d) => d.id === domainId)
+  // A redirect domain must be a subdomain (you cannot CNAME an apex, and pointing
+  // a protected site's apex at the edge would move the whole site behind it), so
+  // offer the roots the user has already verified as the base to build on.
+  const rootDomains = Array.from(new Set(
+    (redirectDomains ?? [])
+      .filter((d) => d.verified)
+      .map((d) => {
+        const parts = d.domain.split('.')
+        return parts.length > 2 ? parts.slice(1).join('.') : d.domain
+      }),
+  ))
+  const effectiveRoot = subRoot || rootDomains[0] || ''
+  const builtDomain = subPrefix && effectiveRoot ? `${subPrefix}.${effectiveRoot}` : ''
+  const domainToAdd = manualDomain || rootDomains.length === 0
+    ? newRedirectDomain.trim().toLowerCase()
+    : builtDomain
   const canLeaveStep1 = !!destinationUrl && (botAction !== 'redirect' || !!fallbackUrl)
 
   // CNAME host: apex domains use "@", subdomains use the leftmost label.
@@ -239,8 +272,11 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
                   type="text"
                   value={slug}
                   onChange={(e) => {
-                    const val = e.target.value.replace(/[^a-zA-Z0-9_-]/g, '')
-                    if (val.length <= 200) setSlug(val)
+                    const val = e.target.value.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, SLUG_MAX)
+                    setSlug(val)
+                    // Typing takes over the pool, so the slider trims what you
+                    // wrote instead of throwing it away.
+                    setSlugPool(val + makeSlugPool().slice(val.length))
                   }}
                   placeholder="sale"
                   className="w-full bg-slate-50 border border-neutral-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-black font-mono"
@@ -249,15 +285,29 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
                   <input
                     type="range"
                     min={0}
-                    max={200}
+                    max={SLUG_MAX}
                     value={slug.length}
-                    onChange={(e) => {
-                      const maxLen = Number(e.target.value)
-                      setSlug((prev) => prev.slice(0, maxLen))
-                    }}
+                    onChange={(e) => setSlug(slugPool.slice(0, Number(e.target.value)))}
                     className="flex-1 accent-black h-1.5"
+                    aria-label="Generated link path length"
                   />
-                  <span className="text-xs text-muted font-mono w-14 text-right">{slug.length}/200</span>
+                  <span className="text-xs text-muted font-mono w-14 text-right">{slug.length}/{SLUG_MAX}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3 mt-2">
+                  <p className="text-xs text-muted">
+                    Drag to generate a random path of that length, or type your own.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const pool = makeSlugPool()
+                      setSlugPool(pool)
+                      setSlug(pool.slice(0, slug.length || 8))
+                    }}
+                    className="text-xs font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition-colors shrink-0"
+                  >
+                    Regenerate
+                  </button>
                 </div>
               </div>
               <button
@@ -278,8 +328,8 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
 
               {redirectDomains && redirectDomains.length === 0 && (
                 <div className="p-3 bg-slate-50 border border-neutral-200 rounded-xl text-xs text-muted">
-                  You don't have any redirect domains yet. Redirect domains are separate from the
-                  protected domains on your Domains page — add one below to get started.
+                  You don't have any usable domains yet. Add one below, or verify a domain on
+                  the Domains page — verified domains can be used for redirects too.
                 </div>
               )}
 
@@ -294,7 +344,8 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
                     <option value="">Select a domain…</option>
                     {redirectDomains.map((d) => (
                       <option key={d.id} value={d.id}>
-                        {d.domain} {!d.verified ? '(unverified)' : ''}
+                        {d.domain}
+                        {!d.verified ? ' (unverified)' : d.purpose === 'protection' ? ' (protected domain)' : ''}
                       </option>
                     ))}
                   </select>
@@ -307,24 +358,98 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
                 <span className="flex-1 h-px bg-neutral-200" />
               </div>
 
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={newRedirectDomain}
-                  onChange={(e) => setNewRedirectDomain(e.target.value)}
-                  placeholder="app.yourdomain.com"
-                  className="flex-1 bg-slate-50 border border-neutral-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-black"
-                />
-                <button
-                  onClick={() => {
-                    if (newRedirectDomain.trim()) addDomainMutation.mutate(newRedirectDomain.trim())
-                  }}
-                  disabled={!newRedirectDomain.trim() || addDomainMutation.isPending}
-                  className="bg-black hover:bg-neutral-800 text-white px-4 py-3 rounded-xl text-sm font-bold transition-all disabled:opacity-50"
-                >
-                  Add
-                </button>
-              </div>
+              {rootDomains.length > 0 && !manualDomain ? (
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={subPrefix}
+                      onChange={(e) => setSubPrefix(
+                        e.target.value.replace(/[^a-zA-Z0-9-]/g, '').toLowerCase().slice(0, 63),
+                      )}
+                      placeholder="go"
+                      aria-label="Subdomain prefix"
+                      className="w-24 bg-slate-50 border border-neutral-200 rounded-xl px-3 py-3 text-sm text-center focus:outline-none focus:border-black font-mono"
+                    />
+                    <span className="self-center text-sm text-muted font-mono">.</span>
+                    <select
+                      value={effectiveRoot}
+                      onChange={(e) => setSubRoot(e.target.value)}
+                      aria-label="Root domain"
+                      className="flex-1 min-w-0 bg-slate-50 border border-neutral-200 rounded-xl px-3 py-3 text-sm focus:outline-none focus:border-black"
+                    >
+                      {rootDomains.map((r) => <option key={r} value={r}>{r}</option>)}
+                    </select>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {['go', 't', 'link', 'r'].map((p) => (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => setSubPrefix(p)}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-bold font-mono transition-colors ${
+                          subPrefix === p ? 'bg-black text-white' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                        }`}
+                      >
+                        {p}.
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted">
+                    Creates <strong className="font-mono text-slate-700">{builtDomain || '—'}</strong>.
+                    You'll point this subdomain at our edge proxy in the next step — your main
+                    site keeps working untouched.
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => domainToAdd && addDomainMutation.mutate(domainToAdd)}
+                      disabled={!domainToAdd || addDomainMutation.isPending}
+                      className="flex-1 bg-black hover:bg-neutral-800 text-white px-4 py-3 rounded-xl text-sm font-bold transition-all disabled:opacity-50"
+                    >
+                      {addDomainMutation.isPending ? 'Adding…' : 'Add'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setManualDomain(true)}
+                      className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-3 rounded-xl text-sm font-bold transition-colors whitespace-nowrap"
+                    >
+                      Different domain
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newRedirectDomain}
+                      onChange={(e) => setNewRedirectDomain(e.target.value)}
+                      placeholder="go.yourdomain.com"
+                      className="flex-1 min-w-0 bg-slate-50 border border-neutral-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-black"
+                    />
+                    <button
+                      onClick={() => domainToAdd && addDomainMutation.mutate(domainToAdd)}
+                      disabled={!domainToAdd || addDomainMutation.isPending}
+                      className="bg-black hover:bg-neutral-800 text-white px-4 py-3 rounded-xl text-sm font-bold transition-all disabled:opacity-50"
+                    >
+                      {addDomainMutation.isPending ? 'Adding…' : 'Add'}
+                    </button>
+                  </div>
+                  <p className="text-xs text-muted">
+                    Use a subdomain such as <span className="font-mono">go.yourdomain.com</span> — an
+                    apex domain can't hold the CNAME record this needs.
+                  </p>
+                  {rootDomains.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setManualDomain(false)}
+                      className="text-xs font-bold text-slate-600 hover:text-slate-900 underline"
+                    >
+                      Back to my domains
+                    </button>
+                  )}
+                </div>
+              )}
 
               {selectedDomain && !selectedDomain.verified && challenge && (
                 <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-3">
@@ -397,6 +522,22 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
               <p className="text-sm text-muted">
                 Point your domain to our edge proxy so traffic can be routed through VeriClick.
               </p>
+
+              {selectedDomain && cnameHost === '@' && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 space-y-1">
+                  <p className="font-bold">
+                    {selectedDomain.domain} is an apex domain
+                    {selectedDomain.purpose === 'protection' ? ' and is running your protected site' : ''}.
+                  </p>
+                  <p>
+                    Most DNS providers won't accept a CNAME at the apex, and routing it here sends
+                    all of {selectedDomain.domain}'s traffic through the edge proxy
+                    {selectedDomain.purpose === 'protection' ? ', including your site itself' : ''}.
+                    Go back and use a subdomain such as{' '}
+                    <span className="font-mono">go.{selectedDomain.domain}</span> instead.
+                  </p>
+                </div>
+              )}
 
               <div className="p-4 bg-slate-50 rounded-xl space-y-3">
                 <p className="text-sm font-bold text-slate-900">CNAME Setup</p>

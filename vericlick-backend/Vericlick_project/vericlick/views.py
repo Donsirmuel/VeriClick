@@ -278,14 +278,15 @@ def domain_verify_challenge(request, domain_id):
     if method not in ('html_meta', 'dns_txt'):
         method = 'html_meta'
 
-    # Generate token if needed
+    # Generate the token once and keep it stable. The same token backs both
+    # methods, so switching between them must not invalidate a record the user
+    # has already published on their site or in DNS.
     if not domain_obj.verification_token:
         domain_obj.verification_method = method
         domain_obj.generate_verification_token()
     elif domain_obj.verification_method != method:
-        # User switched method — regenerate token
         domain_obj.verification_method = method
-        domain_obj.generate_verification_token()
+        domain_obj.save(update_fields=['verification_method'])
 
     token = domain_obj.verification_token
     meta_tag = f'<meta name="vericlick-verification" content="{token}">'
@@ -365,24 +366,38 @@ def domain_verify_confirm(request, domain_id):
 
 
 def _check_meta_tag(domain, expected_token):
-    """Fetch the domain homepage and look for the verification meta tag."""
+    """Fetch the domain homepage and look for the verification meta tag.
+
+    Tries HTTPS first: an HTTPS-only site (HSTS, or no listener on :80) can
+    never be reached over plain HTTP.
+    """
     import urllib.request
     import urllib.error
     import re
-    try:
-        req = urllib.request.Request(
-            f'http://{domain}/',
-            headers={'User-Agent': 'VeriClick/1.0 Verification Bot'},
-        )
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            if resp.status != 200:
-                return False
-            html = resp.read(512 * 1024).decode('utf-8', errors='ignore')
-            # Look for the meta tag
-            pattern = r'<meta\s+name=["\']vericlick-verification["\']\s+content=["\']' + re.escape(expected_token) + r'["\']'
-            return bool(re.search(pattern, html, re.IGNORECASE))
-    except (urllib.error.URLError, OSError, ValueError):
-        return False
+
+    # Attribute order and spacing vary between site builders, so match the two
+    # orderings rather than one rigid form.
+    token_re = re.escape(expected_token)
+    patterns = (
+        r'<meta\s+name=["\']vericlick-verification["\']\s+content=["\']' + token_re + r'["\']',
+        r'<meta\s+content=["\']' + token_re + r'["\']\s+name=["\']vericlick-verification["\']',
+    )
+
+    for scheme in ('https', 'http'):
+        try:
+            req = urllib.request.Request(
+                f'{scheme}://{domain}/',
+                headers={'User-Agent': 'VeriClick/1.0 Verification Bot'},
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                if resp.status != 200:
+                    continue
+                html = resp.read(512 * 1024).decode('utf-8', errors='ignore')
+                if any(re.search(p, html, re.IGNORECASE) for p in patterns):
+                    return True
+        except (urllib.error.URLError, OSError, ValueError):
+            continue
+    return False
 
 
 def _check_dns_txt(domain, expected_token):
@@ -516,7 +531,11 @@ def redirect_domain_list_create(request):
 
     if request.method == 'GET':
         domains = DomainRegistry.objects.filter(
-            workspace=workspace, purpose='redirect',
+            workspace=workspace, is_active=True,
+        ).filter(
+            # Redirect-purpose domains, plus protection domains whose ownership
+            # is already proven — those are reusable as redirect targets.
+            Q(purpose='redirect') | Q(purpose='protection', verified=True),
         ).order_by('-created_at')
         return Response(DomainRegistrySerializer(domains, many=True).data)
 
@@ -524,10 +543,18 @@ def redirect_domain_list_create(request):
     serializer.is_valid(raise_exception=True)
     domain_name = serializer.validated_data['domain']
 
-    # Check duplicate
-    if DomainRegistry.objects.filter(workspace=workspace, domain=domain_name, is_active=True).exists():
+    # Already registered in this workspace? Reuse it rather than rejecting —
+    # a verified protection domain doubles as a redirect domain.
+    existing = DomainRegistry.objects.filter(
+        workspace=workspace, domain=domain_name, is_active=True,
+    ).first()
+    if existing:
+        if existing.purpose == 'redirect' or existing.verified:
+            return Response(DomainRegistrySerializer(existing).data)
         return Response(
-            {'errors': [{'field': 'domain', 'detail': 'This domain is already registered.'}]},
+            {'errors': [{'field': 'domain', 'detail':
+                'This domain is already registered for bot protection but is not '
+                'verified yet. Verify it on the Domains page to use it for redirects.'}]},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
@@ -558,7 +585,7 @@ def redirect_domain_verify_cname(request, domain_id):
 
     try:
         domain_obj = DomainRegistry.objects.get(
-            id=domain_id, workspace=workspace, purpose='redirect', is_active=True,
+            id=domain_id, workspace=workspace, is_active=True,
         )
     except DomainRegistry.DoesNotExist:
         return Response(
@@ -647,7 +674,8 @@ def redirect_route_list_create(request):
     destination_url = request.data.get('destination_url', '').strip()
     slug = request.data.get('slug', '').strip()
     bot_action = request.data.get('bot_action', 'honeypot')
-    fallback_url = request.data.get('fallback_url', '').strip() or None
+    # fallback_url is NOT NULL on the model — empty means "no bot fallback".
+    fallback_url = (request.data.get('fallback_url') or '').strip()
 
     if not domain_id or not destination_url:
         return Response(
@@ -657,7 +685,7 @@ def redirect_route_list_create(request):
 
     try:
         domain_obj = DomainRegistry.objects.get(
-            id=domain_id, workspace=workspace, purpose='redirect', is_active=True,
+            id=domain_id, workspace=workspace, is_active=True,
         )
     except DomainRegistry.DoesNotExist:
         return Response(
@@ -2163,7 +2191,6 @@ def edge_routes_sync(request):
     routes_qs = RedirectRoute.objects.filter(
         workspace=workspace,
         is_active=True,
-        domain__purpose='redirect',
         domain__is_active=True,
     ).select_related('domain')
 
@@ -2243,7 +2270,6 @@ def edge_validate_domain(request):
     exists = RedirectRoute.objects.filter(
         is_active=True,
         domain__domain=domain,
-        domain__purpose='redirect',
         domain__is_active=True,
     ).exists()
 

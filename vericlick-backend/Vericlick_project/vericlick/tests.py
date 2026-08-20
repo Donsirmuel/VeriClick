@@ -2157,14 +2157,75 @@ class RedirectDomainTests(APITestCase):
         self.assertEqual(body['domain'], 'go.example.com')
         self.assertEqual(body['purpose'], 'redirect')
 
-    def test_duplicate_domain_rejected(self):
-        DomainRegistry.objects.create(
+    def test_duplicate_domain_returns_existing(self):
+        existing = DomainRegistry.objects.create(
             workspace=self.workspace, domain='go.example.com', purpose='redirect',
         )
         res = self.client.post('/api/redirect-domains/', {
             'domain': 'go.example.com',
         }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.json()['id'], str(existing.id))
+        self.assertEqual(
+            DomainRegistry.objects.filter(workspace=self.workspace, domain='go.example.com').count(), 1,
+        )
+
+    def test_verified_protection_domain_is_reusable(self):
+        protection = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='shielded.example.com',
+            purpose='protection', verified=True,
+        )
+        res = self.client.post('/api/redirect-domains/', {
+            'domain': 'shielded.example.com',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.json()['id'], str(protection.id))
+        # Reuse must not consume a second domain slot.
+        self.assertEqual(
+            DomainRegistry.objects.filter(workspace=self.workspace, domain='shielded.example.com').count(), 1,
+        )
+
+    def test_unverified_protection_domain_is_not_reusable(self):
+        DomainRegistry.objects.create(
+            workspace=self.workspace, domain='pending.example.com',
+            purpose='protection', verified=False,
+        )
+        res = self.client.post('/api/redirect-domains/', {
+            'domain': 'pending.example.com',
+        }, format='json')
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_list_includes_verified_protection_domains_only(self):
+        DomainRegistry.objects.create(
+            workspace=self.workspace, domain='r.example.com', purpose='redirect',
+        )
+        DomainRegistry.objects.create(
+            workspace=self.workspace, domain='ok.example.com',
+            purpose='protection', verified=True,
+        )
+        DomainRegistry.objects.create(
+            workspace=self.workspace, domain='nope.example.com',
+            purpose='protection', verified=False,
+        )
+        res = self.client.get('/api/redirect-domains/')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        listed = {d['domain'] for d in res.json()}
+        self.assertIn('r.example.com', listed)
+        self.assertIn('ok.example.com', listed)
+        self.assertNotIn('nope.example.com', listed)
+
+    def test_route_can_be_created_on_verified_protection_domain(self):
+        protection = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='go.shielded.example.com',
+            purpose='protection', verified=True,
+        )
+        res = self.client.post('/api/redirect-routes/', {
+            'domain_id': str(protection.id),
+            'destination_url': 'https://example.com/landing',
+            'slug': 'promo',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(RedirectRoute.objects.filter(domain=protection).exists())
 
     def test_domain_limit_enforced(self):
         for i in range(10):

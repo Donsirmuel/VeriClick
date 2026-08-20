@@ -96,7 +96,8 @@ export interface RedirectRoute {
 export interface RedirectDomain {
   id: string
   domain: string
-  purpose: 'redirect'
+  // Verified protection domains are reusable as redirect targets.
+  purpose: 'redirect' | 'protection'
   verified: boolean
   verifiedAt: string | null
   healthStatus: string
