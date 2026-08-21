@@ -292,7 +292,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8 rise">
         <StatCard
           title="Visits (24h)"
           value={(stats?.totalVisits24h ?? 0).toLocaleString()}
@@ -344,7 +344,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <div className="grid lg:grid-cols-3 gap-6">
+      <div className="grid lg:grid-cols-3 gap-6 rise rise-1">
         <div className="lg:col-span-2">
           <TrafficChart
             data={trafficData ?? []}
@@ -358,7 +358,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-6 mt-6">
+      <div className="grid lg:grid-cols-2 gap-6 mt-6 rise rise-2">
         <TopBreakdownWidget
           dimension="country"
           rows={countryBreakdown ?? []}
@@ -373,7 +373,7 @@ export default function DashboardPage() {
         />
       </div>
 
-      <div className="mt-6">
+      <div className="mt-6 rise rise-3">
         <ActivityFeed
           activity={activity ?? []}
           page={activityData?.page ?? 1}

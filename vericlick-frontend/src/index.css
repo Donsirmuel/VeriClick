@@ -182,3 +182,61 @@
     background-clip: text;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Arrival motion for the app
+   ---------------------------------------------------------------------------
+   The marketing pages animate on arrival; the dashboard did not, so signed-in
+   screens snapped into place while the public site felt considered. This is
+   deliberately small — 8px and 400ms. Motion that announces itself is not
+   premium, it is a distraction on a page someone opens forty times a day.
+
+   `backwards` fill matters: the delayed variants must hold at opacity 0 before
+   they start, or every card flashes in at full opacity and then fades in. */
+@layer utilities {
+  .rise {
+    animation: rise 0.4s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  }
+  .rise-1 { animation-delay: 0.05s; }
+  .rise-2 { animation-delay: 0.1s; }
+  .rise-3 { animation-delay: 0.15s; }
+  .rise-4 { animation-delay: 0.2s; }
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ---------------------------------------------------------------------------
+   Reduced motion
+   ---------------------------------------------------------------------------
+   Everything above, plus the hero's scan line, drifting grid and floating
+   particles, ignored the setting entirely. For anyone with vestibular
+   sensitivity that is a page they cannot comfortably read.
+
+   Entrance animations are collapsed rather than removed: they end in the
+   visible state, and several elements start at opacity 0, so `animation: none`
+   would leave that content permanently invisible. Setting the duration to
+   almost zero jumps straight to the final frame instead. Purely decorative
+   loops have no final frame worth landing on, so they are simply hidden. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .scan-line,
+  .terminal-cursor::after,
+  .skeleton-shimmer::after {
+    display: none;
+  }
+
+  .hero-grid-bg {
+    animation: none !important;
+  }
+}
