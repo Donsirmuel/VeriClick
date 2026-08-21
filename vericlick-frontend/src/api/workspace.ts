@@ -6,6 +6,20 @@ interface WorkspaceUpdateInput {
   safeDestination?: string
   /** Stored per account so the tour does not replay on a second device. */
   tourCompleted?: boolean
+  notifyPlanReminders?: boolean
+}
+
+export interface RotatedKey {
+  apiKey: string
+  apiBase: string
+  snippet: string
+  detail: string
+}
+
+/** Issues a new site key. The previous snippet stops working immediately. */
+export async function rotateSiteKey(): Promise<RotatedKey> {
+  const { data } = await apiClient.post<RotatedKey>('/workspace/rotate-key/')
+  return data
 }
 
 export async function fetchWorkspace(): Promise<Workspace> {

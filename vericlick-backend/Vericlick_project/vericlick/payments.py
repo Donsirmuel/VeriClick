@@ -398,11 +398,15 @@ def maybe_run_billing_checks(workspace, force=False):
     def _publish(kind, occurred_at, note, email):
         if BillingEvent.objects.filter(workspace=workspace, kind=kind).exists():
             return
+        # The ledger entry is always written — turning reminders off must not
+        # erase the billing record, only the nudge about it.
         BillingEvent.objects.create(
             workspace=workspace, kind=kind,
             plan=plan, plan_name=plan.name, amount=None, currency='USD',
             occurred_at=occurred_at, note=note,
         )
+        if not workspace.notify_plan_reminders:
+            return
         try:
             email()
         except Exception:

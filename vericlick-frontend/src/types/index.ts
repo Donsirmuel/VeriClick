@@ -54,6 +54,7 @@ export interface Workspace {
   domainLimit: number
   onboardingComplete: boolean
   tourCompleted: boolean
+  notifyPlanReminders: boolean
   onboardingType: 'both' | 'shield' | 'redirect' | null
 }
 

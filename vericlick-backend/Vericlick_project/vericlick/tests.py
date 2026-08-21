@@ -1561,6 +1561,100 @@ class ScriptHostTests(APITestCase):
         self.assertIn('cdn.vericlick.cc', body['snippet'])
 
 
+class SiteKeyRotationTests(APITestCase):
+    """The site key sits in the page source of every protected site. A customer
+    whose key gets scraped and abused had no way to replace it."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='rot', email='r@example.com', password='pw')
+        self.client.force_authenticate(user=self.user)
+        self.workspace = Workspace.objects.get(owner=self.user)
+
+    def test_rotation_replaces_the_key(self):
+        old_key = str(self.workspace.tracker_secret)
+        res = self.client.post('/api/workspace/rotate-key/')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.workspace.refresh_from_db()
+        self.assertNotEqual(str(self.workspace.tracker_secret), old_key)
+        self.assertEqual(res.json()['apiKey'], str(self.workspace.tracker_secret))
+
+    def test_the_old_key_stops_working(self):
+        old_key = str(self.workspace.tracker_secret)
+        self.client.post('/api/workspace/rotate-key/')
+        res = self.client.post('/api/shield/verify/', {
+            'api_key': old_key, 'page_url': 'https://example.com/',
+        }, format='json')
+        # Unknown key is rejected as unauthorised — the whole point of rotating.
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_the_new_key_works(self):
+        self.client.post('/api/workspace/rotate-key/')
+        self.workspace.refresh_from_db()
+        res = self.client.post('/api/shield/verify/', {
+            'api_key': str(self.workspace.tracker_secret), 'page_url': 'https://example.com/',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+
+    def test_response_carries_a_ready_to_paste_snippet(self):
+        body = self.client.post('/api/workspace/rotate-key/').json()
+        self.assertIn(body['apiKey'], body['snippet'])
+        self.assertIn('shield.js', body['snippet'])
+
+    def test_rotation_requires_auth(self):
+        self.client.force_authenticate(user=None)
+        self.assertEqual(
+            self.client.post('/api/workspace/rotate-key/').status_code,
+            status.HTTP_401_UNAUTHORIZED,
+        )
+
+    def test_rotation_does_not_touch_another_workspace(self):
+        other = User.objects.create_user(username='rot2', email='r2@example.com', password='pw')
+        other_ws = Workspace.objects.get(owner=other)
+        untouched = str(other_ws.tracker_secret)
+        self.client.post('/api/workspace/rotate-key/')
+        other_ws.refresh_from_db()
+        self.assertEqual(str(other_ws.tracker_secret), untouched)
+
+
+class NotificationPreferenceTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='notif', email='n@example.com', password='pw')
+        self.client.force_authenticate(user=self.user)
+        self.workspace = Workspace.objects.get(owner=self.user)
+        self.workspace.plan = Plan.objects.get(code='basic')
+        self.workspace.save(update_fields=['plan'])
+
+    def test_reminders_are_on_by_default(self):
+        self.assertTrue(self.client.get('/api/workspace/').json()['notifyPlanReminders'])
+
+    def test_preference_can_be_turned_off(self):
+        res = self.client.patch('/api/workspace/', {'notifyPlanReminders': False}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertFalse(self.client.get('/api/workspace/').json()['notifyPlanReminders'])
+
+    @patch('vericlick.emails.send_period_expired_email')
+    def test_opting_out_suppresses_the_email(self, mock_email):
+        from vericlick.payments import maybe_run_billing_checks
+        self.workspace.notify_plan_reminders = False
+        self.workspace.plan_expires_at = timezone.now() - timedelta(days=1)
+        self.workspace.save(update_fields=['notify_plan_reminders', 'plan_expires_at'])
+        maybe_run_billing_checks(self.workspace, force=True)
+        self.assertFalse(mock_email.called)
+
+    def test_the_ledger_entry_is_written_either_way(self):
+        # Silencing a nudge must not erase the billing record behind it.
+        from vericlick.payments import maybe_run_billing_checks
+        self.workspace.notify_plan_reminders = False
+        self.workspace.plan_expires_at = timezone.now() - timedelta(days=1)
+        self.workspace.save(update_fields=['notify_plan_reminders', 'plan_expires_at'])
+        maybe_run_billing_checks(self.workspace, force=True)
+        self.assertTrue(
+            BillingEvent.objects.filter(
+                workspace=self.workspace, kind=BillingEvent.Kind.PLAN_EXPIRED,
+            ).exists()
+        )
+
+
 class PricingEndpointTests(APITestCase):
     def test_pricing_returns_seeded_plans(self):
         res = self.client.get('/api/pricing/')

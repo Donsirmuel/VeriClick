@@ -180,6 +180,37 @@ def workspace_onboarding(request):
     })
 
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def workspace_rotate_key(request):
+    """Issue a new site key.
+
+    The key lives in the page source of every protected site, so it is public
+    by design — but a customer who has had one scraped and abused had no way to
+    replace it. Rotating invalidates the old snippet immediately, so the
+    response carries the new one to paste.
+    """
+    workspace = get_user_workspace(request.user)
+    if not workspace:
+        return Response({'error': 'No workspace found'}, status=status.HTTP_404_NOT_FOUND)
+
+    workspace.rotate_tracker_secret()
+
+    api_base = f"{getattr(settings, 'SCRIPT_BASE_URL', settings.SITE_URL)}/api"
+    api_key = str(workspace.tracker_secret)
+    return Response({
+        'api_key': api_key,
+        'api_base': api_base,
+        'snippet': (
+            f'<script src="{api_base}/shield.js" data-api-key="{api_key}" defer></script>'
+        ),
+        'detail': (
+            'Your site key was replaced. The old snippet has stopped working — '
+            'paste the new one on every protected site.'
+        ),
+    })
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def workspace_snippet(request):

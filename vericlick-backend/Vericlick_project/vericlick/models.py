@@ -17,7 +17,20 @@ class Workspace(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=255)
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='workspaces')
-    tracker_secret = models.UUIDField(default=uuid.uuid4, editable=False)
+    tracker_secret = models.UUIDField(
+        default=uuid.uuid4, editable=False,
+        help_text=(
+            'Public site key embedded in every protected page. Rotatable from '
+            'Settings — rotating invalidates the old snippet, so the customer '
+            'must paste the new one.'
+        ),
+    )
+    # Reminders about a plan running out. Receipts and security mail are never
+    # optional, so only this discretionary nudge is user-controlled.
+    notify_plan_reminders = models.BooleanField(
+        default=True,
+        help_text='Email the owner before and when a plan period lapses.',
+    )
     safe_destination = models.URLField(
         max_length=2048, blank=True, default='',
         help_text='Where suspicious traffic is sent instead of the real destination.',
@@ -203,6 +216,14 @@ class Workspace(models.Model):
         if self.onboarding_complete:
             return True
         return bool(self.has_plan_access() and self.domains.filter(is_active=True).exists())
+
+    def rotate_tracker_secret(self):
+        """Issue a new site key. The old one stops working immediately, which
+        is the point — it is how a customer recovers from a leaked key."""
+        import uuid as _uuid
+        self.tracker_secret = _uuid.uuid4()
+        self.save(update_fields=['tracker_secret'])
+        return self.tracker_secret
 
     def ensure_trial_started(self):
         # No-op — free trials have been removed. Kept for migration safety.
