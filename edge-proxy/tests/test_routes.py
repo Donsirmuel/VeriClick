@@ -208,3 +208,14 @@ async def test_raw_ip_host_is_refused():
     redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
     resp = await routes.handle_request(_request(host="203.0.113.9"), redis, _FakeBatcher())
     assert resp.status_code == 444
+
+
+@pytest.mark.asyncio
+async def test_an_inactive_route_does_not_redirect():
+    """Defence in depth: if a stale key survives a failed sync, a route the
+    backend has marked inactive must still not serve."""
+    redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    await _seed(redis, is_active=False)
+    resp = await routes.handle_request(_request(), redis, _FakeBatcher())
+    assert resp.status_code == 200
+    assert "location" not in resp.headers

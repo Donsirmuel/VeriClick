@@ -34,6 +34,19 @@ class WorkspaceAdmin(admin.ModelAdmin):
     date_hierarchy = 'created_at'
     actions = ['record_manual_payment']
 
+    def save_model(self, request, obj, form, change):
+        """Editing the plan period or expiry here must reach existing links.
+
+        Link expiry is stored (the edge reads it), so a link created under a
+        weekly plan keeps its short date when the workspace is moved to monthly
+        — it would expire while the plan paying for it is still running. Covers
+        both the change form and inline edits on the list.
+        """
+        super().save_model(request, obj, form, change)
+        if change:
+            from .payments import extend_routes_to_plan
+            extend_routes_to_plan(obj)
+
     @admin.display(description='Status')
     def plan_status(self, obj):
         return obj.plan_status

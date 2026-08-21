@@ -14,6 +14,10 @@ from .config import settings
 
 logger = logging.getLogger("edge.sync")
 
+# Set of route keys written by the last sync, so the next one can remove
+# whatever is no longer active.
+ROUTE_INDEX = "routes:index"
+
 SYNC_URL = f"{settings.BACKEND_URL}/api/edge/sync/"
 HEADERS = {"X-Edge-Api-Key": settings.EDGE_API_KEY}
 
@@ -58,9 +62,13 @@ async def _sync_once(redis: aioredis.Redis):
 
     pipe = redis.pipeline()
 
-    # Routes: hash keyed by "routes:{domain}:{slug}"
-    # First clear old route keys (pattern-based delete is expensive, so we
-    # track active keys in a set and delete stale ones).
+    # Routes: one key per "routes:{domain}:{slug}".
+    #
+    # The active set was collected here and never used, so a route that stopped
+    # being active — deactivated, deleted, expired — kept serving until its TTL
+    # ran out, up to three sync intervals later. Deactivating a link has to take
+    # effect on the next sync, not minutes afterwards, so stale keys are removed
+    # explicitly by diffing against the previous set.
     active_route_keys = set()
     for route in data.get("routes", []):
         domain = route["domain"]
@@ -68,6 +76,17 @@ async def _sync_once(redis: aioredis.Redis):
         key = f"routes:{domain}:{slug}"
         active_route_keys.add(key)
         pipe.set(key, json.dumps(route), ex=settings.SYNC_INTERVAL * 3)
+
+    previous = await redis.smembers(ROUTE_INDEX) or set()
+    stale = previous - active_route_keys
+    if stale:
+        pipe.delete(*stale)
+        pipe.srem(ROUTE_INDEX, *stale)
+    if active_route_keys:
+        pipe.sadd(ROUTE_INDEX, *active_route_keys)
+    # The index must outlive the keys it tracks, or stale entries become
+    # invisible and undeletable.
+    pipe.expire(ROUTE_INDEX, settings.SYNC_INTERVAL * 10)
 
     # Blocked IPs: set
     pipe.delete("blocked_ips")

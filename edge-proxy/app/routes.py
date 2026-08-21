@@ -122,6 +122,12 @@ async def handle_request(
         _queue_event(batcher, host, slug, ip, user_agent, "", "expired", False)
         return _render("neutral")
 
+    # Defence in depth: even if a stale key survives a sync failure, a route
+    # the backend has marked inactive must not serve.
+    if route.get("is_active") is False:
+        _queue_event(batcher, host, slug, ip, user_agent, "", "inactive", False)
+        return _render("neutral")
+
     destination = route.get("destination_url", "")
     bot_action = route.get("bot_action", "block")
 

@@ -98,3 +98,102 @@ async def test_sync_once_writes_usable_values_to_redis(monkeypatch):
     assert await sync.get_blocked_ips(redis) == {"1.2.3.4", "10.0.0.0/8"}
     assert (await sync.get_country_rules(redis))[0]["country_code"] == "CN"
     assert json.loads(await redis.get("site_configs:ws-1"))["protection_mode"] == "balanced"
+
+
+@pytest.mark.asyncio
+async def test_a_route_that_stops_being_active_is_removed(monkeypatch):
+    """Deactivating a link must take effect on the next sync. The active-key set
+    was collected and never used, so a removed route kept serving from cache
+    until its TTL ran out — minutes of a "deactivated" link still redirecting."""
+    redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
+
+    payload = {"routes": [
+        {"domain": "go.example.com", "slug": "sale", "destinationUrl": "https://a/",
+         "isActive": True, "botAction": "honeypot", "expiresAt": None},
+        {"domain": "go.example.com", "slug": "old", "destinationUrl": "https://b/",
+         "isActive": True, "botAction": "honeypot", "expiresAt": None},
+    ], "blockedIps": [], "countryRules": [], "siteConfigs": [], "syncToken": 1}
+
+    class _Resp:
+        def __init__(self, p): self._p = p
+        def raise_for_status(self): return None
+        def json(self): return self._p
+
+    current = {"p": payload}
+
+    class _Client:
+        async def __aenter__(self): return self
+        async def __aexit__(self, *e): return False
+        async def get(self, url, headers=None): return _Resp(current["p"])
+
+    monkeypatch.setattr(sync.httpx, "AsyncClient", lambda **kw: _Client())
+
+    await sync._sync_once(redis)
+    assert await sync.get_route(redis, "go.example.com", "sale") is not None
+    assert await sync.get_route(redis, "go.example.com", "old") is not None
+
+    # Deactivated OR deleted — both look the same from here: the backend simply
+    # stops returning the route, and the cached key must go with it.
+    current["p"] = {**payload, "routes": [payload["routes"][0]]}
+    await sync._sync_once(redis)
+
+    assert await sync.get_route(redis, "go.example.com", "sale") is not None
+    assert await sync.get_route(redis, "go.example.com", "old") is None
+
+
+@pytest.mark.asyncio
+async def test_the_route_index_tracks_only_live_keys(monkeypatch):
+    redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
+
+    class _Resp:
+        def __init__(self, p): self._p = p
+        def raise_for_status(self): return None
+        def json(self): return self._p
+
+    payload = {"routes": [{"domain": "go.example.com", "slug": "sale",
+                           "destinationUrl": "https://a/", "isActive": True,
+                           "botAction": "honeypot", "expiresAt": None}],
+               "blockedIps": [], "countryRules": [], "siteConfigs": [], "syncToken": 1}
+
+    class _Client:
+        async def __aenter__(self): return self
+        async def __aexit__(self, *e): return False
+        async def get(self, url, headers=None): return _Resp(payload)
+
+    monkeypatch.setattr(sync.httpx, "AsyncClient", lambda **kw: _Client())
+    await sync._sync_once(redis)
+
+    assert await redis.smembers(sync.ROUTE_INDEX) == {"routes:go.example.com:sale"}
+
+
+@pytest.mark.asyncio
+async def test_a_deleted_route_stops_serving(monkeypatch):
+    """Deleting a link must render it useless, not leave it live in cache."""
+    redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
+
+    class _Resp:
+        def __init__(self, p): self._p = p
+        def raise_for_status(self): return None
+        def json(self): return self._p
+
+    live = {"routes": [{"domain": "go.example.com", "slug": "sale",
+                        "destinationUrl": "https://a/", "isActive": True,
+                        "botAction": "honeypot", "expiresAt": None}],
+            "blockedIps": [], "countryRules": [], "siteConfigs": [], "syncToken": 1}
+    gone = {**live, "routes": []}
+    current = {"p": live}
+
+    class _Client:
+        async def __aenter__(self): return self
+        async def __aexit__(self, *e): return False
+        async def get(self, url, headers=None): return _Resp(current["p"])
+
+    monkeypatch.setattr(sync.httpx, "AsyncClient", lambda **kw: _Client())
+
+    await sync._sync_once(redis)
+    assert await sync.get_route(redis, "go.example.com", "sale") is not None
+
+    current["p"] = gone
+    await sync._sync_once(redis)
+    assert await sync.get_route(redis, "go.example.com", "sale") is None
+    assert await redis.smembers(sync.ROUTE_INDEX) == set()

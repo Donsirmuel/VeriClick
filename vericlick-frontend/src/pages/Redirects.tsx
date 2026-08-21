@@ -37,11 +37,11 @@ function makeSlugPool(): string {
   return Array.from(bytes, (b) => SLUG_ALPHABET[b % SLUG_ALPHABET.length]).join('')
 }
 
-function RouteCard({ route, periodDays, onRenew, onDeactivate, onDelete }: {
+function RouteCard({ route, periodDays, onRenew, onToggleActive, onDelete }: {
   route: RedirectRoute
   periodDays: number
   onRenew: () => void
-  onDeactivate: () => void
+  onToggleActive: () => void
   onDelete: () => void
 }) {
   const days = daysUntil(route.expiresAt)
@@ -69,12 +69,27 @@ function RouteCard({ route, periodDays, onRenew, onDeactivate, onDelete }: {
         </span>
       </div>
 
-      <div className="flex items-center gap-2 mb-4 p-2.5 rounded-xl bg-slate-50 border border-neutral-200">
-        <code className="flex-1 min-w-0 truncate text-xs font-mono text-slate-800" title={fullUrl}>
+      <div className={`flex items-center gap-2 mb-4 p-2.5 rounded-xl border ${
+        live ? 'bg-slate-50 border-neutral-200' : 'bg-neutral-100 border-neutral-200'
+      }`}>
+        <code
+          className={`flex-1 min-w-0 truncate text-xs font-mono ${
+            live ? 'text-slate-800' : 'text-neutral-400 line-through'
+          }`}
+          title={fullUrl}
+        >
           {fullUrl}
         </code>
         <button
           onClick={() => {
+            if (!live) {
+              toast.error(
+                isExpired
+                  ? 'This link has expired — renew it before sharing'
+                  : 'This link is deactivated — activate it before sharing',
+              )
+              return
+            }
             navigator.clipboard.writeText(fullUrl)
             toast.success('Link copied')
           }}
@@ -129,10 +144,10 @@ function RouteCard({ route, periodDays, onRenew, onDeactivate, onDelete }: {
           Renew {periodDays} days
         </button>
         <button
-          onClick={onDeactivate}
+          onClick={onToggleActive}
           className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-xs font-bold transition-colors"
         >
-          Deactivate
+          {route.isActive ? 'Deactivate' : 'Activate'}
         </button>
         <button
           onClick={onDelete}
@@ -636,12 +651,16 @@ export default function RedirectsPage() {
     onError: (err) => toast.error(parseApiError(err) || 'Failed to delete'),
   })
 
-  const deactivateMutation = useMutation({
-    mutationFn: (id: string) => updateRedirectRoute(id, { isActive: false }),
-    onSuccess: () => {
+  // One toggle rather than a one-way switch: a deactivated link had no way back
+  // on, because the only button still said "Deactivate".
+  const toggleActiveMutation = useMutation({
+    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
+      updateRedirectRoute(id, { isActive }),
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['redirect-routes'] })
-      toast.success('Redirect deactivated')
+      toast.success(variables.isActive ? 'Link is live again' : 'Link deactivated')
     },
+    onError: (err) => toast.error(parseApiError(err) || 'Could not change the link'),
   })
 
   if (isLoading) return <DashboardSkeleton />
@@ -676,8 +695,11 @@ export default function RedirectsPage() {
               route={route}
               periodDays={periodDays}
               onRenew={() => renewMutation.mutate(route.id)}
-              onDeactivate={() => {
-                if (window.confirm('Deactivate this redirect?')) deactivateMutation.mutate(route.id)
+              onToggleActive={() => {
+                if (route.isActive) {
+                  if (!window.confirm('Deactivate this link? Visitors will stop being forwarded.')) return
+                }
+                toggleActiveMutation.mutate({ id: route.id, isActive: !route.isActive })
               }}
               onDelete={() => {
                 if (window.confirm(`Delete redirect for ${route.domain.domain}?`)) deleteMutation.mutate(route.id)
