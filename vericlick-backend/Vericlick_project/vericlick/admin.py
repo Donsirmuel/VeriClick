@@ -28,7 +28,7 @@ class WorkspaceAdmin(admin.ModelAdmin):
     # tier says nothing about whether this workspace bought a week or a month.
     # Granting a plan by hand means choosing both, and expiry has to be settable
     # alongside it or the grant has no end date.
-    readonly_fields = ('id', 'tracker_secret', 'created_at', 'plan_started_at', 'plan_billing_mode', 'plan_status', 'grace_expires_at')
+    readonly_fields = ('id', 'tracker_secret', 'created_at', 'plan_started_at', 'plan_billing_mode', 'plan_status')
     inlines = []
     autocomplete_fields = ['owner']
     date_hierarchy = 'created_at'

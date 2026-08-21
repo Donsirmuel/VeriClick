@@ -381,15 +381,30 @@ def record_failed_collection(data, event_type):
 _BILLING_CHECKS = {}
 _BILLING_CHECK_INTERVAL_SECONDS = 30 * 60
 
+# How many days before the period ends the "renew soon" email goes out. With no
+# grace period, this warning is the customer's only cushion — so a weekly buyer
+# is not given the same lead as a monthly one, where 3 days is a tenth of the
+# term but nearly half of a week.
+WARNING_LEAD_DAYS = {'weekly': 2, 'monthly': 5}
+DEFAULT_WARNING_LEAD_DAYS = 3
+
+
+def warning_lead_days(workspace):
+    return WARNING_LEAD_DAYS.get(workspace.plan_billing_period, DEFAULT_WARNING_LEAD_DAYS)
+
 
 def maybe_run_billing_checks(workspace, force=False):
     """Keep one-time "period" workspaces' billing lifecycle current.
 
-    Emits the expiring-warning, expired, and suspended ledger events plus their
-    owner emails at the right moments. The lifecycle itself is derived from
+    Emits the expiring-warning and expired ledger events plus their owner
+    emails at the right moments. The lifecycle itself is derived from
     ``plan_expires_at`` (so visitor-facing links behave correctly without any
     scheduler); this pass only publishes the notifications and ledger rows, and
     each is DB-guarded so it fires exactly once.
+
+    There is no grace window: the moment the paid period ends, access ends. The
+    warning email is what stands between a customer and that cliff, so its lead
+    time scales with the period they bought.
 
     Runs at most once every 30 minutes per workspace per process. A
     ``check_billing`` management command drives it on a timer so emails go out
@@ -401,9 +416,8 @@ def maybe_run_billing_checks(workspace, force=False):
     from .emails import (
         send_period_expiring_email,
         send_period_expired_email,
-        send_plan_suspended_email,
     )
-    from .models import BillingEvent, PLAN_GRACE_DAYS
+    from .models import BillingEvent
 
     now = timezone.now()
     key = workspace.pk
@@ -418,7 +432,6 @@ def maybe_run_billing_checks(workspace, force=False):
         return
 
     expires = workspace.plan_expires_at
-    grace = expires + timedelta(days=PLAN_GRACE_DAYS)
     plan = workspace.plan
     owner = workspace.owner
 
@@ -440,7 +453,7 @@ def maybe_run_billing_checks(workspace, force=False):
             logger.exception('Billing lifecycle email failed for workspace %s', workspace.pk)
 
     if now < expires:
-        if expires - timedelta(days=3) <= now:
+        if expires - timedelta(days=warning_lead_days(workspace)) <= now:
             _publish(
                 BillingEvent.Kind.PLAN_EXPIRING, now,
                 f'Billing period expires {expires:%d %b %Y}',
@@ -448,14 +461,10 @@ def maybe_run_billing_checks(workspace, force=False):
             )
         return
 
+    # Expiry and loss of access are now the same moment, so this is one event
+    # and one email, not an "ended" notice followed by a "suspended" one.
     _publish(
         BillingEvent.Kind.PLAN_EXPIRED, expires,
-        'Billing period ended',
+        'Billing period ended — access paused until renewal',
         lambda: send_period_expired_email(owner, workspace, plan, expires),
     )
-    if now >= grace:
-        _publish(
-            BillingEvent.Kind.PLAN_SUSPENDED, grace,
-            'Access suspended after the grace period',
-            lambda: send_plan_suspended_email(owner, workspace, plan, grace),
-        )

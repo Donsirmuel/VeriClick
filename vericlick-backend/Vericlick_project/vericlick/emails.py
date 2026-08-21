@@ -213,22 +213,23 @@ def send_payment_receipt_email(user, workspace, plan, charge_id='', occurred_at=
 
 
 def send_period_expiring_email(user, workspace, plan, expires_at):
-    # Heads-up a few days before a one-time (bank/crypto/mobile) period ends so
-    # the customer can renew before the grace window starts.
-    from django.utils import timezone
+    # The last warning before access stops. There is no grace period, so this
+    # email has to be unambiguous about the date and what happens on it.
     when = expires_at.strftime('%d %b %Y')
-    subject = f'Your {plan.name} plan renews soon'
+    period = (workspace.plan_billing_period or 'weekly').lower()
+    subject = f'Your {plan.name} plan ends on {when} — renew to stay protected'
     body = f"""
 <p style="color:#a3a3a3;font-size:15px;">Hi {user.first_name or user.username},</p>
 <p style="color:#d4d4d4;font-size:15px;line-height:1.6;">
-  Your billing period for the <strong style="color:#ffffff;">{plan.name}</strong>
-  plan ends on <strong style="color:#ffffff;">{when}</strong>. Renew before then to keep
-  your protection and analytics running without interruption.
+  Your {period} billing period for the <strong style="color:#ffffff;">{plan.name}</strong>
+  plan ends on <strong style="color:#ffffff;">{when}</strong>. Renew before then and
+  nothing changes — your protection, your redirect links and your analytics keep
+  running without interruption.
 </p>
 <p style="color:#a3a3a3;font-size:15px;line-height:1.6;">
-  If it lapses, you get a <strong style="color:#ffffff;">7-day grace period</strong> where
-  everything keeps working while you renew. After that your protection will become
-  inactive — renew to restore it immediately.
+  If it isn't renewed, protection switches off and your redirect links stop
+  working on that date. Nothing is deleted — your domains, links and history stay
+  exactly as they are, and renewing turns everything back on immediately.
 </p>
 <div style="text-align:center;margin:32px 0;">
   <a href="{settings.SITE_URL}/app/billing"
@@ -242,50 +243,22 @@ def send_period_expiring_email(user, workspace, plan, expires_at):
 
 
 def send_period_expired_email(user, workspace, plan, expires_at):
-    # Sent once when a one-time period lapses without renewal — the grace
-    # window is now running.
-    grace = workspace.grace_expires_at
-    grace_when = grace.strftime('%d %b %Y') if grace else 'within the next 7 days'
-    subject = f'Your {plan.name} plan period has ended'
+    # Sent once, the moment the paid period lapses. Expiry and loss of access
+    # are the same event now, so this is the only notice sent at that point —
+    # it has to say plainly that things have stopped, and that nothing is lost.
+    subject = f'Your {plan.name} plan has ended — protection is paused'
     body = f"""
 <p style="color:#a3a3a3;font-size:15px;">Hi {user.first_name or user.username},</p>
 <p style="color:#d4d4d4;font-size:15px;line-height:1.6;">
   Your billing period for the <strong style="color:#ffffff;">{plan.name}</strong>
-  plan ended on <strong style="color:#ffffff;">{expires_at.strftime('%d %b %Y')}</strong>
-  and wasn't renewed. You're now in a <strong style="color:#ffffff;">7-day grace
-  period</strong> — everything keeps working and you can renew anytime to keep full
-  protection.
+  plan ended on <strong style="color:#ffffff;">{expires_at.strftime('%d %b %Y')}</strong>.
+  Bot protection is now paused and your redirect links have stopped forwarding
+  visitors.
 </p>
 <p style="color:#a3a3a3;font-size:15px;line-height:1.6;">
-  If you don't renew by <strong style="color:#ffffff;">{grace_when}</strong>, your
-  protection will become inactive. Renew to restore it immediately.
-</p>
-<div style="text-align:center;margin:32px 0;">
-  <a href="{settings.SITE_URL}/app/billing"
-     style="background-color:#ffffff;color:#0a0a0a;padding:14px 28px;border-radius:10px;text-decoration:none;font-weight:bold;font-size:14px;">
-    Renew your plan
-  </a>
-</div>
-<p style="color:#525252;font-size:13px;margin-bottom:0;">Questions? Reply to this email and we'll help.</p>
-"""
-    return send_email(user.email, subject, _layout(body))
-
-
-def send_plan_suspended_email(user, workspace, plan, grace_ended_at):
-    # Sent once when the grace window passes without renewal. Links now
-    # return 410 Gone instead of pass-through to prevent abuse from lapsed
-    # accounts.
-    subject = f'Your {plan.name} plan was suspended'
-    body = f"""
-<p style="color:#a3a3a3;font-size:15px;">Hi {user.first_name or user.username},</p>
-<p style="color:#d4d4d4;font-size:15px;line-height:1.6;">
-  Your <strong style="color:#ffffff;">{plan.name}</strong> plan was suspended on
-  <strong style="color:#ffffff;">{grace_ended_at.strftime('%d %b %Y')}</strong> because it
-  wasn't renewed during the 7-day grace period.
-</p>
-<p style="color:#a3a3a3;font-size:15px;line-height:1.6;">
-  Your protection is now inactive. Renew to restore full analytics and protection immediately;
-  your domains and data are all intact.
+  Nothing has been deleted. Your domains, redirect links, settings and traffic
+  history are all still here — renewing restores them straight away, on the same
+  links your visitors already have.
 </p>
 <div style="text-align:center;margin:32px 0;">
   <a href="{settings.SITE_URL}/app/billing"

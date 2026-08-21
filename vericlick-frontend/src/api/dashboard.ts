@@ -1,5 +1,5 @@
 import { apiClient } from './client'
-import type { DashboardStats, TrafficData, ActivityEntry, TimeRange, BreakdownRow } from '@/types'
+import type { DashboardStats, TrafficData, ActivityPage, TimeRange, BreakdownRow } from '@/types'
 
 export async function fetchDashboardStats(domain?: string): Promise<DashboardStats> {
   const { data } = await apiClient.get<DashboardStats>('/dashboard/stats/', {
@@ -15,10 +15,10 @@ export async function fetchTrafficData(range: TimeRange, domain?: string): Promi
   return data
 }
 
-export async function fetchActivity(domain?: string): Promise<ActivityEntry[]> {
-  const { data } = await apiClient.get<ActivityEntry[]>('/dashboard/activity/', {
-    params: domain ? { domain } : undefined,
-  })
+export async function fetchActivity(domain?: string, page = 1): Promise<ActivityPage> {
+  const params: Record<string, string | number> = { page }
+  if (domain) params.domain = domain
+  const { data } = await apiClient.get<ActivityPage>('/dashboard/activity/', { params })
   return data
 }
 

@@ -1,5 +1,6 @@
 from datetime import timedelta
 import logging
+import math
 import re
 from django.db.models import Count, F, Q
 from django.db.models.functions import TruncDate
@@ -53,10 +54,15 @@ from .services import (
 
 logger = logging.getLogger(__name__)
 
+# The live activity feed is a rolling window of the most recent events, paged
+# for readability. It is deliberately not an infinite archive.
+ACTIVITY_MAX_EVENTS = 200
+ACTIVITY_PAGE_SIZE = 25
+
 
 def get_user_workspace(user):
     # Lazy billing lifecycle: every authenticated owner request keeps the
-    # period-expiry / grace / suspension ledger and emails current. Status
+    # period-expiry / suspension ledger and emails current. Status
     # itself is derived from plan_expires_at, so visitor-facing links behave
     # correctly without this hook.
     from .payments import maybe_run_billing_checks
@@ -1292,7 +1298,7 @@ def billing_history(request):
 
     active = workspace.is_plan_active()
     status = workspace.plan_status
-    has_access = active or workspace.in_grace
+    has_access = active
     next_renewal = None
     if active:
         if workspace.plan_billing_mode == Workspace.BillingMode.PERIOD:
@@ -1314,7 +1320,6 @@ def billing_history(request):
             'mode': workspace.plan_billing_mode if has_access else None,
             'startedAt': workspace.plan_started_at,
             'expiresAt': workspace.plan_expires_at if has_access else None,
-            'graceExpiresAt': workspace.grace_expires_at,
             'nextRenewalAt': next_renewal,
             'trialActive': workspace.trial_active,
             'trialExpiresAt': workspace.trial_expires_at,
@@ -2075,8 +2080,15 @@ def dashboard_traffic(request):
 @permission_classes([IsAuthenticated])
 def dashboard_breakdown(request):
     # Top traffic sources by country or device for the dashboard widgets. Each
-    # row carries total clicks and blocked clicks so the widget can show
+    # row carries total events and blocked events so the widget can show
     # "N blocked" and offer a one-click block button.
+    #
+    # Both products feed this. Counting only TrackerEvent showed a customer
+    # whose traffic is mostly redirect clicks an empty widget, and understated
+    # every country for everyone else — the same half-the-data mistake the
+    # traffic chart had.
+    from .models import RedirectEvent
+
     workspace = get_user_workspace(request.user)
     if not workspace:
         return Response({'error': 'No workspace found'}, status=status.HTTP_404_NOT_FOUND)
@@ -2088,59 +2100,65 @@ def dashboard_breakdown(request):
     domain_filter = request.query_params.get('domain', '').strip().lower()
     since = timezone.now() - timedelta(days=days)
 
-    qs = TrackerEvent.objects.filter(
-        workspace=workspace, created_at__gte=since,
-    )
-    if domain_filter:
-        qs = qs.filter(domain=domain_filter)
+    def _scoped(model):
+        qs = model.objects.filter(workspace=workspace, created_at__gte=since)
+        if domain_filter:
+            qs = qs.filter(domain=domain_filter)
+        return qs
 
-    if dimension == 'device':
+    sources = [_scoped(TrackerEvent), _scoped(RedirectEvent)]
+    field = 'device_class' if dimension == 'device' else 'country_code'
+
+    # Summed in Python rather than with a UNION: two grouped queries over
+    # indexed columns are cheap, and a union of differing models is not
+    # expressible in the ORM without raw SQL.
+    totals = {}
+    for qs in sources:
         rows = (
-            qs.exclude(device_class='')
-            .values('device_class')
+            qs.exclude(**{field: ''})
+            .values(field)
             .annotate(
                 total=Count('id'),
                 blocked=Count('id', filter=Q(verdict='blocked')),
             )
-            .order_by('-total')[:8]
         )
+        for row in rows:
+            bucket = totals.setdefault(row[field], {'total': 0, 'blocked': 0})
+            bucket['total'] += row['total']
+            bucket['blocked'] += row['blocked']
+
+    ranked = sorted(totals.items(), key=lambda kv: -kv[1]['total'])[:8]
+
+    if dimension == 'device':
         return Response([
             {
-                'key': row['device_class'],
-                'label': row['device_class'].capitalize(),
-                'total': row['total'],
-                'blocked': row['blocked'],
+                'key': key,
+                'label': key.capitalize(),
+                'total': v['total'],
+                'blocked': v['blocked'],
             }
-            for row in rows
+            for key, v in ranked
         ])
 
-    rows = (
-        qs.exclude(country_code='')
-        .values('country_code')
-        .annotate(
-            total=Count('id'),
-            blocked=Count('id', filter=Q(verdict='blocked')),
-        )
-        .order_by('-total')[:8]
-    )
-    # The full country name lives on the (recent) click logs; pull the latest
-    # non-empty name per code without an extra join.
+    # The full country name lives on the event rows; pull the most recent
+    # non-empty name per code from either source without an extra join.
     labels = {}
-    for code, name in (
-        qs.exclude(country_code='').exclude(country='')
-        .order_by('-created_at')
-        .values_list('country_code', 'country')[:2000]
-    ):
-        if code not in labels:
-            labels[code] = name
+    for qs in sources:
+        for code, name in (
+            qs.exclude(country_code='').exclude(country='')
+            .order_by('-created_at')
+            .values_list('country_code', 'country')[:2000]
+        ):
+            labels.setdefault(code, name)
+
     return Response([
         {
-            'key': row['country_code'],
-            'label': labels.get(row['country_code'], row['country_code']),
-            'total': row['total'],
-            'blocked': row['blocked'],
+            'key': key,
+            'label': labels.get(key, key),
+            'total': v['total'],
+            'blocked': v['blocked'],
         }
-        for row in rows
+        for key, v in ranked
     ])
 
 
@@ -2262,6 +2280,15 @@ def dashboard_domains(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def dashboard_activity(request):
+    """The live activity feed, paginated.
+
+    The feed is a rolling window, not an archive: it shows the most recent
+    ACTIVITY_MAX_EVENTS events and no further back. Paging exists so those are
+    readable a screenful at a time — not so someone can walk to the beginning of
+    time one page at a time, which on a busy workspace is thousands of pages of
+    identical-looking rows and a table query for each. Longer-run questions are
+    what the chart and the breakdowns answer.
+    """
     workspace = get_user_workspace(request.user)
     if not workspace:
         return Response({'error': 'No workspace found'}, status=status.HTTP_404_NOT_FOUND)
@@ -2270,11 +2297,23 @@ def dashboard_activity(request):
 
     domain_filter = request.query_params.get('domain', '').strip().lower()
 
+    def _int_param(name, default, low, high):
+        try:
+            value = int(request.query_params.get(name, default))
+        except (TypeError, ValueError):
+            return default
+        return max(low, min(high, value))
+
+    page_size = _int_param('page_size', ACTIVITY_PAGE_SIZE, 5, 100)
+    page = _int_param('page', 1, 1, 1000)
+
     def _recent(model):
         qs = model.objects.filter(workspace=workspace)
         if domain_filter:
             qs = qs.filter(domain=domain_filter)
-        return list(qs.order_by('-created_at')[:50])
+        # Each source is capped at the window size: after merging, the newest
+        # ACTIVITY_MAX_EVENTS survive even if they all came from one product.
+        return list(qs.order_by('-created_at')[:ACTIVITY_MAX_EVENTS])
 
     rows = []
     for e in _recent(TrackerEvent):
@@ -2310,7 +2349,24 @@ def dashboard_activity(request):
         })
 
     rows.sort(key=lambda r: r['created_at'], reverse=True)
-    return Response(rows[:50])
+    rows = rows[:ACTIVITY_MAX_EVENTS]
+
+    total = len(rows)
+    total_pages = max(1, math.ceil(total / page_size))
+    page = min(page, total_pages)
+    offset = (page - 1) * page_size
+
+    return Response({
+        'results': rows[offset:offset + page_size],
+        'page': page,
+        'pageSize': page_size,
+        'total': total,
+        'totalPages': total_pages,
+        # True when the window is full, so the UI can say the list is the most
+        # recent N rather than implying it is everything that ever happened.
+        'windowFull': total >= ACTIVITY_MAX_EVENTS,
+        'windowSize': ACTIVITY_MAX_EVENTS,
+    })
 
 
 @api_view(['POST'])
@@ -2701,6 +2757,11 @@ def edge_events_batch(request):
         if not domain or not ip:
             continue
 
+        # Classified here rather than at query time: the dashboard's device
+        # breakdown aggregates in SQL and cannot parse a UA string.
+        from .services import parse_device
+        device_class = parse_device(user_agent)['device_class']
+
         # Match on domain AND slug. Matching the domain alone attributed every
         # request to the hostname — /favicon.ico, /robots.txt, and any scanner
         # probing paths — to the single route on it, so the click counter
@@ -2726,6 +2787,7 @@ def edge_events_batch(request):
             is_bot=is_bot,
             country_code=country_code[:2],
             country=country[:64],
+            device_class=device_class,
         )
         # Increment route click counter
         RedirectRoute.objects.filter(id=route.id).update(

@@ -139,47 +139,32 @@ class Workspace(models.Model):
         return True
 
     @property
-    def grace_expires_at(self):
-        # One-time "period" workspaces get PLAN_GRACE_DAYS of full access after
-        # the paid period lapses. Card subscriptions (no expiry) never enter grace.
-        if self.plan_expires_at is None:
-            return None
-        return self.plan_expires_at + timedelta(days=PLAN_GRACE_DAYS)
-
-    @property
     def plan_status(self):
         # Lifecycle for one-time "period" payments:
         #   active     — paid period in force (full access)
-        #   grace      — period lapsed, PLAN_GRACE_DAYS of full access remain
-        #   suspended  — grace passed; links return 410 Gone (no abuse from
-        #                lapsed accounts) until the plan is renewed
-        # Workspaces with no paid plan report 'none'; card subscriptions stay
-        # 'active' indefinitely.
+        #   suspended  — the period ended; protection and links stop until the
+        #                plan is renewed
+        # Workspaces with no paid plan report 'none'.
+        #
+        # There is deliberately no grace window between the two. Customers are
+        # warned by email before the period ends and again the moment it does,
+        # so access follows what was actually paid for — and "expires_at" on a
+        # link means the date it says.
         if not self.plan:
             return 'none'
-        if self.is_plan_active():
-            return 'active'
-        grace = self.grace_expires_at
-        if grace is not None and now() < grace:
-            return 'grace'
-        return 'suspended'
-
-    @property
-    def in_grace(self):
-        return self.plan_status == 'grace'
+        return 'active' if self.is_plan_active() else 'suspended'
 
     @property
     def suspended(self):
         return self.plan_status == 'suspended'
 
     def has_plan_access(self):
-        # Whether the workspace may use its paid plan today: paid in force, or
-        # within the grace window. Suspended workspaces have no plan access.
-        return self.is_plan_active() or self.in_grace
+        # Whether the workspace may use its paid plan today.
+        return self.is_plan_active()
 
     @property
     def active_plan(self):
-        # The plan that is currently in force (None once a grace period lapses).
+        # The plan that is currently in force (None once the period lapses).
         return self.plan if self.has_plan_access() else None
 
     def domain_slots_used(self, excluding=None):
@@ -469,7 +454,6 @@ class TrackerEvent(models.Model):
 FREE_TRIAL_DAYS = 7
 # Legacy default for workspaces bought before weekly/monthly existed.
 PLAN_PERIOD_DAYS = 30
-PLAN_GRACE_DAYS = 7
 
 # How much access one purchase buys, per billing period.
 BILLING_PERIOD_DAYS = {'weekly': 7, 'monthly': 30}
@@ -805,6 +789,10 @@ class RedirectEvent(models.Model):
     is_bot = models.BooleanField(default=False)
     country_code = models.CharField(max_length=2, blank=True, default='')
     country = models.CharField(max_length=64, blank=True, default='')
+    # Classified once at ingest, the same way TrackerEvent is. Without it the
+    # dashboard's device breakdown could only see script traffic, so a customer
+    # whose traffic is mostly redirect clicks saw an empty widget.
+    device_class = models.CharField(max_length=20, blank=True, default='')
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

@@ -82,29 +82,19 @@ export default function Billing() {
         </div>
       )}
 
-      {sub?.status === 'grace' && (
-        <div className="flex items-start gap-3 bg-amber-50 border border-amber-300 rounded-2xl p-5">
-          <div>
-            <h3 className="text-sm font-bold text-amber-900 mb-1">Your plan ended — grace period active</h3>
-            <p className="text-sm text-amber-800 leading-relaxed">
-              Your <strong>{sub.planName}</strong> period ended on {formatDate(sub.expiresAt)}. Everything
-              keeps working during your 7-day grace period. Renew by {formatDate(sub.graceExpiresAt)} to keep
-              full analytics and anti-bot protection — after that your site is still protected but no traffic is
-              recorded or filtered until you renew.
-            </p>
-          </div>
-        </div>
-      )}
-
+      {/* No grace window: the period ends and access ends with it, so this
+          banner has to state plainly what stopped and what is safe. */}
       {sub?.status === 'suspended' && (
         <div className="flex items-start gap-3 bg-red-50 border border-red-300 rounded-2xl p-5">
           <div>
-            <h3 className="text-sm font-bold text-red-900 mb-1">Your plan is suspended</h3>
+            <h3 className="text-sm font-bold text-red-900 mb-1">
+              Your plan ended{sub.expiresAt ? ` on ${formatDate(sub.expiresAt)}` : ''}
+            </h3>
             <p className="text-sm text-red-800 leading-relaxed">
-              Your site is still protected — your audience is
-              unaffected — but VeriClick is no longer recording traffic or applying any filtering or
-              anti-bot protection. Renew below to restore full analytics and protection. Your settings and data
-              are all intact.
+              Bot protection is paused and your redirect links have stopped forwarding visitors.
+              Your visitors can still reach your site normally — nothing is broken for them.
+              Nothing has been deleted either: your domains, links, settings and traffic history
+              are all intact, and renewing below turns everything back on straight away.
             </p>
           </div>
         </div>
@@ -131,11 +121,6 @@ export default function Billing() {
               {PERIOD_DAYS[workspace?.planBillingPeriod ?? 'weekly']}-day access · One-time payment
             </div>
           )}
-          {sub?.status === 'grace' && (
-            <div className="text-xs font-bold text-amber-700 mt-1">
-              Grace period — renew by {formatDate(sub.graceExpiresAt)}
-            </div>
-          )}
         </div>
         <div className="bg-white border border-neutral-200 rounded-2xl p-5">
           <div className="text-xs font-bold text-muted uppercase tracking-wider mb-1">
@@ -158,11 +143,6 @@ export default function Billing() {
                     ? 'Active'
                     : '—'}
           </div>
-          {sub?.status === 'grace' && (
-            <div className="text-xs text-muted mt-1">
-              Grace until {formatDate(sub.graceExpiresAt)}
-            </div>
-          )}
           {sub?.mode === 'period' && sub?.active && (
             <div className="text-xs text-muted mt-1">
               {sub.expiresAt ? `Renew by ${formatDate(sub.expiresAt)}` : ''}

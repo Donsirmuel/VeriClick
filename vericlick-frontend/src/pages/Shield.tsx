@@ -56,14 +56,6 @@ export default function ShieldPage() {
     },
   })
 
-  const { data: workspace } = useQuery({
-    queryKey: ['workspace'],
-    queryFn: async () => {
-      const { data } = await apiClient.get<{ safeDestination: string; planName: string | null; trialActive: boolean }>('/workspace/')
-      return data
-    },
-  })
-
   const { data: domains } = useQuery({
     queryKey: ['domains'],
     queryFn: fetchDomains,
@@ -75,6 +67,7 @@ export default function ShieldPage() {
   const [protectionMode, setProtectionMode] = useState<ProtectionMode>('balanced')
   const [botAction, setBotAction] = useState<BotAction>('block')
   const [safeDestination, setSafeDestination] = useState('')
+  const [saveError, setSaveError] = useState('')
 
   const selectedDomain = domains?.find((d) => d.id === selectedDomainId)
 
@@ -88,21 +81,31 @@ export default function ShieldPage() {
     if (config) {
       setProtectionMode(config.protectionMode)
       setBotAction(config.botAction)
-      setSafeDestination(config.safeDestination || workspace?.safeDestination || '')
+      setSafeDestination(config.safeDestination ?? '')
     }
-  }, [config, workspace])
+  }, [config])
 
   const saveMutation = useMutation({
     mutationFn: async (payload: { protectionMode: ProtectionMode; botAction: BotAction; safeDestination: string }) => {
       const { data } = await apiClient.patch('/workspace/shield-config/', payload)
       return data
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['workspace-shield-config'] })
-      toast.success('Shield configuration saved')
+      queryClient.invalidateQueries({ queryKey: ['workspace'] })
+      setSaveError('')
+      // Reflect what the server stored, not what was typed — it normalises
+      // "example.com/safe" into a full address.
+      if (typeof data?.safeDestination === 'string') setSafeDestination(data.safeDestination)
+      toast.success('Anti-bot settings saved')
     },
-    onError: () => {
-      toast.error('Failed to save shield configuration')
+    onError: (err: any) => {
+      // A rejected safe destination is a fixable typo. Saying only "failed"
+      // leaves the user re-clicking Save with no idea what is wrong.
+      const detail = err?.response?.data?.safeDestination
+      const message = Array.isArray(detail) ? detail[0] : detail
+      setSaveError(message || '')
+      toast.error(message || 'Could not save your anti-bot settings')
     },
   })
 
@@ -128,7 +131,7 @@ export default function ShieldPage() {
   const isDirty = config
     ? protectionMode !== config.protectionMode ||
       botAction !== config.botAction ||
-      (botAction === 'honeypot' && safeDestination !== (config.safeDestination || workspace?.safeDestination || ''))
+      (botAction === 'honeypot' && safeDestination !== (config.safeDestination ?? ''))
     : false
 
   const currentSnippet = snippetData?.snippet ?? ''
@@ -289,12 +292,20 @@ export default function ShieldPage() {
               Where bots will be redirected instead of being blocked.
             </p>
             <input
-              type="url"
+              type="text"
+              inputMode="url"
               value={safeDestination}
-              onChange={(e) => setSafeDestination(e.target.value)}
+              onChange={(e) => { setSafeDestination(e.target.value); setSaveError('') }}
               placeholder="https://example.com/safe-page"
-              className="w-full bg-slate-50 border border-neutral-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-black transition-colors"
+              aria-invalid={!!saveError}
+              aria-describedby={saveError ? 'safe-destination-error' : undefined}
+              className={`w-full bg-slate-50 border rounded-xl px-4 py-3 text-sm focus:outline-none transition-colors ${
+                saveError ? 'border-red-400 focus:border-red-500' : 'border-neutral-200 focus:border-black'
+              }`}
             />
+            {saveError && (
+              <p id="safe-destination-error" className="text-xs text-red-600 mt-2">{saveError}</p>
+            )}
           </div>
         )}
 

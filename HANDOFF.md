@@ -24,7 +24,7 @@ VeriClick is a **script-first bot protection & smart redirect platform**. Custom
 
 | Model | Purpose |
 |---|---|
-| `Workspace` | Tenant container. Owner, plan, billing state. Plan lifecycle: active → grace → suspended |
+| `Workspace` | Tenant container. Owner, plan, billing state. Plan lifecycle: active → suspended (no grace window) |
 | `Plan` | Pricing tier. Code, name, price (one-time/week), domain_limit (1 for all plans) |
 | `DomainRegistry` | Domain ownership with verification (`html_meta` or `dns_txt`), health status, purpose (`protection` or `redirect`) |
 | `InstallToken` | SHA-256 hashed, `vc_` prefix, shown once on create. Used by anti-bot script to authenticate |
@@ -96,8 +96,7 @@ VeriClick is a **script-first bot protection & smart redirect platform**. Custom
 
 ### Plan Lifecycle
 - `active` → paid period in force (full access)
-- `grace` → period lapsed, 7-day grace window (full access)
-- `suspended` → grace passed, protection inactive until renewal
+- `suspended` → the paid period ended; protection inactive and links stop until renewal
 
 ### Background Tasks
 - `check_redirect_expiry` — daily cron, sends warning emails 1 day before + day of redirect expiry, auto-deactivates expired routes
@@ -116,7 +115,7 @@ All errors: `{"errors": [{"field": ..., "detail": ...}]}`
 - ~273 tests in `vericlick/tests.py`
 - Dev: `python manage.py test` (SQLite)
 - CI: `python manage.py test --settings=Vericlick_project.settings_test`
-- Covers: all models, endpoints (CRUD, auth, edge cases), anti-bot verify/config with both api_key and install_token, domain verification (meta + DNS), install token lifecycle, redirect route CRUD + renew/activate/deactivate, edge sync/validate/events, credential management, test installation, plan lifecycle (active/grace/suspended), CNAME verification
+- Covers: all models, endpoints (CRUD, auth, edge cases), anti-bot verify/config with both api_key and install_token, domain verification (meta + DNS), install token lifecycle, redirect route CRUD + renew/activate/deactivate, edge sync/validate/events, credential management, test installation, plan lifecycle (active/suspended), CNAME verification
 
 ---
 

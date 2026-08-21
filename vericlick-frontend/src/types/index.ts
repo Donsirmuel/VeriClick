@@ -36,6 +36,19 @@ export interface ActivityEntry {
   createdAt: string
 }
 
+/** One page of the live activity feed. The feed is a rolling window of the most
+ *  recent `windowSize` events, not a full archive — `windowFull` says whether
+ *  the window is saturated so the UI can label the list honestly. */
+export interface ActivityPage {
+  results: ActivityEntry[]
+  page: number
+  pageSize: number
+  total: number
+  totalPages: number
+  windowFull: boolean
+  windowSize: number
+}
+
 export interface Workspace {
   id: string
   name: string
@@ -46,8 +59,7 @@ export interface Workspace {
   planBillingMode: BillingMode | null
   planBillingPeriod: BillingPeriod | null
   planExpiresAt: string | null
-  planStatus: 'active' | 'grace' | 'suspended' | 'none' | null
-  graceExpiresAt: string | null
+  planStatus: 'active' | 'suspended' | 'none' | null
   trialExpiresAt: string | null
   trialActive: boolean
   domainsUsed: number
@@ -160,14 +172,13 @@ export interface BillingEvent {
 
 export interface BillingHistory {
   subscription: {
-    status: 'active' | 'grace' | 'suspended' | 'none'
+    status: 'active' | 'suspended' | 'none'
     active: boolean
     plan: string | null
     planName: string | null
     mode: BillingMode | null
     startedAt: string | null
     expiresAt: string | null
-    graceExpiresAt: string | null
     nextRenewalAt: string | null
     trialActive: boolean
     trialExpiresAt: string | null

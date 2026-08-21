@@ -15,7 +15,6 @@ from rest_framework.test import APITestCase, APIClient
 from rest_framework import status
 from decimal import Decimal
 from .models import (
-    PLAN_GRACE_DAYS,
     Workspace, IPRule, TrackerEvent,
     Plan, DiscountCode, SiteConfig, CheckoutIntent, BillingEvent,
     DomainRegistry, InstallToken, RedirectRoute, EdgeSyncCredential,
@@ -531,9 +530,9 @@ class DashboardEndpointTests(APITestCase):
         res = self.client.get('/api/dashboard/activity/')
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         body = res.json()
-        self.assertGreaterEqual(len(body), 1)
-        self.assertIn('ip', body[0])
-        self.assertIn('isBot', body[0])
+        self.assertGreaterEqual(len(body['results']), 1)
+        self.assertIn('ip', body['results'][0])
+        self.assertIn('isBot', body['results'][0])
 
     def test_activity_unauthenticated(self):
         self.client.force_authenticate(user=None)
@@ -675,6 +674,23 @@ class WorkspaceEndpointTests(APITestCase):
         self.assertEqual(res.json()['safeDestination'], 'https://safety.example.com/honeypot')
         self.workspace.refresh_from_db()
         self.assertEqual(self.workspace.safe_destination, 'https://safety.example.com/honeypot')
+
+    def test_a_scheme_less_safe_destination_is_accepted(self):
+        """People type "myshop.com/safe", not "https://myshop.com/safe". A URL
+        validator rejecting that reads as the feature being broken."""
+        res = self.client.patch(
+            '/api/workspace/', {'safeDestination': 'safety.example.com/honeypot'},
+            format='json',
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.workspace.refresh_from_db()
+        self.assertEqual(self.workspace.safe_destination, 'https://safety.example.com/honeypot')
+
+    def test_nonsense_safe_destination_is_named_as_such(self):
+        res = self.client.patch(
+            '/api/workspace/', {'safeDestination': 'not a url at all'}, format='json',
+        )
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_tracker_secret_is_read_only(self):
         original = str(self.workspace.tracker_secret)
@@ -1988,7 +2004,7 @@ class EdgeVerdictTests(APITestCase):
 
     def test_a_suspended_workspace_fails_open(self):
         # A lapsed plan stops analysis; it must not start blocking their traffic.
-        self.workspace.plan_expires_at = timezone.now() - timedelta(days=PLAN_GRACE_DAYS + 1)
+        self.workspace.plan_expires_at = timezone.now() - timedelta(days=1)
         self.workspace.save(update_fields=['plan_expires_at'])
         self.assertEqual(self.workspace.plan_status, 'suspended')
         self.assertFalse(self._ask(ua='curl/8.0').json()['isBot'])
@@ -2416,7 +2432,88 @@ class AdminManualPaymentActionTests(TestCase):
         self.assertEqual(BillingEvent.objects.count(), 0)
 
 
-class BillingGraceSuspensionTests(APITestCase):
+class ShieldConfigSafeDestinationTests(APITestCase):
+    """The Anti-Bot page saves the safe destination through /shield-config/.
+    ShieldConfigSerializer had no such field, so DRF discarded the key and every
+    save reported success while writing nothing."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='safe_dest', password='pw')
+        self.client.force_authenticate(user=self.user)
+        self.workspace = Workspace.objects.get(owner=self.user)
+
+    def test_saving_from_the_antibot_page_persists(self):
+        res = self.client.patch(
+            '/api/workspace/shield-config/',
+            {'botAction': 'honeypot', 'safeDestination': 'https://safe.example.com/here'},
+            format='json',
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.workspace.refresh_from_db()
+        self.assertEqual(self.workspace.safe_destination, 'https://safe.example.com/here')
+
+    def test_the_saved_value_is_read_back(self):
+        """The page repopulates from this response; if it is not returned the
+        field blanks itself on reload and looks unsaved."""
+        self.client.patch(
+            '/api/workspace/shield-config/',
+            {'safeDestination': 'https://safe.example.com/here'}, format='json',
+        )
+        res = self.client.get('/api/workspace/shield-config/')
+        self.assertEqual(res.json()['safeDestination'], 'https://safe.example.com/here')
+
+    def test_it_reaches_the_code_that_actually_uses_it(self):
+        from vericlick.services import get_safe_destination
+        self.client.patch(
+            '/api/workspace/shield-config/',
+            {'safeDestination': 'https://safe.example.com/here'}, format='json',
+        )
+        self.workspace.refresh_from_db()
+        self.assertEqual(get_safe_destination(self.workspace), 'https://safe.example.com/here')
+
+    def test_clearing_it_is_allowed(self):
+        self.workspace.safe_destination = 'https://old.example.com/'
+        self.workspace.save()
+        res = self.client.patch(
+            '/api/workspace/shield-config/',
+            {'botAction': 'block', 'safeDestination': ''}, format='json',
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.workspace.refresh_from_db()
+        self.assertEqual(self.workspace.safe_destination, '')
+
+    def test_a_scheme_less_address_is_accepted(self):
+        res = self.client.patch(
+            '/api/workspace/shield-config/',
+            {'safeDestination': 'safe.example.com/here'}, format='json',
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.workspace.refresh_from_db()
+        self.assertEqual(self.workspace.safe_destination, 'https://safe.example.com/here')
+
+    def test_the_other_shield_settings_still_save_alongside_it(self):
+        res = self.client.patch(
+            '/api/workspace/shield-config/',
+            {'protectionMode': 'strict', 'botAction': 'honeypot',
+             'safeDestination': 'https://safe.example.com/'},
+            format='json',
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.json()['protectionMode'], 'strict')
+        self.assertEqual(res.json()['botAction'], 'honeypot')
+
+    def test_another_workspace_is_untouched(self):
+        other = User.objects.create_user(username='safe_dest_other', password='pw')
+        other_ws = Workspace.objects.get(owner=other)
+        self.client.patch(
+            '/api/workspace/shield-config/',
+            {'safeDestination': 'https://safe.example.com/'}, format='json',
+        )
+        other_ws.refresh_from_db()
+        self.assertEqual(other_ws.safe_destination, '')
+
+
+class BillingExpiryTests(APITestCase):
     def setUp(self):
         self.user = User.objects.create_user(username='payperiod', email='period@example.com', password='pw')
         self.workspace = Workspace.objects.get(owner=self.user)
@@ -2433,34 +2530,30 @@ class BillingGraceSuspensionTests(APITestCase):
         self.workspace.plan_expires_at = timezone.now() - timedelta(days=1)
         self.workspace.save()
 
-    def _end_grace(self):
-        self.workspace.plan_expires_at = timezone.now() - timedelta(days=8)
-        self.workspace.save()
-
-    def test_status_transitions(self):
+    def test_access_ends_the_moment_the_period_does(self):
+        """No grace window. Customers are warned by email before and at expiry,
+        so access follows exactly what was paid for — a link that says it
+        expires on a date stops working on that date."""
         self.assertEqual(self.workspace.plan_status, 'active')
         self.assertTrue(self.workspace.has_plan_access())
         self._expire()
-        self.assertEqual(self.workspace.plan_status, 'grace')
-        self.assertTrue(self.workspace.has_plan_access())
-        self._end_grace()
-        self.assertEqual(self.workspace.plan_status, 'suspended')
-        self.assertFalse(self.workspace.has_plan_access())
-
-    def test_grace_keeps_plan_access(self):
-        self._expire()
-        self.assertEqual(self.workspace.plan_status, 'grace')
-        self.assertTrue(self.workspace.has_plan_access())
-        self.assertIsNotNone(self.workspace.active_plan)
-
-    def test_suspended_drops_plan_access(self):
-        self._end_grace()
         self.assertEqual(self.workspace.plan_status, 'suspended')
         self.assertFalse(self.workspace.has_plan_access())
         self.assertIsNone(self.workspace.active_plan)
 
+    def test_one_second_past_expiry_is_already_suspended(self):
+        self.workspace.plan_expires_at = timezone.now() - timedelta(seconds=1)
+        self.workspace.save()
+        self.assertEqual(self.workspace.plan_status, 'suspended')
+
+    def test_a_workspace_with_no_plan_reports_none(self):
+        self.workspace.plan = None
+        self.workspace.plan_expires_at = None
+        self.workspace.save()
+        self.assertEqual(self.workspace.plan_status, 'none')
+
     def test_suspended_tracker_event_not_recorded(self):
-        self._end_grace()
+        self._expire()
         res = self.client.post(
             '/api/tracker/event/',
             {
@@ -2475,6 +2568,7 @@ class BillingGraceSuspensionTests(APITestCase):
 
     @patch('vericlick.emails.send_period_expiring_email')
     def test_expiring_check_emits_event_and_email_once(self, mock_email):
+        self.workspace.plan_billing_period = 'monthly'
         self.workspace.plan_expires_at = timezone.now() + timedelta(days=2)
         self.workspace.save()
         from vericlick.payments import maybe_run_billing_checks
@@ -2485,31 +2579,76 @@ class BillingGraceSuspensionTests(APITestCase):
         )
         self.assertEqual(mock_email.call_count, 1)
 
+    @patch('vericlick.emails.send_period_expiring_email')
+    def test_a_weekly_plan_is_warned_two_days_out(self, mock_email):
+        """A weekly buyer warned five days ahead would be warned before they had
+        used most of what they bought; a monthly one warned two days ahead has
+        almost no room. The lead scales with the term."""
+        from vericlick.payments import maybe_run_billing_checks
+        self.workspace.plan_billing_period = 'weekly'
+        self.workspace.plan_expires_at = timezone.now() + timedelta(days=4)
+        self.workspace.save()
+        maybe_run_billing_checks(self.workspace, force=True)
+        self.assertEqual(mock_email.call_count, 0)
+
+        self.workspace.plan_expires_at = timezone.now() + timedelta(days=1)
+        self.workspace.save()
+        maybe_run_billing_checks(self.workspace, force=True)
+        self.assertEqual(mock_email.call_count, 1)
+
+    @patch('vericlick.emails.send_period_expiring_email')
+    def test_a_monthly_plan_is_warned_five_days_out(self, mock_email):
+        from vericlick.payments import maybe_run_billing_checks
+        self.workspace.plan_billing_period = 'monthly'
+        self.workspace.plan_expires_at = timezone.now() + timedelta(days=4)
+        self.workspace.save()
+        maybe_run_billing_checks(self.workspace, force=True)
+        self.assertEqual(mock_email.call_count, 1)
+
     @patch('vericlick.emails.send_period_expired_email')
-    @patch('vericlick.emails.send_plan_suspended_email')
-    def test_expired_then_suspended_emits_each_once(self, mock_suspended, mock_expired):
-        self._end_grace()
+    def test_expiry_sends_exactly_one_notice(self, mock_expired):
+        """Expiry and loss of access are the same moment now, so a customer
+        gets one email about it, not an "ended" notice chased by a
+        "suspended" one."""
+        self._expire()
         from vericlick.payments import maybe_run_billing_checks
         maybe_run_billing_checks(self.workspace, force=True)
         maybe_run_billing_checks(self.workspace, force=True)
         self.assertEqual(
             BillingEvent.objects.filter(workspace=self.workspace, kind=BillingEvent.Kind.PLAN_EXPIRED).count(), 1
         )
-        self.assertEqual(
-            BillingEvent.objects.filter(workspace=self.workspace, kind=BillingEvent.Kind.PLAN_SUSPENDED).count(), 1
-        )
         self.assertEqual(mock_expired.call_count, 1)
-        self.assertEqual(mock_suspended.call_count, 1)
+        self.assertFalse(
+            BillingEvent.objects.filter(
+                workspace=self.workspace, kind=BillingEvent.Kind.PLAN_SUSPENDED,
+            ).exists()
+        )
 
-    def test_billing_history_reflects_grace(self):
+    def test_reminders_off_still_writes_the_ledger_row(self):
+        """Turning reminders off silences the nudge, not the billing record."""
+        from vericlick.payments import maybe_run_billing_checks
+        self.workspace.notify_plan_reminders = False
+        self.workspace.save()
+        self._expire()
+        with patch('vericlick.emails.send_period_expired_email') as mock_email:
+            maybe_run_billing_checks(self.workspace, force=True)
+        self.assertEqual(mock_email.call_count, 0)
+        self.assertTrue(
+            BillingEvent.objects.filter(
+                workspace=self.workspace, kind=BillingEvent.Kind.PLAN_EXPIRED,
+            ).exists()
+        )
+
+    def test_billing_history_reports_suspension_at_expiry(self):
         self.client.force_authenticate(user=self.user)
         self._expire()
         res = self.client.get('/api/workspace/billing-history/')
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         sub = res.json()['subscription']
-        self.assertEqual(sub['status'], 'grace')
-        self.assertIsNotNone(sub['graceExpiresAt'])
-        self.assertEqual(sub['planName'], 'Plus')
+        self.assertEqual(sub['status'], 'suspended')
+        self.assertFalse(sub['active'])
+        self.assertIsNone(sub['planName'])
+        self.assertNotIn('graceExpiresAt', sub)
 
 
 @override_settings(BACHS_API_KEY='test_api_key')
@@ -2894,6 +3033,218 @@ class DashboardBreakdownTests(APITestCase):
         self.client.force_authenticate(user=None)
         res = self.client.get('/api/dashboard/breakdown/')
         self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+class DashboardBreakdownCountsBothProductsTests(APITestCase):
+    """Top countries and top devices originally aggregated TrackerEvent alone,
+    so redirect clicks — half the product — were missing from both widgets. A
+    workspace that only runs redirect links saw an empty breakdown."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='breakdown_both', password='pw123')
+        self.client.force_authenticate(user=self.user)
+        self.workspace = Workspace.objects.get(owner=self.user)
+        self.domain = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='go.example.com', purpose='redirect',
+            verified=True,
+        )
+        self.route = RedirectRoute.objects.create(
+            workspace=self.workspace, domain=self.domain, slug='promo',
+            destination_url='https://target.example.com/',
+        )
+
+    def _tracker(self, **kw):
+        defaults = dict(
+            workspace=self.workspace, ip='1.1.1.1', page_url='https://example.com/',
+            country_code='US', country='United States', device_class='desktop',
+            verdict='allowed',
+        )
+        defaults.update(kw)
+        return TrackerEvent.objects.create(**defaults)
+
+    def _click(self, **kw):
+        from vericlick.models import RedirectEvent
+        defaults = dict(
+            workspace=self.workspace, redirect_route=self.route,
+            domain='go.example.com', slug='promo', ip='2.2.2.2',
+            destination='https://target.example.com/', verdict='allowed',
+            country_code='US', country='United States', device_class='mobile',
+        )
+        defaults.update(kw)
+        return RedirectEvent.objects.create(**defaults)
+
+    def test_countries_sum_across_both_products(self):
+        self._tracker(country_code='US')
+        self._click(country_code='US')
+        self._click(country_code='US')
+        res = self.client.get('/api/dashboard/breakdown/?dimension=country&range=30d')
+        by_key = {r['key']: r for r in res.json()}
+        self.assertEqual(by_key['US']['total'], 3)
+
+    def test_a_redirect_only_workspace_still_gets_a_country_breakdown(self):
+        self._click(country_code='NG', country='Nigeria')
+        res = self.client.get('/api/dashboard/breakdown/?dimension=country&range=30d')
+        by_key = {r['key']: r for r in res.json()}
+        self.assertEqual(by_key['NG']['total'], 1)
+        self.assertEqual(by_key['NG']['label'], 'Nigeria')
+
+    def test_devices_sum_across_both_products(self):
+        self._tracker(device_class='mobile')
+        self._click(device_class='mobile')
+        res = self.client.get('/api/dashboard/breakdown/?dimension=device&range=30d')
+        by_key = {r['key']: r for r in res.json()}
+        self.assertEqual(by_key['mobile']['total'], 2)
+
+    def test_blocked_counts_include_redirect_blocks(self):
+        self._click(verdict='blocked', is_bot=True, country_code='RU', country='Russia')
+        res = self.client.get('/api/dashboard/breakdown/?dimension=country&range=30d')
+        by_key = {r['key']: r for r in res.json()}
+        self.assertEqual(by_key['RU']['blocked'], 1)
+
+    def test_the_domain_filter_applies_to_both_sources(self):
+        self._tracker(domain='example.com', country_code='US')
+        self._click(country_code='US')
+        res = self.client.get(
+            '/api/dashboard/breakdown/?dimension=country&range=30d&domain=go.example.com'
+        )
+        by_key = {r['key']: r for r in res.json()}
+        self.assertEqual(by_key['US']['total'], 1)
+
+    def test_events_outside_the_range_are_excluded(self):
+        from vericlick.models import RedirectEvent
+        old = self._click(country_code='FR', country='France')
+        RedirectEvent.objects.filter(pk=old.pk).update(
+            created_at=timezone.now() - timedelta(days=45),
+        )
+        res = self.client.get('/api/dashboard/breakdown/?dimension=country&range=30d')
+        self.assertNotIn('FR', {r['key'] for r in res.json()})
+
+    def test_a_redirect_click_is_classified_at_ingest(self):
+        """The device column is filled from the user agent when the edge batch
+        lands — the breakdown groups in SQL and cannot parse a UA later."""
+        from vericlick.models import EdgeSyncCredential, RedirectEvent
+        raw_key, _ = EdgeSyncCredential.create_for_workspace(self.workspace, label='edge')
+        res = self.client.post(
+            '/api/edge/events/',
+            {'events': [{
+                'domain': 'go.example.com', 'slug': 'promo', 'ip': '9.9.9.9',
+                'user_agent': (
+                    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) '
+                    'AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
+                ),
+                'destination': 'https://target.example.com/', 'verdict': 'allowed',
+            }]},
+            format='json', HTTP_X_EDGE_API_KEY=raw_key,
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        event = RedirectEvent.objects.get(ip='9.9.9.9')
+        self.assertEqual(event.device_class, 'mobile')
+
+
+class DashboardActivityPaginationTests(APITestCase):
+    """The feed is a rolling window of the most recent events, paged for
+    readability — not an archive that can be walked back forever."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='activity_pages', password='pw123')
+        self.client.force_authenticate(user=self.user)
+        self.workspace = Workspace.objects.get(owner=self.user)
+
+    def _events(self, n, **kw):
+        for i in range(n):
+            TrackerEvent.objects.create(
+                workspace=self.workspace, ip=f'10.0.0.{i % 250}',
+                page_url=f'https://example.com/{i}', verdict='allowed', **kw,
+            )
+
+    def test_the_first_page_is_a_screenful_not_everything(self):
+        self._events(60)
+        body = self.client.get('/api/dashboard/activity/').json()
+        self.assertEqual(len(body['results']), 25)
+        self.assertEqual(body['page'], 1)
+        self.assertEqual(body['total'], 60)
+        self.assertEqual(body['totalPages'], 3)
+
+    def test_paging_walks_backwards_in_time_without_repeats(self):
+        self._events(60)
+        first = self.client.get('/api/dashboard/activity/?page=1').json()['results']
+        second = self.client.get('/api/dashboard/activity/?page=2').json()['results']
+        self.assertEqual(len(set(r['id'] for r in first) & set(r['id'] for r in second)), 0)
+        self.assertLess(second[0]['createdAt'], first[-1]['createdAt'] + 'z')
+
+    def test_the_feed_stops_at_two_hundred_events(self):
+        """Asked for explicitly: however much traffic a workspace has, the feed
+        shows the most recent 200 and no more."""
+        self._events(260)
+        body = self.client.get('/api/dashboard/activity/').json()
+        self.assertEqual(body['total'], 200)
+        self.assertEqual(body['totalPages'], 8)
+        self.assertTrue(body['windowFull'])
+        self.assertEqual(body['windowSize'], 200)
+
+    def test_there_is_no_page_past_the_window(self):
+        self._events(260)
+        body = self.client.get('/api/dashboard/activity/?page=99').json()
+        # Clamped to the last real page rather than returning an empty list,
+        # which would look like the data had vanished.
+        self.assertEqual(body['page'], 8)
+        self.assertEqual(len(body['results']), 25)
+
+    def test_the_two_hundred_shown_are_the_newest_ones(self):
+        self._events(260)
+        newest = TrackerEvent.objects.order_by('-created_at').first()
+        body = self.client.get('/api/dashboard/activity/?page=1').json()
+        self.assertEqual(body['results'][0]['id'], str(newest.id))
+
+    def test_a_window_that_is_not_full_says_so(self):
+        self._events(10)
+        body = self.client.get('/api/dashboard/activity/').json()
+        self.assertFalse(body['windowFull'])
+        self.assertEqual(body['total'], 10)
+        self.assertEqual(body['totalPages'], 1)
+
+    def test_an_empty_feed_is_one_empty_page(self):
+        body = self.client.get('/api/dashboard/activity/').json()
+        self.assertEqual(body['results'], [])
+        self.assertEqual(body['total'], 0)
+        self.assertEqual(body['totalPages'], 1)
+        self.assertEqual(body['page'], 1)
+
+    def test_a_junk_page_number_does_not_500(self):
+        self._events(5)
+        for value in ('abc', '-4', '0', ''):
+            res = self.client.get(f'/api/dashboard/activity/?page={value}')
+            self.assertEqual(res.status_code, status.HTTP_200_OK, value)
+            self.assertEqual(res.json()['page'], 1, value)
+
+    def test_page_size_is_capped(self):
+        self._events(260)
+        body = self.client.get('/api/dashboard/activity/?page_size=5000').json()
+        self.assertLessEqual(len(body['results']), 100)
+
+    def test_the_window_spans_both_products(self):
+        """200 script visits must not crowd out redirect clicks entirely — each
+        source is read up to the window size before the merge."""
+        from vericlick.models import RedirectEvent
+        domain = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='go.example.com', purpose='redirect',
+            verified=True,
+        )
+        route = RedirectRoute.objects.create(
+            workspace=self.workspace, domain=domain, slug='promo',
+            destination_url='https://target.example.com/',
+        )
+        self._events(150)
+        for i in range(10):
+            RedirectEvent.objects.create(
+                workspace=self.workspace, redirect_route=route,
+                domain='go.example.com', slug='promo', ip=f'11.0.0.{i}',
+                destination='https://target.example.com/', verdict='allowed',
+            )
+        pages = []
+        for page in range(1, 9):
+            pages.extend(self.client.get(f'/api/dashboard/activity/?page={page}').json()['results'])
+        self.assertEqual(sum(1 for r in pages if r['source'] == 'redirect'), 10)
 
 
 class TrackerEventBeaconVerdictTests(APITestCase):
@@ -3986,10 +4337,10 @@ class ShieldTelemetryTests(APITestCase):
         self.assertEqual(res.json()['status'], 'ok')
 
     def test_telemetry_suspended_workspace_returns_ok(self):
-        # plan_status is derived: a plan whose period AND grace window have both
+        # plan_status is derived: a plan whose period has
         # lapsed reads as suspended.
         self.workspace.plan = Plan.objects.get(code='plus')
-        self.workspace.plan_expires_at = timezone.now() - timedelta(days=PLAN_GRACE_DAYS + 1)
+        self.workspace.plan_expires_at = timezone.now() - timedelta(days=1)
         self.workspace.save(update_fields=['plan', 'plan_expires_at'])
         self.assertEqual(self.workspace.plan_status, 'suspended')
         res = self.client.post('/api/shield/telemetry/', {

@@ -64,19 +64,23 @@ class WorkspaceSerializer(serializers.ModelSerializer):
     plan_billing_period = serializers.CharField(read_only=True)
     plan_expires_at = serializers.DateTimeField(read_only=True)
     plan_status = serializers.CharField(read_only=True)
-    grace_expires_at = serializers.DateTimeField(read_only=True)
     trial_expires_at = serializers.SerializerMethodField()
     trial_active = serializers.SerializerMethodField()
     domains_used = serializers.SerializerMethodField()
     domain_limit = serializers.SerializerMethodField()
     onboarding_complete = serializers.SerializerMethodField()
+    # Declared explicitly so the model's URLValidator does not reject a
+    # scheme-less address before normalize_safe_destination can add one.
+    safe_destination = serializers.CharField(
+        required=False, allow_blank=True, max_length=2048,
+    )
 
     class Meta:
         model = Workspace
         fields = [
             'id', 'name', 'tracker_secret', 'safe_destination',
             'created_at', 'plan', 'plan_name',
-            'plan_billing_mode', 'plan_billing_period', 'plan_expires_at', 'plan_status', 'grace_expires_at',
+            'plan_billing_mode', 'plan_billing_period', 'plan_expires_at', 'plan_status',
             'trial_expires_at', 'trial_active', 'domains_used', 'domain_limit',
             'onboarding_complete', 'onboarding_type', 'tour_completed',
             'notify_plan_reminders',
@@ -84,10 +88,13 @@ class WorkspaceSerializer(serializers.ModelSerializer):
         read_only_fields = [
             'id', 'tracker_secret', 'created_at',
             'plan', 'plan_name', 'plan_billing_mode', 'plan_billing_period', 'plan_expires_at',
-            'plan_status', 'grace_expires_at',
+            'plan_status',
             'trial_expires_at', 'trial_active', 'domains_used', 'domain_limit',
             'onboarding_complete', 'onboarding_type',
         ]
+
+    def validate_safe_destination(self, value):
+        return normalize_safe_destination(value)
 
     def get_plan(self, obj):
         active = obj.active_plan
@@ -255,14 +262,69 @@ class BlockedIPSerializer(serializers.ModelSerializer):
         return reason_label(verdict, obj.reason, '')
 
 
+def normalize_safe_destination(value):
+    """Accept what a person actually types.
+
+    "myshop.com/safe" is a destination to everyone except a URL validator, so
+    add the scheme rather than rejecting it. Anything that still isn't a URL
+    after that is a real mistake, and is named as one."""
+    from django.core.validators import URLValidator
+    from django.core.exceptions import ValidationError as DjangoValidationError
+
+    value = (value or '').strip()
+    if not value:
+        return ''
+    if '://' not in value:
+        value = f'https://{value}'
+    if not value.startswith(('http://', 'https://')):
+        raise serializers.ValidationError(
+            'The safe page must be a web address starting with https://'
+        )
+    try:
+        URLValidator()(value)
+    except DjangoValidationError:
+        raise serializers.ValidationError(
+            f'"{value}" is not a valid web address. Use something like '
+            'https://example.com/safe-page'
+        )
+    return value
+
+
 class ShieldConfigSerializer(serializers.ModelSerializer):
+    # The safe destination is stored on Workspace — the request path reads it
+    # there without loading a ShieldConfig — but it belongs to this screen: the
+    # Anti-Bot page sets it right below "Redirect to safe page". It is proxied
+    # rather than duplicated so there is only ever one copy of the value.
+    #
+    # Before this existed the page PATCHed `safeDestination` here and DRF
+    # dropped the unknown key without complaint, so every save reported success
+    # and wrote nothing.
+    safe_destination = serializers.CharField(
+        source='workspace.safe_destination',
+        required=False, allow_blank=True, max_length=2048,
+    )
+
     class Meta:
         model = ShieldConfig
         fields = [
             'id', 'protection_mode', 'bot_action', 'protected_paths',
-            'blocked_paths', 'rate_limit_per_hour', 'updated_at',
+            'blocked_paths', 'rate_limit_per_hour', 'safe_destination',
+            'updated_at',
         ]
         read_only_fields = ['id', 'updated_at']
+
+    def validate_safe_destination(self, value):
+        return normalize_safe_destination(value)
+
+    def update(self, instance, validated_data):
+        # `safe_destination` writes through to the workspace, which
+        # ModelSerializer.update() will not do for a dotted source.
+        workspace_data = validated_data.pop('workspace', None)
+        if workspace_data and 'safe_destination' in workspace_data:
+            workspace = instance.workspace
+            workspace.safe_destination = workspace_data['safe_destination']
+            workspace.save(update_fields=['safe_destination'])
+        return super().update(instance, validated_data)
 
     def validate_protected_paths(self, value):
         value = list(value or [])

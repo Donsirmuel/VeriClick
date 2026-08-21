@@ -47,10 +47,19 @@ export default function DashboardPage() {
     queryFn: () => fetchTrafficData(range, domainParam),
   })
 
-  const { data: activity, isLoading: activityLoading } = useQuery({
-    queryKey: ['activity', selectedDomain],
-    queryFn: () => fetchActivity(domainParam),
+  // Paging is per-domain: switching the filter starts at the top of the new
+  // feed rather than page 4 of a list that may only have two pages.
+  const [activityPage, setActivityPage] = useState(1)
+  useEffect(() => { setActivityPage(1) }, [selectedDomain])
+
+  const { data: activityData, isLoading: activityLoading } = useQuery({
+    queryKey: ['activity', selectedDomain, activityPage],
+    queryFn: () => fetchActivity(domainParam, activityPage),
+    // Keep the previous page on screen while the next loads, so the table does
+    // not collapse to a spinner and shove the page around on every click.
+    placeholderData: (previous) => previous,
   })
+  const activity = activityData?.results
 
   const { data: countryBreakdown } = useQuery({
     queryKey: ['breakdown', 'country', range, selectedDomain],
@@ -364,7 +373,15 @@ export default function DashboardPage() {
       </div>
 
       <div className="mt-6">
-        <ActivityFeed activity={activity ?? []} />
+        <ActivityFeed
+          activity={activity ?? []}
+          page={activityData?.page ?? 1}
+          totalPages={activityData?.totalPages ?? 1}
+          total={activityData?.total ?? 0}
+          windowFull={activityData?.windowFull ?? false}
+          windowSize={activityData?.windowSize ?? 200}
+          onPageChange={setActivityPage}
+        />
       </div>
     </div>
   )

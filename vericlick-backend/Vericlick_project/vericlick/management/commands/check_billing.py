@@ -6,7 +6,7 @@ from vericlick.models import Workspace
 
 class Command(BaseCommand):
     help = (
-        'Emit period-expiry / grace / suspension billing events and reminders '
+        'Emit period-expiry and suspension billing events and reminders '
         'for one-time "period" workspaces. Runs once by default; pass --interval '
         'to loop forever as a scheduler (e.g. --interval 3600 for hourly, driven '
         'by cron/systemd or the process manager of your PaaS). The same work also '
