@@ -17,14 +17,14 @@ from .models import (
 
 @admin.register(Workspace)
 class WorkspaceAdmin(admin.ModelAdmin):
-    list_display = ('name', 'owner', 'plan', 'plan_status', 'plan_billing_mode', 'plan_expires_at', 'tracker_secret', 'created_at')
+    list_display = ('name', 'owner', 'plan', 'plan_status', 'plan_billing_period', 'plan_expires_at', 'created_at')
     # `plan` is editable inline from the list page so an admin can upgrade a
     # workspace (e.g. hand testers a higher tier) without going through checkout.
     list_editable = ('plan',)
     list_select_related = ('owner', 'plan')
-    list_filter = ('plan', 'plan_billing_mode', 'created_at')
+    list_filter = ('plan', 'plan_billing_period', 'created_at')
     search_fields = ('name', 'owner__username', 'owner__email')
-    readonly_fields = ('id', 'tracker_secret', 'created_at', 'plan_started_at', 'plan_billing_mode', 'plan_expires_at', 'plan_status', 'grace_expires_at')
+    readonly_fields = ('id', 'tracker_secret', 'created_at', 'plan_started_at', 'plan_billing_mode', 'plan_billing_period', 'plan_expires_at', 'plan_status', 'grace_expires_at')
     inlines = []
     autocomplete_fields = ['owner']
     date_hierarchy = 'created_at'
@@ -163,20 +163,63 @@ class TrackerEventAdmin(admin.ModelAdmin):
 
 @admin.register(Plan)
 class PlanAdmin(admin.ModelAdmin):
-    list_display = ('code', 'name', 'weekly_price', 'monthly_price', 'bachs_ot_product_id', 'bachs_monthly_product_id', 'features_preview', 'is_active', 'sort_order')
+    # A tier is only sellable for a period once that period's Bachs product ID
+    # is filled in, so the list surfaces both at a glance.
+    list_display = (
+        'code', 'name', 'weekly_price', 'monthly_price',
+        'weekly_status', 'monthly_status', 'is_active', 'sort_order',
+    )
+    list_display_links = ('code', 'name')
+    list_editable = ('weekly_price', 'monthly_price', 'is_active', 'sort_order')
     list_filter = ('is_active',)
-    search_fields = ('code', 'name', 'bachs_product_id', 'bachs_ot_product_id', 'bachs_payment_link')
-    list_editable = ('weekly_price', 'monthly_price', 'bachs_ot_product_id', 'bachs_monthly_product_id', 'is_active', 'sort_order')
+    search_fields = ('code', 'name', 'bachs_ot_product_id', 'bachs_monthly_product_id')
+    ordering = ('sort_order', 'code')
+
+    fieldsets = (
+        (None, {
+            'fields': ('code', 'name', 'domain_limit', 'features', 'is_active', 'sort_order'),
+        }),
+        ('Pricing', {
+            'fields': ('weekly_price', 'monthly_price'),
+            'description': (
+                'Prices shown on the pricing page. Bachs charges what its own '
+                'product says, so keep these in step with the products below.'
+            ),
+        }),
+        ('Bachs products', {
+            'fields': ('bachs_ot_product_id', 'bachs_monthly_product_id'),
+            'description': (
+                'Each billing period is sold as its own Bachs ONE-TIME product, '
+                'because Bachs stores the price on the product. A period with no '
+                'product ID is hidden from checkout instead of charging the wrong '
+                'amount.'
+            ),
+        }),
+        ('Legacy / reference', {
+            'classes': ('collapse',),
+            'fields': ('bachs_product_id', 'bachs_payment_link'),
+            'description': 'Not used by checkout. Kept for reference only.',
+        }),
+    )
 
     @admin.display(description='Features')
     def features_preview(self, obj):
         return '; '.join(obj.features or [])[:80]
 
+    @admin.display(description='Weekly', boolean=True)
+    def weekly_status(self, obj):
+        return bool(obj.bachs_ot_product_id)
+
+    @admin.display(description='Monthly', boolean=True)
+    def monthly_status(self, obj):
+        return bool(obj.bachs_monthly_product_id)
+
 
 @admin.register(CheckoutIntent)
 class CheckoutIntentAdmin(admin.ModelAdmin):
-    list_display = ('id', 'workspace', 'plan', 'status', 'billing_mode', 'checkout_id', 'created_at')
-    list_filter = ('status', 'billing_mode', 'created_at')
+    list_display = ('id', 'workspace', 'plan', 'status', 'billing_period', 'checkout_id', 'created_at')
+    list_filter = ('status', 'billing_period', 'created_at')
+    list_select_related = ('workspace', 'plan')
     search_fields = ('workspace__name', 'checkout_id', 'charge_id')
     readonly_fields = ('id', 'created_at', 'updated_at')
     autocomplete_fields = ['workspace', 'plan', 'user']

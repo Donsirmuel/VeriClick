@@ -778,11 +778,14 @@ class Plan(models.Model):
     code = models.SlugField(max_length=50, unique=True, help_text='e.g. basic, plus, pro')
     name = models.CharField(max_length=100, help_text='Display name, e.g. Basic')
     weekly_price = models.DecimalField(
-        max_digits=8, decimal_places=2, help_text='One-time price in USD for 7 days of access.',
+        'Weekly price (USD)',
+        max_digits=8, decimal_places=2,
+        help_text='One-time price for 7 days of access.',
     )
     monthly_price = models.DecimalField(
+        'Monthly price (USD)',
         max_digits=8, decimal_places=2, default=0,
-        help_text='One-time price in USD for 30 days of access.',
+        help_text='One-time price for 30 days of access.',
     )
     domain_limit = models.PositiveIntegerField(
         default=5,
@@ -790,12 +793,12 @@ class Plan(models.Model):
     )
     features = models.JSONField(default=list, blank=True, help_text='Extra bullet points shown on the pricing page.')
     bachs_product_id = models.CharField(
+        'Bachs recurring product ID (legacy)',
         max_length=64, blank=True, default='',
         help_text=(
-            'The Bachs recurring product ID (prod_...) this plan is sold as. '
-            'Create a matching recurring product in Bachs, then paste its ID '
-            'here — upgrading to this plan routes through that product\'s '
-            'checkout.'
+            'Unused. Subscriptions were removed — every purchase is a one-time '
+            'period. Kept only so existing rows are not lost; set the weekly and '
+            'monthly one-time product IDs instead.'
         ),
     )
     bachs_payment_link = models.URLField(
@@ -808,21 +811,23 @@ class Plan(models.Model):
         ),
     )
     bachs_ot_product_id = models.CharField(
+        'Bachs weekly product ID (one-time)',
         max_length=64, blank=True, default='',
         help_text=(
-            'The Bachs ONE-TIME product ID (prod_...) used when a customer buys '
-            'a 30-day "period" of this plan. One-time checkouts are the only '
-            'ones that can show card / crypto / bank transfer / mobile money. '
-            'Leave blank to fall back to bachs_product_id.'
+            'Bachs one-time product (prod_...) sold for a WEEKLY period — 7 days '
+            'of access at the weekly price. Bachs stores the price on the '
+            'product, so weekly and monthly need separate products. '
+            'Leave blank to disable weekly for this plan.'
         ),
     )
     bachs_monthly_product_id = models.CharField(
+        'Bachs monthly product ID (one-time)',
         max_length=64, blank=True, default='',
         help_text=(
-            'The Bachs ONE-TIME product ID (prod_...) sold when a customer buys '
-            'a MONTHLY period of this plan. Bachs holds the price, so weekly and '
-            'monthly need separate products. Leave blank to disable monthly for '
-            'this plan.'
+            'Bachs one-time product (prod_...) sold for a MONTHLY period — 30 days '
+            'of access at the monthly price. Leave blank to disable monthly for '
+            'this plan; the pricing page then shows it as unavailable rather than '
+            'failing at checkout.'
         ),
     )
     is_active = models.BooleanField(default=True, help_text='Inactive plans are hidden from the pricing endpoint.')
