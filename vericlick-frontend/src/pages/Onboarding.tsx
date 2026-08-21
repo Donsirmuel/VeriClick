@@ -14,18 +14,25 @@ import toast from 'react-hot-toast'
 import {
   completeOnboarding, fetchSnippet, fetchWorkspace, fetchDomains,
   testInstallation, startCheckout, createRedirectRoute, fetchRedirectRoutes,
+  fetchRedirectDomains, addRedirectDomain, verifyRedirectDomainCname,
 } from '@/api/workspace'
 import { fetchPricing } from '@/api/pricing'
 import {
   BillingPeriodToggle, bestMonthlySavings, monthlySavings, periodLabel, priceFor, PERIOD_DAYS,
 } from '@/components/shared/BillingPeriodToggle'
 import { parseApiError } from '@/lib/errors'
-import type { BillingPeriod, Domain, Plan } from '@/types'
+import type { BillingPeriod, Domain, Plan, RedirectDomain } from '@/types'
 
 /**
  * Setup runs in one order for everyone: pay, add a domain, install the script
- * (which verifies the domain and switches anti-bot on), then create a redirect
- * on that same domain.
+ * (which verifies the domain and switches anti-bot on), point a subdomain at
+ * our edge proxy, then create the redirect on it.
+ *
+ * The link needs its OWN hostname. Protection leaves a site on the customer's
+ * own hosting — the script just runs in the browser. A redirect is the
+ * opposite: the hostname must resolve to our edge proxy, so CNAMEing the site's
+ * apex would take the whole site off their server. Hence go.example.com rather
+ * than example.com.
  *
  * The current step is DERIVED from what the workspace actually has rather than
  * held in local state. Checkout sends the user out to Bachs and back, so any
@@ -35,7 +42,8 @@ const STEPS = [
   { n: 1, label: 'Plan' },
   { n: 2, label: 'Domain' },
   { n: 3, label: 'Protect' },
-  { n: 4, label: 'Redirect' },
+  { n: 4, label: 'Link address' },
+  { n: 5, label: 'Destination' },
 ] as const
 
 function StepRail({ current }: { current: number }) {

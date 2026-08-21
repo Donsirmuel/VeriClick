@@ -255,6 +255,13 @@ RESEND_API_KEY = _env_str('RESEND_API_KEY')
 RESEND_FROM_EMAIL = _env_str('RESEND_FROM_EMAIL', 'VeriClick <noreply@vericlick.site>')
 SITE_URL = _env_str('SITE_URL', 'https://vericlick.site').rstrip('/')
 
+# Host the customer-facing anti-bot script is served from. It ends up in the
+# page source of every protected site, so keeping it off the app domain means a
+# site under investigation never points an investigator at vericlick.site — the
+# same reason redirects resolve to edge.vericlick.cc. Defaults to SITE_URL so
+# nothing breaks before the neutral host is routed to this backend.
+SCRIPT_BASE_URL = _env_str('SCRIPT_BASE_URL', '').rstrip('/') or SITE_URL
+
 # Google Safe Browsing API v5 key. Blank = check is a no-op (always safe).
 GOOGLE_SAFE_BROWSING_API_KEY = _env_str('GOOGLE_SAFE_BROWSING_API_KEY')
 

@@ -195,7 +195,9 @@ def workspace_snippet(request):
         return Response({'errors': [{'field': 'domain', 'detail': 'Domain not found'}]}, status=404)
 
     api_key = str(workspace.tracker_secret)
-    api_base = request.build_absolute_uri('/api/').rstrip('/')
+    # Never derive this from the incoming request: that stamps the app domain
+    # into every protected customer's page source.
+    api_base = f"{getattr(settings, 'SCRIPT_BASE_URL', settings.SITE_URL)}/api"
 
     if not domain.verification_token:
         domain.generate_verification_token()
@@ -631,22 +633,59 @@ def redirect_domain_verify_cname(request, domain_id):
     import dns.resolver
     expected_cname = 'edge.vericlick.cc'
 
+    def _verified_ok(target, note=''):
+        """Pointing a hostname at our edge proxy requires DNS control, so a
+        correct CNAME is itself proof of ownership.
+
+        Without this the redirect flow was a catch-22: a route needs a verified
+        domain, but the other two methods cannot work on a redirect subdomain —
+        the meta tag is fetched from the hostname, which by then serves OUR edge
+        proxy rather than the customer's site.
+        """
+        if not domain_obj.verified:
+            domain_obj.verified = True
+            domain_obj.verified_at = timezone.now()
+            domain_obj.verification_method = 'dns_txt'
+            domain_obj.health_status = 'healthy'
+            domain_obj.last_health_check = timezone.now()
+            domain_obj.save(update_fields=[
+                'verified', 'verified_at', 'verification_method',
+                'health_status', 'last_health_check',
+            ])
+        return Response({
+            'cname_ok': True,
+            'target': target,
+            'verified': True,
+            'detail': f'DNS is pointing at {expected_cname}.{note} This domain is verified and ready.',
+        })
+
     try:
         answers = dns.resolver.resolve(domain_obj.domain, 'CNAME')
         for rdata in answers:
             target = str(rdata.target).rstrip('.')
             if target.lower() == expected_cname.lower():
-                return Response({
-                    'cname_ok': True,
-                    'target': target,
-                    'detail': f'CNAME correctly points to {expected_cname}.',
-                })
+                return _verified_ok(target)
         return Response({
             'cname_ok': False,
             'target': str(answers[0].target).rstrip('.'),
             'detail': f'CNAME points to {str(answers[0].target).rstrip(".")} instead of {expected_cname}.',
         })
     except dns.resolver.NoAnswer:
+        # Cloudflare and similar providers flatten a CNAME into A records, and
+        # ALIAS/ANAME behave the same way. There is no CNAME to read, but the
+        # hostname still resolves to our edge — so compare the addresses.
+        try:
+            edge_ips = {str(r) for r in dns.resolver.resolve(expected_cname, 'A')}
+            domain_ips = {str(r) for r in dns.resolver.resolve(domain_obj.domain, 'A')}
+        except Exception:
+            edge_ips, domain_ips = set(), set()
+
+        if edge_ips and domain_ips & edge_ips:
+            return _verified_ok(
+                ', '.join(sorted(domain_ips & edge_ips)),
+                ' (resolved through a flattened CNAME or ALIAS record.)',
+            )
+
         return Response({
             'cname_ok': False,
             'target': None,

@@ -4,7 +4,7 @@ import json
 import time
 import uuid
 from datetime import timedelta
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 from django.test import TestCase, override_settings
 from django.contrib.auth.models import User
 from django.contrib.auth.tokens import default_token_generator
@@ -1439,6 +1439,126 @@ class TourStateTests(APITestCase):
         res = self.client.patch('/api/workspace/', {'tourCompleted': True}, format='json')
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         self.assertTrue(self.client.get('/api/workspace/').json()['tourCompleted'])
+
+
+class RedirectCnameVerificationTests(APITestCase):
+    """A correct CNAME must verify the domain. Without it the redirect flow is
+    a catch-22: routes need a verified domain, but the meta-tag check fetches
+    the hostname, which by then serves our edge proxy, not the customer."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='cname', email='c@example.com', password='pw')
+        self.client.force_authenticate(user=self.user)
+        self.workspace = Workspace.objects.get(owner=self.user)
+        self.workspace.plan = Plan.objects.get(code='basic')
+        self.workspace.plan_expires_at = timezone.now() + timedelta(days=7)
+        self.workspace.save(update_fields=['plan', 'plan_expires_at'])
+        self.domain = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='go.example.com', purpose='redirect',
+        )
+
+    def _check(self):
+        return self.client.post(f'/api/redirect-domains/{self.domain.id}/verify-cname/')
+
+    @patch('dns.resolver.resolve')
+    def test_correct_cname_verifies_the_domain(self, mock_resolve):
+        rec = MagicMock()
+        rec.target = 'edge.vericlick.cc.'
+        mock_resolve.return_value = [rec]
+
+        res = self._check()
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertTrue(res.json()['cnameOk'])
+        self.domain.refresh_from_db()
+        self.assertTrue(self.domain.verified)
+
+    @patch('dns.resolver.resolve')
+    def test_verified_domain_can_then_take_a_route(self, mock_resolve):
+        rec = MagicMock()
+        rec.target = 'edge.vericlick.cc.'
+        mock_resolve.return_value = [rec]
+        self._check()
+
+        res = self.client.post('/api/redirect-routes/', {
+            'domain_id': str(self.domain.id),
+            'destination_url': 'https://example.com/offer',
+            'slug': 'offer',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+
+    @patch('dns.resolver.resolve')
+    def test_wrong_cname_does_not_verify(self, mock_resolve):
+        rec = MagicMock()
+        rec.target = 'somewhere-else.example.net.'
+        mock_resolve.return_value = [rec]
+
+        res = self._check()
+        self.assertFalse(res.json()['cnameOk'])
+        self.domain.refresh_from_db()
+        self.assertFalse(self.domain.verified)
+
+    @patch('dns.resolver.resolve')
+    def test_flattened_cname_is_accepted(self, mock_resolve):
+        # Cloudflare flattens CNAMEs into A records: no CNAME exists, but the
+        # hostname still resolves to our edge.
+        import dns.resolver as dnsr
+
+        def side_effect(name, rtype):
+            if rtype == 'CNAME':
+                raise dnsr.NoAnswer()
+            return ['203.0.113.10']
+
+        mock_resolve.side_effect = side_effect
+        res = self._check()
+        self.assertTrue(res.json()['cnameOk'])
+        self.domain.refresh_from_db()
+        self.assertTrue(self.domain.verified)
+
+    @patch('dns.resolver.resolve')
+    def test_unrelated_a_records_are_not_accepted(self, mock_resolve):
+        import dns.resolver as dnsr
+
+        def side_effect(name, rtype):
+            if rtype == 'CNAME':
+                raise dnsr.NoAnswer()
+            return ['203.0.113.10'] if name == 'edge.vericlick.cc' else ['198.51.100.5']
+
+        mock_resolve.side_effect = side_effect
+        res = self._check()
+        self.assertFalse(res.json()['cnameOk'])
+        self.domain.refresh_from_db()
+        self.assertFalse(self.domain.verified)
+
+
+class ScriptHostTests(APITestCase):
+    """The snippet lands in every protected customer's page source, so it must
+    not name the app domain — anyone inspecting a customer's site would be
+    pointed straight at it."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='host', email='h@example.com', password='pw')
+        self.client.force_authenticate(user=self.user)
+        self.workspace = Workspace.objects.get(owner=self.user)
+        DomainRegistry.objects.create(
+            workspace=self.workspace, domain='example.com', purpose='protection',
+        )
+
+    @override_settings(SCRIPT_BASE_URL='https://cdn.vericlick.cc')
+    def test_snippet_uses_the_neutral_script_host(self):
+        body = self.client.get('/api/workspace/snippet/', {'domain': 'example.com'}).json()
+        self.assertEqual(body['apiBase'], 'https://cdn.vericlick.cc/api')
+        self.assertIn('https://cdn.vericlick.cc/api/shield.js', body['snippet'])
+        self.assertNotIn('vericlick.site', body['snippet'])
+
+    @override_settings(SCRIPT_BASE_URL='https://cdn.vericlick.cc')
+    def test_snippet_ignores_the_requesting_host(self):
+        # Previously built from request.build_absolute_uri, so the snippet
+        # inherited whatever domain the dashboard happened to be served on.
+        body = self.client.get(
+            '/api/workspace/snippet/', {'domain': 'example.com'}, HTTP_HOST='testserver',
+        ).json()
+        self.assertNotIn('testserver', body['snippet'])
+        self.assertIn('cdn.vericlick.cc', body['snippet'])
 
 
 class PricingEndpointTests(APITestCase):
