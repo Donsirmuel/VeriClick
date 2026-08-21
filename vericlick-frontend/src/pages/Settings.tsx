@@ -9,6 +9,7 @@ import type { RotatedKey } from '@/api/workspace'
 import { deleteAccount, fetchMe } from '@/api/auth'
 import { parseApiError } from '@/lib/errors'
 import { formatDate } from '@/lib/utils'
+import { clearSession } from '@/lib/session'
 
 const SETTINGS_SECTIONS = [
   { id: 'workspace', label: 'Workspace', icon: Globe02Icon },
@@ -95,8 +96,9 @@ export default function SettingsPage() {
     setDeleting(true)
     try {
       await deleteAccount(confirmation.trim())
-      localStorage.removeItem('token')
-      localStorage.removeItem('refresh')
+      // A deleted account must leave nothing behind: signing up again in this
+      // browser has to look like a first visit, tour included.
+      clearSession()
       window.location.href = '/auth/login'
     } catch (err) {
       toast.error(parseApiError(err))

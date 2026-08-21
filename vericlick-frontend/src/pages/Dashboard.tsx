@@ -16,6 +16,7 @@ import { FreeTierBanner } from '@/components/FreeTierBanner'
 import { DashboardSkeleton } from '@/components/ui/DashboardSkeleton'
 import type { TimeRange } from '@/types'
 
+// Listed in SESSION_KEYS so signing out clears it with everything else.
 const SHIELD_TOAST_KEY = 'vericlick-first-bot-blocked-toast'
 
 export default function DashboardPage() {

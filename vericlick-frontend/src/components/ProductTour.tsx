@@ -14,6 +14,7 @@ import {
   Cancel01Icon,
 } from '@hugeicons/core-free-icons'
 
+// Listed in SESSION_KEYS so signing out clears it with everything else.
 const TOUR_KEY = 'vericlick_tour_completed'
 
 interface TourStep {

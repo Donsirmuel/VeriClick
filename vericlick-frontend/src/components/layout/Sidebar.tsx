@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 import { Logo } from '@/components/Logo'
 import { fetchWorkspace } from '@/api/workspace'
 import { notifyAuthChanged } from '@/hooks/useAuth'
+import { clearSession } from '@/lib/session'
 
 interface NavItemProps {
   to: string
@@ -42,8 +43,7 @@ export function Sidebar({ onClose }: { onClose: () => void }) {
   })
 
   const handleSignOut = () => {
-    localStorage.removeItem('token')
-    localStorage.removeItem('refresh')
+    clearSession()
     notifyAuthChanged()
     navigate('/auth/login')
   }

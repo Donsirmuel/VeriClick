@@ -422,6 +422,156 @@ class AccountDeletionTests(APITestCase):
         self.assertFalse(User.objects.filter(pk=self.user.pk).exists())
         self.assertFalse(Workspace.objects.filter(pk=self.workspace.pk).exists())
 
+    def test_everything_belonging_to_the_account_goes_with_it(self):
+        """Closing an account has to actually close it. Anything left behind is
+        a row nobody can reach but that still counts against a domain, still
+        holds a slug, or still shows up in an export."""
+        from vericlick.models import (
+            BillingEvent, CheckoutIntent, CountryRule, EdgeSyncCredential,
+            InstallToken, RedirectEvent, ShieldConfig, UserProfile,
+        )
+
+        plan = Plan.objects.get(code='plus')
+        domain = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='go.example.com', purpose='redirect',
+            verified=True,
+        )
+        route = RedirectRoute.objects.create(
+            workspace=self.workspace, domain=domain, slug='promo',
+            destination_url='https://target.example.com/',
+        )
+        RedirectEvent.objects.create(
+            workspace=self.workspace, redirect_route=route, domain='go.example.com',
+            slug='promo', ip='1.2.3.4', destination='https://target.example.com/',
+            verdict='allowed',
+        )
+        TrackerEvent.objects.create(
+            workspace=self.workspace, ip='1.2.3.4',
+            page_url='https://example.com/', verdict='allowed',
+        )
+        IPRule.objects.create(workspace=self.workspace, created_by=self.user)
+        CountryRule.objects.create(
+            workspace=self.workspace, country_code='CN', created_by=self.user,
+        )
+        ShieldConfig.objects.get_or_create(workspace=self.workspace)
+        InstallToken.create_for_workspace(self.workspace)
+        EdgeSyncCredential.create_for_workspace(self.workspace)
+        CheckoutIntent.objects.create(
+            workspace=self.workspace, plan=plan, user=self.user, checkout_id='chk_del',
+        )
+        BillingEvent.objects.create(
+            workspace=self.workspace, kind=BillingEvent.Kind.PLAN_PERIOD_PAID,
+            plan=plan, plan_name=plan.name, occurred_at=timezone.now(),
+        )
+        UserProfile.objects.get_or_create(user=self.user)
+
+        res = self.client.post(
+            '/api/auth/delete-account/', {'confirmation': 'DELETE'}, format='json',
+        )
+        self.assertEqual(res.status_code, status.HTTP_204_NO_CONTENT)
+
+        ws = self.workspace.pk
+        self.assertFalse(User.objects.filter(pk=self.user.pk).exists())
+        self.assertFalse(Workspace.objects.filter(pk=ws).exists())
+        for model in (
+            DomainRegistry, RedirectRoute, RedirectEvent, TrackerEvent, IPRule,
+            CountryRule, ShieldConfig, InstallToken, EdgeSyncCredential,
+            CheckoutIntent, BillingEvent,
+        ):
+            self.assertFalse(
+                model.objects.filter(workspace_id=ws).exists(),
+                f'{model.__name__} rows survived the account deletion',
+            )
+        self.assertFalse(UserProfile.objects.filter(user_id=self.user.pk).exists())
+
+    def test_another_account_is_not_touched(self):
+        other = User.objects.create_user(username='keepme', email='keep@example.com', password='pw')
+        other_ws = Workspace.objects.get(owner=other)
+        TrackerEvent.objects.create(
+            workspace=other_ws, ip='9.9.9.9', page_url='https://keep.example.com/',
+            verdict='allowed',
+        )
+        self.client.post('/api/auth/delete-account/', {'confirmation': 'DELETE'}, format='json')
+        self.assertTrue(User.objects.filter(pk=other.pk).exists())
+        self.assertTrue(Workspace.objects.filter(pk=other_ws.pk).exists())
+        self.assertEqual(TrackerEvent.objects.filter(workspace=other_ws).count(), 1)
+
+    def test_signing_up_again_starts_from_scratch(self):
+        """Same person, same email, nothing carried over: no plan, no domains,
+        no completed onboarding, and a tracker secret that is not the old one."""
+        self.workspace.plan = Plan.objects.get(code='plus')
+        self.workspace.plan_expires_at = timezone.now() + timedelta(days=30)
+        self.workspace.onboarding_complete = True
+        self.workspace.tour_completed = True
+        self.workspace.save()
+        DomainRegistry.objects.create(
+            workspace=self.workspace, domain='old.example.com', purpose='protection',
+            verified=True,
+        )
+        old_secret = str(self.workspace.tracker_secret)
+
+        self.client.post('/api/auth/delete-account/', {'confirmation': 'DELETE'}, format='json')
+        self.client.force_authenticate(user=None)
+
+        res = self.client.post('/api/auth/register/', {
+            'username': 'deleteuser2', 'email': 'delete@example.com', 'password': 'testpass123',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+
+        fresh = Workspace.objects.get(owner__email='delete@example.com')
+        self.assertIsNone(fresh.plan)
+        self.assertEqual(fresh.plan_status, 'none')
+        self.assertFalse(fresh.onboarding_complete)
+        self.assertFalse(fresh.tour_completed)
+        self.assertEqual(fresh.domains.count(), 0)
+        self.assertNotEqual(str(fresh.tracker_secret), old_secret)
+
+    def test_the_email_is_free_to_use_again(self):
+        """Registration refuses a duplicate email, so a leftover user row would
+        lock the person out of their own address forever."""
+        self.client.post('/api/auth/delete-account/', {'confirmation': 'DELETE'}, format='json')
+        self.client.force_authenticate(user=None)
+        res = self.client.post('/api/auth/register/', {
+            'username': 'brandnew', 'email': 'delete@example.com', 'password': 'testpass123',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+
+    def test_the_old_token_stops_working(self):
+        from rest_framework_simplejwt.tokens import RefreshToken
+        token = str(RefreshToken.for_user(self.user).access_token)
+        self.client.force_authenticate(user=None)
+        self.client.post('/api/auth/delete-account/', {'confirmation': 'DELETE'}, format='json')
+
+        self.client.force_authenticate(user=self.user)
+        self.client.post('/api/auth/delete-account/', {'confirmation': 'DELETE'}, format='json')
+        self.client.force_authenticate(user=None)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+        res = self.client.get('/api/workspace/')
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_the_slug_is_free_for_someone_else(self):
+        """A deleted account must not keep holding a redirect link's address."""
+        domain = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='go.example.com', purpose='redirect',
+            verified=True,
+        )
+        RedirectRoute.objects.create(
+            workspace=self.workspace, domain=domain, slug='promo',
+            destination_url='https://target.example.com/',
+        )
+        self.client.post('/api/auth/delete-account/', {'confirmation': 'DELETE'}, format='json')
+
+        other = User.objects.create_user(username='claimant', email='c@example.com', password='pw')
+        other_ws = Workspace.objects.get(owner=other)
+        other_domain = DomainRegistry.objects.create(
+            workspace=other_ws, domain='go.example.com', purpose='redirect', verified=True,
+        )
+        RedirectRoute.objects.create(
+            workspace=other_ws, domain=other_domain, slug='promo',
+            destination_url='https://other.example.com/',
+        )
+        self.assertEqual(RedirectRoute.objects.filter(slug='promo').count(), 1)
+
     def test_delete_account_requires_auth(self):
         self.client.force_authenticate(user=None)
         res = self.client.post('/api/auth/delete-account/',

@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { notifyAuthChanged } from '@/hooks/useAuth'
+import { clearSession } from '@/lib/session'
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -112,8 +113,7 @@ apiClient.interceptors.response.use(
         })
       }
 
-      localStorage.removeItem('token')
-      localStorage.removeItem('refresh')
+      clearSession()
       notifyAuthChanged()
       window.location.href = '/auth/login'
     }

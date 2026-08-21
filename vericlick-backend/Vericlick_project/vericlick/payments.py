@@ -220,6 +220,15 @@ def fulfil_paid_checkout(checkout_id, charge_id='', payment_method=''):
         status=CheckoutIntent.Status.OPEN,
     ).first()
     if intent is None:
+        # Usually a re-delivery of an event already handled, which is fine. But
+        # it also covers money arriving for a checkout with nothing behind it —
+        # an account closed mid-payment, say — and that needs a human, so it
+        # must not vanish silently.
+        if not CheckoutIntent.objects.filter(checkout_id=checkout_id).exists():
+            logger.warning(
+                'Paid webhook for unknown checkout %s (charge %s) — nothing was granted.',
+                checkout_id, charge_id or 'n/a',
+            )
         return None
 
     from datetime import timedelta

@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query'
 import { fetchMe } from '@/api/auth'
 import { fetchWorkspace } from '@/api/workspace'
 import { Link } from 'react-router-dom'
+import { clearSession } from '@/lib/session'
 
 export function TopBar({ onMenuToggle }: { onMenuToggle: () => void }) {
   const { data: user } = useQuery({
@@ -33,8 +34,7 @@ export function TopBar({ onMenuToggle }: { onMenuToggle: () => void }) {
   }, [])
 
   const handleSignOut = () => {
-    localStorage.removeItem('token')
-    localStorage.removeItem('refresh')
+    clearSession()
     navigate('/auth/login')
   }
 
