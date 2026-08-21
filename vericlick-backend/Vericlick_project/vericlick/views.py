@@ -131,16 +131,27 @@ def workspace_onboarding(request):
     # If user has a plan, also register the domain
     if workspace.has_plan_access():
         active_plan = workspace.active_plan
+
+        # Already registered in this workspace? Onboarding's goal is met, so
+        # finish rather than rejecting — a 400 here used to strand the user in
+        # the wizard forever. Scoped to the workspace: a global check would let
+        # the first tenant to claim a domain lock every other tenant out of it.
+        existing = workspace.domains.filter(domain=domain_name, is_active=True).first()
+        if existing:
+            workspace.onboarding_complete = True
+            workspace.save(update_fields=['onboarding_complete', 'onboarding_type'])
+            return Response({
+                'domain': {'id': str(existing.id), 'domain': existing.domain, 'purpose': existing.purpose},
+                'workspace': WorkspaceSerializer(workspace).data,
+            })
+
         current_count = workspace.domains.filter(is_active=True).count()
         if current_count >= active_plan.domain_limit:
-            workspace.save(update_fields=['onboarding_type'])
+            # At the limit means domains already exist, so setup is done — the
+            # user just cannot add another one here.
+            workspace.onboarding_complete = True
+            workspace.save(update_fields=['onboarding_complete', 'onboarding_type'])
             return Response({'errors': [{'field': 'domain', 'detail': f'Domain limit reached ({active_plan.domain_limit})'}]}, status=400)
-
-        # Scoped to this workspace: a global check would let the first tenant to
-        # claim a domain lock every other tenant out of it.
-        if workspace.domains.filter(domain=domain_name, is_active=True).exists():
-            workspace.save(update_fields=['onboarding_type'])
-            return Response({'errors': [{'field': 'domain', 'detail': 'This domain is already registered'}]}, status=400)
 
         purpose = 'protection' if onboarding_type == 'shield' else 'redirect'
         domain = DomainRegistry.objects.create(

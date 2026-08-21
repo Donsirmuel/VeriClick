@@ -69,6 +69,7 @@ class WorkspaceSerializer(serializers.ModelSerializer):
     trial_active = serializers.SerializerMethodField()
     domains_used = serializers.SerializerMethodField()
     domain_limit = serializers.SerializerMethodField()
+    onboarding_complete = serializers.SerializerMethodField()
 
     class Meta:
         model = Workspace
@@ -103,6 +104,10 @@ class WorkspaceSerializer(serializers.ModelSerializer):
 
     def get_domains_used(self, obj):
         return obj.domains.filter(is_active=True).count()
+
+    def get_onboarding_complete(self, obj):
+        # Derived, so setup done outside the wizard still counts.
+        return obj.has_completed_onboarding
 
     def get_domain_limit(self, obj):
         active = obj.active_plan

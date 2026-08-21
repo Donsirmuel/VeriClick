@@ -1289,6 +1289,85 @@ class DomainSlotTests(APITestCase):
         )
 
 
+class OnboardingCompletionTests(APITestCase):
+    """Onboarding must reflect what the workspace actually has, not which door
+    the user walked through to get it."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='onb', email='onb@example.com', password='pw')
+        self.client.force_authenticate(user=self.user)
+        self.workspace = Workspace.objects.get(owner=self.user)
+
+    def _grant_plan(self):
+        self.workspace.plan = Plan.objects.get(code='basic')
+        self.workspace.plan_expires_at = timezone.now() + timedelta(days=7)
+        self.workspace.save(update_fields=['plan', 'plan_expires_at'])
+
+    def _complete(self):
+        return self.client.get('/api/workspace/').json()['onboardingComplete']
+
+    def test_fresh_workspace_is_not_onboarded(self):
+        self.assertFalse(self._complete())
+
+    def test_plan_without_a_domain_is_not_onboarded(self):
+        self._grant_plan()
+        self.assertFalse(self._complete())
+
+    def test_domain_without_a_plan_is_not_onboarded(self):
+        DomainRegistry.objects.create(
+            workspace=self.workspace, domain='example.com', purpose='protection',
+        )
+        self.assertFalse(self._complete())
+
+    def test_plan_plus_domain_added_outside_the_wizard_counts_as_onboarded(self):
+        # The reported bug: upgraded in the admin, domain added on the Domains
+        # page, yet the wizard kept reappearing.
+        self._grant_plan()
+        self.client.post('/api/domains/', {'domain': 'example.com'}, format='json')
+        self.assertFalse(self.workspace.refresh_from_db() or self.workspace.onboarding_complete)
+        self.assertTrue(self._complete())
+
+    def test_wizard_with_an_already_registered_domain_finishes_instead_of_erroring(self):
+        # Previously returned 400 and left the user stranded in the wizard.
+        self._grant_plan()
+        self.client.post('/api/domains/', {'domain': 'example.com'}, format='json')
+        res = self.client.post('/api/workspace/onboarding/', {
+            'type': 'shield', 'domain': 'example.com',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.workspace.refresh_from_db()
+        self.assertTrue(self.workspace.onboarding_complete)
+        # Must not have created a duplicate.
+        self.assertEqual(
+            DomainRegistry.objects.filter(workspace=self.workspace, domain='example.com').count(), 1,
+        )
+
+    def test_hitting_the_domain_limit_still_marks_onboarding_done(self):
+        self._grant_plan()
+        limit = self.workspace.plan.domain_limit
+        for i in range(limit):
+            self.client.post('/api/domains/', {'domain': f'd{i}.example.com'}, format='json')
+        res = self.client.post('/api/workspace/onboarding/', {
+            'type': 'shield', 'domain': 'extra.example.com',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.workspace.refresh_from_db()
+        self.assertTrue(self.workspace.onboarding_complete)
+
+    def test_explicit_flag_still_wins(self):
+        # A user who skipped the wizard with no plan stays onboarded.
+        self.workspace.onboarding_complete = True
+        self.workspace.save(update_fields=['onboarding_complete'])
+        self.assertTrue(self._complete())
+
+    def test_losing_plan_access_does_not_undo_an_explicit_completion(self):
+        self.workspace.onboarding_complete = True
+        self.workspace.save(update_fields=['onboarding_complete'])
+        self.workspace.plan_expires_at = timezone.now() - timedelta(days=99)
+        self.workspace.save(update_fields=['plan_expires_at'])
+        self.assertTrue(self._complete())
+
+
 class PricingEndpointTests(APITestCase):
     def test_pricing_returns_seeded_plans(self):
         res = self.client.get('/api/pricing/')

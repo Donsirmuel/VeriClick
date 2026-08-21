@@ -173,6 +173,20 @@ class Workspace(models.Model):
             return period
         return None
 
+    @property
+    def has_completed_onboarding(self):
+        """Whether the user is past setup.
+
+        `onboarding_complete` only ever gets set by the wizard, so anyone who
+        paid and added a domain through the Billing and Domains pages instead
+        stayed flagged as un-onboarded forever and kept being sent back to the
+        wizard. Treat a workspace with plan access and a registered domain as
+        onboarded no matter which route it took to get there.
+        """
+        if self.onboarding_complete:
+            return True
+        return bool(self.has_plan_access() and self.domains.filter(is_active=True).exists())
+
     def ensure_trial_started(self):
         # No-op — free trials have been removed. Kept for migration safety.
         return self.trial_started_at
