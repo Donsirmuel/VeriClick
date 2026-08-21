@@ -57,7 +57,7 @@ logger = logging.getLogger(__name__)
 # The live activity feed is a rolling window of the most recent events, paged
 # for readability. It is deliberately not an infinite archive.
 ACTIVITY_MAX_EVENTS = 200
-ACTIVITY_PAGE_SIZE = 25
+ACTIVITY_PAGE_SIZE = 10
 
 
 def get_user_workspace(user):
@@ -1362,7 +1362,11 @@ def bachs_webhook(request):
     if event_type == 'collection.succeeded':
         # First-time purchases carry a checkout_id; recurring renewals don't.
         if data.get('checkout_id'):
-            fulfil_paid_checkout(data.get('checkout_id'), data.get('charge_id') or '')
+            fulfil_paid_checkout(
+                data.get('checkout_id'),
+                data.get('charge_id') or '',
+                payment_method=data.get('payment_method') or '',
+            )
         else:
             from .payments import record_recurring_collection
             record_recurring_collection(data)

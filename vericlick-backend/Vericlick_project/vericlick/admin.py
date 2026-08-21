@@ -110,8 +110,11 @@ class WorkspaceAdmin(admin.ModelAdmin):
                     # one-time period by the workspace's own cadence.
                     ws.plan = ws_plan
                     ws.plan_billing_mode = Workspace.BillingMode.PERIOD
-                    base = ws.plan_expires_at or now
-                    ws.plan_expires_at = base + timedelta(days=ws.period_days)
+                    # Shared with the webhook path: adds to time remaining,
+                    # never onto a date that has already passed. Stacking onto
+                    # a stale expiry granted a lapsed workspace nothing at all.
+                    from .payments import next_expiry
+                    ws.plan_expires_at = next_expiry(ws, ws.period_days, now=now)
                     ws.save()
                     # Same as a real payment: carry existing links forward.
                     from .payments import extend_routes_to_plan

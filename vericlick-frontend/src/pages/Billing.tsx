@@ -171,10 +171,21 @@ export default function Billing() {
       <div>
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div>
-            <h2 className="text-lg font-bold text-slate-900">Choose your plan</h2>
+            <h2 className="text-lg font-bold text-slate-900">
+              {sub?.active ? 'Renew or switch your plan' : 'Choose your plan'}
+            </h2>
             <p className="text-sm text-muted mt-0.5">
               Every tier has the same features — pick by how many domains you protect.
             </p>
+            {/* Switching used to overwrite the expiry date, so people avoided
+                changing plans mid-period. It now adds, and saying so is what
+                makes that safe to act on. */}
+            {sub?.active && (
+              <p className="text-sm text-muted mt-1">
+                Days you have left are added to whatever you buy next — you never lose
+                time by renewing early or changing tier.
+              </p>
+            )}
           </div>
           <BillingPeriodToggle
             value={billingPeriod}
@@ -248,25 +259,30 @@ export default function Billing() {
                     </li>
                   ))}
                 </ul>
-                {isCurrentPlan ? (
+                {/* Renewing early has to be reachable: there is no grace period
+                    behind the expiry date, so waiting for it is not an option. */}
+                <button
+                  onClick={() => beginCheckout(plan.code)}
+                  disabled={checkoutMutation.isPending || unavailable}
+                  className="bg-black hover:bg-neutral-800 disabled:bg-neutral-300 disabled:cursor-not-allowed text-white px-4 py-3 rounded-xl text-sm font-bold transition-all"
+                >
+                  {unavailable
+                    ? 'Monthly coming soon'
+                    : checkoutMutation.isPending
+                      ? 'Opening checkout…'
+                      : isCurrentPlan
+                        ? `Renew ${plan.name}`
+                        : sub?.active
+                          ? `Switch to ${plan.name}`
+                          : `Choose ${plan.name}`}
+                </button>
+                {isCurrentPlan && (
                   <Link
                     to="/app/shield"
-                    className="text-center bg-neutral-100 text-slate-900 px-4 py-3 rounded-xl text-sm font-bold transition-all"
+                    className="text-center text-sm font-bold text-slate-600 hover:text-slate-900 mt-2 py-1 transition-colors"
                   >
                     Configure anti-bot
                   </Link>
-                ) : (
-                  <button
-                    onClick={() => beginCheckout(plan.code)}
-                    disabled={checkoutMutation.isPending || unavailable}
-                    className="bg-black hover:bg-neutral-800 disabled:bg-neutral-300 disabled:cursor-not-allowed text-white px-4 py-3 rounded-xl text-sm font-bold transition-all"
-                  >
-                    {unavailable
-                      ? 'Monthly coming soon'
-                      : checkoutMutation.isPending
-                        ? 'Opening checkout…'
-                        : `Choose ${plan.name}`}
-                  </button>
                 )}
               </div>
             )

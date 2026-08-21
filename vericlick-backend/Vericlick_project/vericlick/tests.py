@@ -2350,6 +2350,367 @@ class BachsWebhookEndpointTests(APITestCase):
         self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
 
 
+class PaymentEndToEndTests(APITestCase):
+    """The whole money path, one test per thing that can go wrong with it:
+
+        choose a plan -> CheckoutIntent -> Bachs checkout -> signed webhook
+        -> plan granted -> links extended -> ledger row -> receipt
+
+    Bachs is the only source of truth for whether money moved, so nothing
+    here grants access on a redirect back to the app.
+    """
+
+    SECRET = 'whsec_e2e_secret'
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='e2e_payer', email='e2e@example.com', password='pw',
+        )
+        self.client.force_authenticate(user=self.user)
+        self.workspace = Workspace.objects.get(owner=self.user)
+        self.basic = Plan.objects.get(code='basic')
+        self.plus = Plan.objects.get(code='plus')
+        Plan.objects.filter(code__in=['basic', 'plus', 'pro']).update(
+            bachs_ot_product_id='prod_weekly', bachs_monthly_product_id='prod_monthly',
+        )
+        self.basic.refresh_from_db()
+        self.plus.refresh_from_db()
+
+    # -- helpers ----------------------------------------------------------
+
+    def _start_checkout(self, plan_code, period='weekly', checkout_id='chk_e2e'):
+        with patch('vericlick.payments.create_checkout_session') as mock_create:
+            mock_create.return_value = {
+                'checkout_id': checkout_id,
+                'checkout_url': f'https://checkout.bachs.io/c/{checkout_id}',
+                'expires_at': '2099-01-01T00:00:00Z',
+            }
+            res = self.client.post(
+                '/api/upgrade/',
+                {'plan_code': plan_code, 'billing_period': period},
+                format='json',
+            )
+        return res
+
+    def _deliver(self, event):
+        body = json.dumps(event).encode('utf-8')
+        timestamp = str(int(time.time()))
+        message = f'{timestamp}.{body.decode("utf-8")}'
+        signature = hmac.new(
+            self.SECRET.encode(), message.encode('utf-8'), hashlib.sha256,
+        ).hexdigest()
+        return self.client.post(
+            '/api/webhooks/bachs/', data=body.decode('utf-8'),
+            content_type='application/json',
+            HTTP_X_BACHS_TIMESTAMP=timestamp, HTTP_X_BACHS_SIGNATURE=signature,
+        )
+
+    def _paid_event(self, checkout_id='chk_e2e', charge_id='chr_e2e', **data):
+        payload = {
+            'id': 'evt_e2e', 'type': 'collection.succeeded',
+            'data': {
+                'checkout_id': checkout_id, 'charge_id': charge_id,
+                'status': 'SUCCEEDED', 'amount': '25.00', 'currency': 'USD',
+                **data,
+            },
+        }
+        return payload
+
+    def _grant(self, plan_code, period, checkout_id, charge_id=None, **data):
+        """Buy a plan the way a customer does: checkout, then the webhook."""
+        self._start_checkout(plan_code, period, checkout_id)
+        res = self._deliver(self._paid_event(
+            checkout_id=checkout_id, charge_id=charge_id or f'chr_{checkout_id}', **data,
+        ))
+        self.workspace.refresh_from_db()
+        return res
+
+    def _days_left(self):
+        return round(
+            (self.workspace.plan_expires_at - timezone.now()).total_seconds() / 86400
+        )
+
+    # -- the happy path ---------------------------------------------------
+
+    @override_settings(BACHS_WEBHOOK_SECRET=SECRET)
+    def test_a_purchase_runs_end_to_end(self):
+        res = self._grant('plus', 'monthly', 'chk_happy')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(self.workspace.plan, self.plus)
+        self.assertEqual(self.workspace.plan_billing_period, 'monthly')
+        self.assertEqual(self._days_left(), 30)
+        self.assertEqual(self.workspace.plan_status, 'active')
+
+        intent = CheckoutIntent.objects.get(checkout_id='chk_happy')
+        self.assertEqual(intent.status, CheckoutIntent.Status.PAID)
+
+        event = BillingEvent.objects.filter(workspace=self.workspace).latest('occurred_at')
+        self.assertEqual(event.kind, BillingEvent.Kind.PLAN_PERIOD_PAID)
+        self.assertEqual(event.amount, self.plus.monthly_price)
+        self.assertEqual(event.charge_id, 'chr_chk_happy')
+
+    @override_settings(BACHS_WEBHOOK_SECRET=SECRET)
+    def test_starting_checkout_grants_nothing_on_its_own(self):
+        """A customer who opens checkout and closes the tab has not paid."""
+        self._start_checkout('plus', 'monthly', 'chk_abandoned')
+        self.workspace.refresh_from_db()
+        self.assertIsNone(self.workspace.plan)
+        self.assertEqual(self.workspace.plan_status, 'none')
+
+    @override_settings(BACHS_WEBHOOK_SECRET=SECRET)
+    def test_the_receipt_goes_to_the_person_who_paid(self):
+        with patch('vericlick.emails.send_payment_receipt_email') as mock_receipt:
+            self._grant('plus', 'weekly', 'chk_receipt')
+        mock_receipt.assert_called_once()
+        self.assertEqual(mock_receipt.call_args.args[0], self.user)
+
+    @override_settings(BACHS_WEBHOOK_SECRET=SECRET)
+    def test_the_payment_channel_is_recorded(self):
+        self._grant('plus', 'weekly', 'chk_method', payment_method='bank_transfer')
+        intent = CheckoutIntent.objects.get(checkout_id='chk_method')
+        self.assertEqual(intent.payment_method, 'bank_transfer')
+        event = BillingEvent.objects.filter(workspace=self.workspace).latest('occurred_at')
+        self.assertEqual(event.data['payment_method'], 'bank_transfer')
+
+    # -- paying again ------------------------------------------------------
+
+    @override_settings(BACHS_WEBHOOK_SECRET=SECRET)
+    def test_renewing_early_adds_time_rather_than_resetting_it(self):
+        """Renewing on day 25 of 30 used to overwrite the expiry with now+30,
+        throwing away five days the customer had already paid for."""
+        self._grant('plus', 'monthly', 'chk_first')
+        self.assertEqual(self._days_left(), 30)
+
+        self._grant('plus', 'monthly', 'chk_second')
+        self.assertEqual(self._days_left(), 60)
+
+    @override_settings(BACHS_WEBHOOK_SECRET=SECRET)
+    def test_a_duplicate_webhook_does_not_add_a_second_period(self):
+        """Now that time stacks, a re-delivered event granting another 30 days
+        would be a free month. The intent guard has to hold."""
+        self._start_checkout('plus', 'monthly', 'chk_dupe')
+        event = self._paid_event(checkout_id='chk_dupe')
+        self._deliver(event)
+        self._deliver(event)
+        self._deliver(event)
+        self.workspace.refresh_from_db()
+        self.assertEqual(self._days_left(), 30)
+        self.assertEqual(
+            BillingEvent.objects.filter(
+                workspace=self.workspace, kind=BillingEvent.Kind.PLAN_PERIOD_PAID,
+            ).count(),
+            1,
+        )
+
+    @override_settings(BACHS_WEBHOOK_SECRET=SECRET)
+    def test_buying_again_after_lapsing_starts_from_today(self):
+        """Stacking must not back-date onto an expiry that has already passed —
+        that would hand over a plan that is already partly used up."""
+        self._grant('plus', 'weekly', 'chk_lapse')
+        self.workspace.plan_expires_at = timezone.now() - timedelta(days=20)
+        self.workspace.save()
+
+        self._grant('plus', 'weekly', 'chk_return')
+        self.assertEqual(self._days_left(), 7)
+        self.assertEqual(self.workspace.plan_status, 'active')
+
+    # -- changing plan -----------------------------------------------------
+
+    @override_settings(BACHS_WEBHOOK_SECRET=SECRET)
+    def test_upgrading_tier_mid_period_keeps_the_time_already_paid_for(self):
+        self._grant('basic', 'monthly', 'chk_basic')
+        self.assertEqual(self._days_left(), 30)
+
+        self._grant('plus', 'weekly', 'chk_plus')
+        self.assertEqual(self.workspace.plan, self.plus)
+        # 30 days of Basic left + the 7 just bought. Upgrading must not cost
+        # the customer the rest of the month they already paid for.
+        self.assertEqual(self._days_left(), 37)
+
+    @override_settings(BACHS_WEBHOOK_SECRET=SECRET)
+    def test_downgrading_tier_applies_immediately_and_keeps_the_time(self):
+        self._grant('plus', 'monthly', 'chk_was_plus')
+        self._grant('basic', 'weekly', 'chk_now_basic')
+        self.assertEqual(self.workspace.plan, self.basic)
+        self.assertEqual(self.workspace.plan_billing_period, 'weekly')
+        self.assertEqual(self._days_left(), 37)
+
+    @override_settings(BACHS_WEBHOOK_SECRET=SECRET)
+    def test_switching_weekly_to_monthly_moves_the_badge_and_the_clock(self):
+        self._grant('plus', 'weekly', 'chk_w')
+        self.assertEqual(self.workspace.plan_billing_period, 'weekly')
+        self.assertEqual(self.workspace.period_days, 7)
+
+        self._grant('plus', 'monthly', 'chk_m')
+        self.assertEqual(self.workspace.plan_billing_period, 'monthly')
+        self.assertEqual(self.workspace.period_days, 30)
+        self.assertEqual(self._days_left(), 37)
+
+    @override_settings(BACHS_WEBHOOK_SECRET=SECRET)
+    def test_the_domain_limit_follows_the_new_plan(self):
+        self._grant('basic', 'weekly', 'chk_dl_basic')
+        self.assertEqual(self.workspace.active_plan.domain_limit, self.basic.domain_limit)
+        self._grant('pro', 'weekly', 'chk_dl_pro')
+        self.assertEqual(self.workspace.active_plan.domain_limit, Plan.objects.get(code='pro').domain_limit)
+
+    # -- links -------------------------------------------------------------
+
+    @override_settings(BACHS_WEBHOOK_SECRET=SECRET)
+    def test_paying_extends_links_that_already_exist(self):
+        """A link's expiry is stored because the edge reads it, so it is fixed
+        at creation. Without this, renewing left old links expiring mid-plan."""
+        self._grant('plus', 'weekly', 'chk_links_1')
+        domain = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='go.example.com', purpose='redirect',
+            verified=True,
+        )
+        route = RedirectRoute.objects.create(
+            workspace=self.workspace, domain=domain, slug='promo',
+            destination_url='https://target.example.com/',
+            expires_at=self.workspace.plan_expires_at,
+        )
+
+        self._grant('plus', 'monthly', 'chk_links_2')
+        route.refresh_from_db()
+        self.assertEqual(route.expires_at, self.workspace.plan_expires_at)
+
+    @override_settings(BACHS_WEBHOOK_SECRET=SECRET)
+    def test_an_inactive_link_is_not_quietly_revived(self):
+        self._grant('plus', 'weekly', 'chk_inactive_1')
+        domain = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='go2.example.com', purpose='redirect',
+            verified=True,
+        )
+        route = RedirectRoute.objects.create(
+            workspace=self.workspace, domain=domain, slug='old',
+            destination_url='https://target.example.com/',
+            expires_at=self.workspace.plan_expires_at, is_active=False,
+        )
+        original = route.expires_at
+
+        self._grant('plus', 'monthly', 'chk_inactive_2')
+        route.refresh_from_db()
+        self.assertEqual(route.expires_at, original)
+        self.assertFalse(route.is_active)
+
+    # -- payments that do not succeed --------------------------------------
+
+    @override_settings(BACHS_WEBHOOK_SECRET=SECRET)
+    def test_a_failed_payment_grants_nothing_and_is_logged(self):
+        self._start_checkout('plus', 'monthly', 'chk_failed')
+        res = self._deliver({
+            'id': 'evt_fail', 'type': 'collection.failed',
+            'data': {'checkout_id': 'chk_failed', 'charge_id': 'chr_fail',
+                     'metadata': {'workspace_id': str(self.workspace.id)}},
+        })
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.workspace.refresh_from_db()
+        self.assertIsNone(self.workspace.plan)
+        self.assertTrue(
+            BillingEvent.objects.filter(
+                workspace=self.workspace, kind=BillingEvent.Kind.PAYMENT_FAILED,
+            ).exists()
+        )
+
+    @override_settings(BACHS_WEBHOOK_SECRET=SECRET)
+    def test_an_abandoned_checkout_cannot_be_paid_later(self):
+        """A dead intent left OPEN is one a replayed webhook could still cash
+        in. Closing it is what stops that."""
+        self._start_checkout('plus', 'monthly', 'chk_gone')
+        self._deliver({
+            'id': 'evt_gone', 'type': 'collection.abandoned',
+            'data': {'checkout_id': 'chk_gone',
+                     'metadata': {'workspace_id': str(self.workspace.id)}},
+        })
+        intent = CheckoutIntent.objects.get(checkout_id='chk_gone')
+        self.assertEqual(intent.status, CheckoutIntent.Status.FAILED)
+
+        self._deliver(self._paid_event(checkout_id='chk_gone'))
+        self.workspace.refresh_from_db()
+        self.assertIsNone(self.workspace.plan)
+
+    @override_settings(BACHS_WEBHOOK_SECRET=SECRET)
+    def test_an_unsigned_delivery_never_grants_a_plan(self):
+        self._start_checkout('plus', 'monthly', 'chk_forged')
+        res = self.client.post(
+            '/api/webhooks/bachs/',
+            data=json.dumps(self._paid_event(checkout_id='chk_forged')),
+            content_type='application/json',
+        )
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.workspace.refresh_from_db()
+        self.assertIsNone(self.workspace.plan)
+
+    @override_settings(BACHS_WEBHOOK_SECRET=SECRET)
+    def test_a_replayed_old_delivery_is_refused(self):
+        """A correctly signed body captured and re-sent days later must not
+        still be accepted — that is what the timestamp window is for."""
+        self._start_checkout('plus', 'monthly', 'chk_replay')
+        event = self._paid_event(checkout_id='chk_replay')
+        body = json.dumps(event)
+        stale = str(int(time.time()) - 4000)
+        signature = hmac.new(
+            self.SECRET.encode(), f'{stale}.{body}'.encode('utf-8'), hashlib.sha256,
+        ).hexdigest()
+        res = self.client.post(
+            '/api/webhooks/bachs/', data=body, content_type='application/json',
+            HTTP_X_BACHS_TIMESTAMP=stale, HTTP_X_BACHS_SIGNATURE=signature,
+        )
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.workspace.refresh_from_db()
+        self.assertIsNone(self.workspace.plan)
+
+    @override_settings(BACHS_WEBHOOK_SECRET=SECRET)
+    def test_a_payment_for_someone_elses_checkout_stays_with_them(self):
+        other_user = User.objects.create_user(username='e2e_other', email='o@example.com', password='pw')
+        other_ws = Workspace.objects.get(owner=other_user)
+        CheckoutIntent.objects.create(
+            workspace=other_ws, plan=self.plus, user=other_user,
+            checkout_id='chk_theirs', billing_period='weekly',
+        )
+        self._deliver(self._paid_event(checkout_id='chk_theirs'))
+        self.workspace.refresh_from_db()
+        other_ws.refresh_from_db()
+        self.assertIsNone(self.workspace.plan)
+        self.assertEqual(other_ws.plan, self.plus)
+
+    def test_a_checkout_that_bachs_refuses_leaves_no_open_intent(self):
+        from vericlick.payments import BachsError
+        with patch('vericlick.payments.create_checkout_session', side_effect=BachsError('down')):
+            res = self.client.post(
+                '/api/upgrade/', {'plan_code': 'plus', 'billing_period': 'weekly'},
+                format='json',
+            )
+        self.assertEqual(res.status_code, status.HTTP_502_BAD_GATEWAY)
+        intent = CheckoutIntent.objects.get(workspace=self.workspace)
+        self.assertEqual(intent.status, CheckoutIntent.Status.FAILED)
+        self.workspace.refresh_from_db()
+        self.assertIsNone(self.workspace.plan)
+
+    def test_a_period_with_no_product_configured_is_refused_before_checkout(self):
+        Plan.objects.filter(code='plus').update(bachs_monthly_product_id='')
+        res = self.client.post(
+            '/api/upgrade/', {'plan_code': 'plus', 'billing_period': 'monthly'},
+            format='json',
+        )
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(CheckoutIntent.objects.filter(workspace=self.workspace).exists())
+
+    # -- what the customer sees afterwards ---------------------------------
+
+    @override_settings(BACHS_WEBHOOK_SECRET=SECRET)
+    def test_billing_history_shows_the_purchase(self):
+        self._grant('plus', 'monthly', 'chk_history')
+        body = self.client.get('/api/workspace/billing-history/').json()
+        self.assertEqual(body['subscription']['status'], 'active')
+        self.assertEqual(body['subscription']['planName'], self.plus.name)
+        self.assertTrue(body['subscription']['active'])
+        self.assertEqual(body['subscription']['expiresAt'][:10],
+                         self.workspace.plan_expires_at.date().isoformat())
+        kinds = {e['kind'] for e in body['events']}
+        self.assertIn('plan_period_paid', kinds)
+
+
 class PasswordResetEndpointTests(APITestCase):
     def setUp(self):
         self.shared_email = 'reset@example.com'
@@ -2413,6 +2774,30 @@ class AdminManualPaymentActionTests(TestCase):
         self.assertEqual(self.ws.plan, self.plan)
         self.assertEqual(self.ws.plan_billing_mode, Workspace.BillingMode.PERIOD)
         self.assertIsNotNone(self.ws.plan_expires_at)
+
+    def test_activating_a_long_lapsed_workspace_grants_real_time(self):
+        """Stacking onto `plan_expires_at or now` used a date in the past for a
+        workspace that lapsed months ago, so recording their payment left them
+        still expired — the plan was "activated" and nothing worked."""
+        self.ws.plan = self.plan
+        self.ws.plan_expires_at = timezone.now() - timedelta(days=90)
+        self.ws.save()
+
+        self._post_action()
+        self.ws.refresh_from_db()
+        self.assertGreater(self.ws.plan_expires_at, timezone.now())
+        self.assertEqual(self.ws.plan_status, 'active')
+
+    def test_activating_mid_period_adds_to_the_time_left(self):
+        self.ws.plan = self.plan
+        self.ws.plan_billing_period = 'weekly'
+        self.ws.plan_expires_at = timezone.now() + timedelta(days=5)
+        self.ws.save()
+
+        self._post_action()
+        self.ws.refresh_from_db()
+        days = round((self.ws.plan_expires_at - timezone.now()).total_seconds() / 86400)
+        self.assertEqual(days, 12)
 
     def test_without_activate_only_logs_event(self):
         res = self._post_action(activate='')
@@ -3160,10 +3545,10 @@ class DashboardActivityPaginationTests(APITestCase):
     def test_the_first_page_is_a_screenful_not_everything(self):
         self._events(60)
         body = self.client.get('/api/dashboard/activity/').json()
-        self.assertEqual(len(body['results']), 25)
+        self.assertEqual(len(body['results']), 10)
         self.assertEqual(body['page'], 1)
         self.assertEqual(body['total'], 60)
-        self.assertEqual(body['totalPages'], 3)
+        self.assertEqual(body['totalPages'], 6)
 
     def test_paging_walks_backwards_in_time_without_repeats(self):
         self._events(60)
@@ -3178,7 +3563,7 @@ class DashboardActivityPaginationTests(APITestCase):
         self._events(260)
         body = self.client.get('/api/dashboard/activity/').json()
         self.assertEqual(body['total'], 200)
-        self.assertEqual(body['totalPages'], 8)
+        self.assertEqual(body['totalPages'], 20)
         self.assertTrue(body['windowFull'])
         self.assertEqual(body['windowSize'], 200)
 
@@ -3187,8 +3572,8 @@ class DashboardActivityPaginationTests(APITestCase):
         body = self.client.get('/api/dashboard/activity/?page=99').json()
         # Clamped to the last real page rather than returning an empty list,
         # which would look like the data had vanished.
-        self.assertEqual(body['page'], 8)
-        self.assertEqual(len(body['results']), 25)
+        self.assertEqual(body['page'], 20)
+        self.assertEqual(len(body['results']), 10)
 
     def test_the_two_hundred_shown_are_the_newest_ones(self):
         self._events(260)
@@ -3242,7 +3627,7 @@ class DashboardActivityPaginationTests(APITestCase):
                 destination='https://target.example.com/', verdict='allowed',
             )
         pages = []
-        for page in range(1, 9):
+        for page in range(1, 17):
             pages.extend(self.client.get(f'/api/dashboard/activity/?page={page}').json()['results'])
         self.assertEqual(sum(1 for r in pages if r['source'] == 'redirect'), 10)
 

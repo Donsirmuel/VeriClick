@@ -184,7 +184,24 @@ def extend_routes_to_plan(workspace):
     ).update(expires_at=new_expiry)
 
 
-def fulfil_paid_checkout(checkout_id, charge_id=''):
+def next_expiry(workspace, days, now=None):
+    """Where a workspace's plan should end after buying `days` more access.
+
+    Time already paid for is never taken away, and time already gone is never
+    counted: the period is added to whatever is left, or to today if the plan
+    has lapsed. Resetting to now+days robs anyone who renews early; stacking
+    onto a date in the past grants nothing at all.
+    """
+    from datetime import timedelta
+    from django.utils import timezone
+
+    now = now or timezone.now()
+    current = workspace.plan_expires_at
+    base = current if current and current > now else now
+    return base + timedelta(days=days)
+
+
+def fulfil_paid_checkout(checkout_id, charge_id='', payment_method=''):
     """Grant a workspace its paid plan once a verified webhook confirms payment.
 
     Idempotent: an intent is only matched while OPEN, so re-deliveries of the
@@ -215,7 +232,11 @@ def fulfil_paid_checkout(checkout_id, charge_id=''):
             return None
         intent.status = CheckoutIntent.Status.PAID
         intent.charge_id = charge_id or intent.charge_id
-        intent.save(update_fields=['status', 'charge_id', 'updated_at'])
+        # Which channel the customer actually paid through is only known now —
+        # checkout offers several. Recorded so the receipt and the ledger can
+        # say "paid by bank transfer" rather than guessing.
+        intent.payment_method = payment_method or intent.payment_method
+        intent.save(update_fields=['status', 'charge_id', 'payment_method', 'updated_at'])
 
         workspace = intent.workspace
         # Subscriptions were removed — every purchase is a one-time period. The
@@ -223,9 +244,11 @@ def fulfil_paid_checkout(checkout_id, charge_id=''):
         period = intent.billing_period or 'weekly'
         days = BILLING_PERIOD_DAYS.get(period, PLAN_PERIOD_DAYS)
         is_period = True
+
+        previous_expiry = workspace.plan_expires_at
         workspace.plan_billing_mode = Workspace.BillingMode.PERIOD
         workspace.plan_billing_period = period
-        workspace.plan_expires_at = timezone.now() + timedelta(days=days)
+        workspace.plan_expires_at = next_expiry(workspace, days)
         workspace.plan = intent.plan
         workspace.save(update_fields=[
             'plan', 'plan_billing_mode', 'plan_billing_period', 'plan_expires_at',
@@ -249,6 +272,11 @@ def fulfil_paid_checkout(checkout_id, charge_id=''):
                 'billing_mode': intent.billing_mode,
                 'billing_period': period,
                 'payment_method': intent.payment_method,
+                # What the purchase was worth in access, for support questions
+                # about "why does my plan end on that date".
+                'days_granted': days,
+                'previous_expires_at': previous_expiry.isoformat() if previous_expiry else None,
+                'expires_at': workspace.plan_expires_at.isoformat(),
             },
         )
 
@@ -362,6 +390,16 @@ def record_failed_collection(data, event_type):
     charge_id = (data or {}).get('charge_id', '')
     if charge_id and BillingEvent.objects.filter(charge_id=charge_id, kind=BillingEvent.Kind.PAYMENT_FAILED).exists():
         return True
+
+    # Close the intent behind it. An abandoned checkout left OPEN forever is a
+    # row a replayed or late webhook could still fulfil, and it makes the admin
+    # unable to tell a checkout in progress from one that died weeks ago.
+    from .models import CheckoutIntent
+    checkout_id = (data or {}).get('checkout_id', '')
+    if checkout_id:
+        CheckoutIntent.objects.filter(
+            checkout_id=checkout_id, status=CheckoutIntent.Status.OPEN,
+        ).update(status=CheckoutIntent.Status.FAILED, updated_at=timezone.now())
 
     BillingEvent.objects.create(
         workspace=workspace,
