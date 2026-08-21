@@ -81,7 +81,7 @@ const TOPICS: ChatTopic[] = [
   {
     id: 'pricing',
     keywords: ['price', 'pricing', 'cost', 'free', 'paid', 'plan', 'money', 'charge', 'billing', 'subscription', 'upgrade', 'premium', 'trial'],
-    answer: `VeriClick is paid from the start — there's no free tier. Pick Basic, Plus or Pro (they differ only by how many domains you can cover) and choose weekly (7 days) or monthly (30 days) access. Weekly starts at $25; monthly starts at $80 and works out cheaper per day. You pay once — card, bank transfer, mobile money or crypto — and renew when you want. Nothing auto-charges and there is no subscription. When a period ends, protection pauses and links stop forwarding until you renew; nothing is deleted, and any days you have left are added on top when you buy again. See the Pricing page to compare, or Billing & Plan to buy.`,
+    answer: `VeriClick is paid from the start — there's no free tier. Pick Basic, Plus or Pro (they differ only by how many domains you can cover) and choose weekly (7 days) or monthly (30 days) access. Weekly starts at $25; monthly starts at $80 and works out cheaper per day. You pay once with crypto and renew when you want. Nothing auto-charges and there is no subscription. When a period ends, protection pauses and links stop forwarding until you renew; nothing is deleted, and any days you have left are added on top when you buy again. See the Pricing page to compare, or Billing & Plan to buy.`,
   },
   {
     id: 'site-script',

@@ -27,8 +27,8 @@ export default function Billing() {
     queryFn: fetchBillingHistory,
     // Returning from checkout is a race: Bachs sends the customer back
     // immediately, but the plan is only granted when the signed webhook
-    // arrives, which for a bank transfer can be a while. Poll until it lands
-    // rather than making the customer refresh and wonder.
+    // arrives, and a crypto payment waits on network confirmations. Poll until
+    // it lands rather than making the customer refresh and wonder.
     refetchInterval: (query) =>
       returned === 'success' && !query.state.data?.subscription?.active && !waitedTooLong
         ? 3000
@@ -121,7 +121,7 @@ export default function Billing() {
             <h3 className="text-sm font-bold text-blue-900 mb-1">Confirming your payment…</h3>
             <p className="text-sm text-blue-700 leading-relaxed">
               Your payment went through and we're waiting for it to be confirmed. This is
-              usually seconds, but a bank transfer can take longer. You can leave this page —
+              usually quick, but crypto confirmations can take a few minutes. You can leave this page —
               your plan turns on by itself, and we'll email you a receipt.
             </p>
           </div>

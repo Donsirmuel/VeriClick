@@ -100,7 +100,7 @@ const tutorialSteps = [
     title: 'Choose a plan',
     steps: [
       <>Pick a tier by how many domains you need to cover; every tier has the same features.</>,
-      <>Choose 7 or 30 days and pay once — by card, bank transfer, mobile money or crypto.</>,
+      <>Choose 7 or 30 days and pay once with crypto — checkout shows you the exact amount.</>,
       <>Access starts as soon as the payment clears. Nothing renews on its own.</>,
     ],
   },

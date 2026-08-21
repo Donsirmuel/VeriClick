@@ -12,7 +12,7 @@ const SECTIONS = [
   },
   {
     title: 'Plans and payment',
-    body: 'A paid plan is required to protect a site or run a redirect link. Plans are sold as one-time payments for a fixed period of access — 7 days or 30 days, whichever you choose at checkout. There is no automatic renewal and no recurring charge: nothing is taken from you again unless you buy another period yourself. Payments are handled by our payment provider, who receives the details needed to process them; we never see or store your card details.',
+    body: 'A paid plan is required to protect a site or run a redirect link. Plans are sold as one-time payments for a fixed period of access — 7 days or 30 days, whichever you choose at checkout. There is no automatic renewal and no recurring charge: nothing is taken from you again unless you buy another period yourself. Payments are made in cryptocurrency and are handled by our payment provider, who receives the details needed to process them.',
   },
   {
     title: 'When a period ends',

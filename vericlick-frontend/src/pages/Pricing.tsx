@@ -230,14 +230,12 @@ export default function Pricing() {
           </>
           )}
 
-          {/* "Pay once with crypto" undersold the checkout — card, bank
-              transfer and mobile money are all offered — and left the two
-              questions people actually have unanswered: does it auto-renew,
-              and what happens on the last day. */}
+          {/* Checkout is crypto-only by choice, both here and in Bachs. The
+              two questions people actually have were the ones going
+              unanswered: does it auto-renew, and what happens on the last day. */}
           <p className="text-center text-sm text-neutral-500 mt-8 max-w-2xl mx-auto leading-relaxed">
             Every plan includes unlimited protected pages and the same full feature set —
-            tiers differ only by how many domains you can protect. Pay once by card, bank
-            transfer, mobile money or crypto for
+            tiers differ only by how many domains you can protect. Pay once with crypto for
             {period === 'monthly' ? ' 30 days' : ' 7 days'} of access.
           </p>
           <p className="text-center text-sm text-neutral-500 mt-3 max-w-2xl mx-auto leading-relaxed">
