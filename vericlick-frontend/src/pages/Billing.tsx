@@ -63,7 +63,8 @@ export default function Billing() {
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Billing &amp; Plan</h1>
         <p className="text-sm text-muted mt-1">
-          Your plan controls how many domains you can protect. Pay once with crypto for 7-day access, renew manually when ready.
+          Your plan controls how many domains you can protect. Pay once with crypto,
+          renew manually when ready.
         </p>
       </div>
 
@@ -118,7 +119,7 @@ export default function Billing() {
           </div>
           {sub?.mode && (
             <div className="text-xs text-muted mt-1">
-              7-day access · One-time payment
+              {PERIOD_DAYS[workspace?.planBillingPeriod ?? 'weekly']}-day access · One-time payment
             </div>
           )}
           {sub?.status === 'grace' && (

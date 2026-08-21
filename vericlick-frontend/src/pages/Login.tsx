@@ -73,7 +73,7 @@ export default function Login() {
               Verify every click.<br />Block every bot.
             </h2>
             <p className="text-neutral-400 text-lg leading-relaxed max-w-md">
-              VeriClick checks every visitor against your rules before they reach your page. Start free for 7 days.
+              VeriClick checks every visitor against your rules before they reach your page.
             </p>
           </div>
 

@@ -17,6 +17,7 @@ import type { CnameCheckResult } from '@/api/workspace'
 import type { RedirectRoute } from '@/types'
 import { parseApiError } from '@/lib/errors'
 import { DashboardSkeleton } from '@/components/ui/DashboardSkeleton'
+import { PERIOD_DAYS } from '@/components/shared/BillingPeriodToggle'
 
 function daysUntil(dateStr: string | null): number {
   if (!dateStr) return 0
@@ -36,8 +37,9 @@ function makeSlugPool(): string {
   return Array.from(bytes, (b) => SLUG_ALPHABET[b % SLUG_ALPHABET.length]).join('')
 }
 
-function RouteCard({ route, onRenew, onDeactivate, onDelete }: {
+function RouteCard({ route, periodDays, onRenew, onDeactivate, onDelete }: {
   route: RedirectRoute
+  periodDays: number
   onRenew: () => void
   onDeactivate: () => void
   onDelete: () => void
@@ -124,7 +126,7 @@ function RouteCard({ route, onRenew, onDeactivate, onDelete }: {
           onClick={onRenew}
           className="bg-black hover:bg-neutral-800 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all"
         >
-          Renew 7 Days
+          Renew {periodDays} days
         </button>
         <button
           onClick={onDeactivate}
@@ -608,6 +610,8 @@ export default function RedirectsPage() {
     queryFn: fetchWorkspace,
   })
   const hasPlan = !!workspace?.planName
+  // A link lives as long as the plan period paying for it.
+  const periodDays = PERIOD_DAYS[workspace?.planBillingPeriod ?? 'weekly']
 
   const { data: routes, isLoading } = useQuery({
     queryKey: ['redirect-routes'],
@@ -650,7 +654,8 @@ export default function RedirectsPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Smart Redirects</h1>
           <p className="text-sm text-muted mt-1">
-            Redirect visitors through your custom domains. Each domain gets 1 redirect with 7-day validity.
+            Redirect visitors through your custom domains. Each domain gets one link,
+            valid for as long as your current plan period.
           </p>
         </div>
         <button
@@ -669,6 +674,7 @@ export default function RedirectsPage() {
             <RouteCard
               key={route.id}
               route={route}
+              periodDays={periodDays}
               onRenew={() => renewMutation.mutate(route.id)}
               onDeactivate={() => {
                 if (window.confirm('Deactivate this redirect?')) deactivateMutation.mutate(route.id)
@@ -711,7 +717,8 @@ export default function RedirectsPage() {
           </li>
           <li className="flex items-start gap-2">
             <span className="text-xs mt-1.5">3.</span>
-            Redirects expire after 7 days. You'll get an email reminder to renew.
+            Links last as long as your plan period ({periodDays} days on your current plan).
+            You'll get an email reminder before one expires.
           </li>
         </ul>
       </div>

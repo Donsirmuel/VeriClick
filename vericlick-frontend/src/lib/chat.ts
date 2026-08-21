@@ -70,7 +70,7 @@ const TOPICS: ChatTopic[] = [
   {
     id: 'pricing',
     keywords: ['price', 'pricing', 'cost', 'free', 'paid', 'plan', 'money', 'charge', 'billing', 'subscription', 'upgrade', 'premium', 'trial'],
-    answer: `Every new account starts with a free 7-day trial — no credit card required. After that you'll need a plan to keep using VeriClick; your site stays protected. Plans are Basic, Plus, and Pro — all from just $25/month. Head to the Pricing page to compare, and to Billing to upgrade.`,
+    answer: `VeriClick is paid from the start — there's no free tier. Pick Basic, Plus or Pro, and choose weekly (7 days) or monthly (30 days) access. Weekly starts at $25; monthly starts at $80 and works out cheaper per day. You pay once with crypto and renew manually — nothing auto-charges. See the Pricing page to compare, or Billing to upgrade.`,
   },
   {
     id: 'site-script',
