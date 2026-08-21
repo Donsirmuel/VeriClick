@@ -139,6 +139,22 @@ docker compose down -v             # stop AND delete the database (destructive)
    - **PaaS** — most platforms have a cron/scheduled job runner; run
      `python manage.py check_domains --once` every 15 minutes.
 
+7. **Billing reminders (REQUIRED).** There is no grace period after a plan
+   expires — access stops on the date it was paid up to. The warning email is
+   therefore the only thing standing between a customer and losing access
+   without notice, and it must not depend on that customer happening to log in.
+
+   Docker Compose runs this for you: the `scheduler` service loops
+   `check_billing --interval 3600`. Confirm it is up after a deploy:
+   ```bash
+   docker compose ps scheduler
+   docker compose logs --tail=20 scheduler
+   ```
+   Not using Compose? Run `python manage.py check_billing --once` hourly from
+   cron, a systemd timer, or your PaaS scheduler. The same checks also run
+   lazily on an owner's own authenticated requests, but that covers only the
+   people already logging in — not the ones who need reminding.
+
 ### Google sign-in setup
 The Google OAuth flow is already wired in (`POST /api/auth/google/` verifies the
 id_token and matches its `aud` against `GOOGLE_CLIENT_ID`; the SPA renders the

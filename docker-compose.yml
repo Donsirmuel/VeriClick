@@ -1,3 +1,27 @@
+# Shared by the backend and the scheduler: they are the same image with the
+# same configuration, and a scheduler running against different settings than
+# the app is a class of bug nobody finds until an email goes to the wrong URL.
+x-backend-env: &backend-env
+  DEBUG: "false"
+  SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env}
+  ALLOWED_HOSTS: ${ALLOWED_HOSTS:?set ALLOWED_HOSTS in .env}
+  DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
+  CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:?set CORS_ALLOWED_ORIGINS in .env}
+  CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:?set CSRF_TRUSTED_ORIGINS in .env}
+  PUBLIC_TRACKING_BASE_URL: ${PUBLIC_TRACKING_BASE_URL:?set PUBLIC_TRACKING_BASE_URL in .env}
+  TRUST_X_FORWARDED_PROTO: "true"
+  GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+  RESEND_API_KEY: ${RESEND_API_KEY:-}
+  RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-VeriClick <noreply@vericlick.site>}
+  SITE_URL: ${SITE_URL:-https://vericlick.site}
+  # Host the anti-bot snippet points at. Compose only forwards what is
+  # listed here, so without this line setting it in .env does nothing.
+  SCRIPT_BASE_URL: ${SCRIPT_BASE_URL:-}
+  BACHS_API_KEY: ${BACHS_API_KEY:-}
+  BACHS_WEBHOOK_SECRET: ${BACHS_WEBHOOK_SECRET:-}
+  BACHS_BASE_URL: ${BACHS_BASE_URL:-https://sandbox-api.bachs.io}
+  BACHS_WEBHOOK_TOLERANCE_SECONDS: ${BACHS_WEBHOOK_TOLERANCE_SECONDS:-300}
+
 services:
   db:
     image: postgres:16-alpine
@@ -22,26 +46,23 @@ services:
     build:
       context: ./vericlick-backend
     restart: unless-stopped
-    environment:
-      DEBUG: "false"
-      SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env}
-      ALLOWED_HOSTS: ${ALLOWED_HOSTS:?set ALLOWED_HOSTS in .env}
-      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:?set CORS_ALLOWED_ORIGINS in .env}
-      CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:?set CSRF_TRUSTED_ORIGINS in .env}
-      PUBLIC_TRACKING_BASE_URL: ${PUBLIC_TRACKING_BASE_URL:?set PUBLIC_TRACKING_BASE_URL in .env}
-      TRUST_X_FORWARDED_PROTO: "true"
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
-      RESEND_API_KEY: ${RESEND_API_KEY:-}
-      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-VeriClick <noreply@vericlick.site>}
-      SITE_URL: ${SITE_URL:-https://vericlick.site}
-      # Host the anti-bot snippet points at. Compose only forwards what is
-      # listed here, so without this line setting it in .env does nothing.
-      SCRIPT_BASE_URL: ${SCRIPT_BASE_URL:-}
-      BACHS_API_KEY: ${BACHS_API_KEY:-}
-      BACHS_WEBHOOK_SECRET: ${BACHS_WEBHOOK_SECRET:-}
-      BACHS_BASE_URL: ${BACHS_BASE_URL:-https://sandbox-api.bachs.io}
-      BACHS_WEBHOOK_TOLERANCE_SECONDS: ${BACHS_WEBHOOK_TOLERANCE_SECONDS:-300}
+    environment: *backend-env
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # Billing reminders on a timer.
+  #
+  # There is no grace period after a plan expires, so the warning email is the
+  # only thing standing between a customer and losing access. The same checks
+  # run lazily on an owner's own requests — which is no help at all for the
+  # person this is for: the one who is not logging in.
+  scheduler:
+    build:
+      context: ./vericlick-backend
+    restart: unless-stopped
+    environment: *backend-env
+    command: python manage.py check_billing --interval 3600
     depends_on:
       db:
         condition: service_healthy
