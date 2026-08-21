@@ -11,7 +11,6 @@ import {
   fetchRedirectRoutes, createRedirectRoute, deleteRedirectRoute,
   renewRedirectRoute, updateRedirectRoute,
   fetchRedirectDomains, addRedirectDomain,
-  getVerifyChallenge, confirmVerification,
   verifyRedirectDomainCname, fetchWorkspace,
 } from '@/api/workspace'
 import type { CnameCheckResult } from '@/api/workspace'
@@ -102,6 +101,18 @@ function RouteCard({ route, onRenew, onDeactivate, onDelete }: {
   )
 }
 
+/**
+ * Three steps, in the order the work actually happens:
+ *
+ *   1. Link address — pick the subdomain the link will live on
+ *   2. Point DNS    — add the CNAME; checking it also verifies the domain
+ *   3. Destination  — where it sends people, then the link goes live
+ *
+ * Address first because it is the step with a waiting period: the DNS clock
+ * starts while the user is still deciding where the link should point. The
+ * previous order asked for the destination first, so the user finished all the
+ * thinking and THEN discovered they had to wait for propagation.
+ */
 function CreateWizard({ onClose }: { onClose: () => void }) {
   const queryClient = useQueryClient()
   const [step, setStep] = useState(1)
@@ -115,18 +126,11 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
   const [subPrefix, setSubPrefix] = useState('go')
   const [subRoot, setSubRoot] = useState('')
   const [manualDomain, setManualDomain] = useState(false)
-  const [verifyMethod, setVerifyMethod] = useState<'html_meta' | 'dns_txt'>('html_meta')
   const [cnameResult, setCnameResult] = useState<CnameCheckResult | null>(null)
 
   const { data: redirectDomains } = useQuery({
     queryKey: ['redirect-domains'],
     queryFn: fetchRedirectDomains,
-  })
-
-  const { data: challenge } = useQuery({
-    queryKey: ['verify-challenge', domainId, verifyMethod],
-    queryFn: () => getVerifyChallenge(domainId, verifyMethod),
-    enabled: !!domainId,
   })
 
   const addDomainMutation = useMutation({
@@ -135,31 +139,20 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
       queryClient.invalidateQueries({ queryKey: ['redirect-domains'] })
       setDomainId(data.id)
       setNewRedirectDomain('')
-      toast.success('Domain added')
+      toast.success(`${data.domain} added`)
+      setStep(2)
     },
     onError: (err) => toast.error(parseApiError(err) || 'Failed to add domain'),
   })
 
-  const verifyMutation = useMutation({
-    mutationFn: () => confirmVerification(domainId),
-    onSuccess: (data) => {
-      if (data.verified) {
-        queryClient.invalidateQueries({ queryKey: ['redirect-domains'] })
-        toast.success('Domain verified!')
-        setStep(3)
-      } else {
-        toast.error(data.detail || 'Verification failed')
-      }
-    },
-    onError: (err) => toast.error(parseApiError(err) || 'Verification failed'),
-  })
-
   const cnameVerifyMutation = useMutation({
     mutationFn: () => verifyRedirectDomainCname(domainId),
-    onSuccess: (data: CnameCheckResult) => {
+    onSuccess: (data) => {
       setCnameResult(data)
+      queryClient.invalidateQueries({ queryKey: ['redirect-domains'] })
       if (data.cnameOk) {
-        toast.success('CNAME verified!')
+        toast.success('DNS is pointing at us — address verified')
+        setStep(3)
       }
     },
     onError: () => {
@@ -177,16 +170,17 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
     }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['redirect-routes'] })
-      toast.success('Redirect created!')
+      queryClient.invalidateQueries({ queryKey: ['domains'] })
+      toast.success('Your link is live')
       onClose()
     },
     onError: (err) => toast.error(parseApiError(err) || 'Failed to create redirect'),
   })
 
   const selectedDomain = redirectDomains?.find((d) => d.id === domainId)
-  // A redirect domain must be a subdomain (you cannot CNAME an apex, and pointing
-  // a protected site's apex at the edge would move the whole site behind it), so
-  // offer the roots the user has already verified as the base to build on.
+
+  // A link must live on a subdomain: an apex cannot hold a CNAME, and pointing a
+  // protected site's apex at the edge would take the whole site off its host.
   const rootDomains = Array.from(new Set(
     (redirectDomains ?? [])
       .filter((d) => d.verified)
@@ -197,178 +191,94 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
   ))
   const effectiveRoot = subRoot || rootDomains[0] || ''
   const builtDomain = subPrefix && effectiveRoot ? `${subPrefix}.${effectiveRoot}` : ''
-  const domainToAdd = manualDomain || rootDomains.length === 0
-    ? newRedirectDomain.trim().toLowerCase()
-    : builtDomain
-  const canLeaveStep1 = !!destinationUrl && (botAction !== 'redirect' || !!fallbackUrl)
+  const usingBuilder = rootDomains.length > 0 && !manualDomain
+  const domainToAdd = usingBuilder ? builtDomain : newRedirectDomain.trim().toLowerCase()
 
-  // CNAME host: apex domains use "@", subdomains use the leftmost label.
-  const cnameHost = selectedDomain
-    ? (selectedDomain.domain.split('.').length > 2 ? selectedDomain.domain.split('.')[0] : '@')
-    : ''
+  // Reusable addresses: already verified and not already carrying a link.
+  const readyDomains = (redirectDomains ?? []).filter((d) => d.verified && d.purpose === 'redirect')
+
+  const canCreate = !!destinationUrl && (botAction !== 'redirect' || !!fallbackUrl)
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text)
     toast.success('Copied')
   }
 
+  const STEP_LABELS = ['Link address', 'Point DNS', 'Destination']
+
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl border border-neutral-200 shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
         <div className="p-6">
-          <h2 className="text-lg font-bold text-slate-900 mb-1">Create Redirect</h2>
-          <p className="text-sm text-muted mb-5">Step {step} of 4</p>
+          <h2 className="text-lg font-bold text-slate-900 mb-3">Create a redirect link</h2>
 
+          <div className="flex items-center gap-1.5 mb-5">
+            {STEP_LABELS.map((label, i) => {
+              const n = i + 1
+              const done = n < step
+              const active = n === step
+              return (
+                <div key={label} className="flex-1 min-w-0">
+                  <div className={`h-1.5 rounded-full transition-all ${done || active ? 'bg-black' : 'bg-neutral-200'}`} />
+                  <span className={`block text-[11px] font-bold mt-1.5 truncate ${
+                    active ? 'text-black' : done ? 'text-muted' : 'text-neutral-400'
+                  }`}>
+                    {label}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* ---- Step 1: which address will the link live on? ---- */}
           {step === 1 && (
             <div className="space-y-4">
-              <div>
-                <label className="text-sm font-bold text-slate-900 block mb-1">Destination URL</label>
-                <input
-                  type="url"
-                  value={destinationUrl}
-                  onChange={(e) => setDestinationUrl(e.target.value)}
-                  placeholder="https://example.com/sale"
-                  className="w-full bg-slate-50 border border-neutral-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-black"
-                />
-              </div>
-              <div>
-                <label className="text-sm font-bold text-slate-900 block mb-2">Bot handling</label>
-                {[
-                  { value: 'honeypot', label: 'Honeypot — trap bots with a fake page' },
-                  { value: 'block', label: 'Block — return 404' },
-                  { value: 'neutral', label: 'Neutral — empty page' },
-                  { value: 'redirect', label: 'Redirect — send bots to a different URL' },
-                ].map((opt) => (
-                  <label key={opt.value} className="flex items-center gap-2 py-1.5 text-sm text-slate-700 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="botAction"
-                      value={opt.value}
-                      checked={botAction === opt.value}
-                      onChange={(e) => setBotAction(e.target.value)}
-                      className="accent-black"
-                    />
-                    {opt.label}
-                  </label>
-                ))}
-              </div>
-              {botAction === 'redirect' && (
-                <div>
-                  <label className="text-sm font-bold text-slate-900 block mb-1">Fallback URL (for bots)</label>
-                  <input
-                    type="url"
-                    value={fallbackUrl}
-                    onChange={(e) => setFallbackUrl(e.target.value)}
-                    placeholder="https://example.com/blocked"
-                    className="w-full bg-slate-50 border border-neutral-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-black"
-                  />
-                </div>
-              )}
-              <div>
-                <label className="text-sm font-bold text-slate-900 block mb-1">Link path (optional)</label>
-                <p className="text-xs text-muted mb-2">
-                  This is the short part after your domain — e.g. <code className="bg-slate-100 px-1 rounded font-mono">yourdomain.com/<strong>{slug || 'sale'}</strong></code>. Leave empty for the root path.
-                </p>
-                <input
-                  type="text"
-                  value={slug}
-                  onChange={(e) => {
-                    const val = e.target.value.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, SLUG_MAX)
-                    setSlug(val)
-                    // Typing takes over the pool, so the slider trims what you
-                    // wrote instead of throwing it away.
-                    setSlugPool(val + makeSlugPool().slice(val.length))
-                  }}
-                  placeholder="sale"
-                  className="w-full bg-slate-50 border border-neutral-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-black font-mono"
-                />
-                <div className="flex items-center gap-3 mt-2">
-                  <input
-                    type="range"
-                    min={0}
-                    max={SLUG_MAX}
-                    value={slug.length}
-                    onChange={(e) => setSlug(slugPool.slice(0, Number(e.target.value)))}
-                    className="flex-1 accent-black h-1.5"
-                    aria-label="Generated link path length"
-                  />
-                  <span className="text-xs text-muted font-mono w-14 text-right">{slug.length}/{SLUG_MAX}</span>
-                </div>
-                <div className="flex items-center justify-between gap-3 mt-2">
-                  <p className="text-xs text-muted">
-                    Drag to generate a random path of that length, or type your own.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const pool = makeSlugPool()
-                      setSlugPool(pool)
-                      setSlug(pool.slice(0, slug.length || 8))
-                    }}
-                    className="text-xs font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition-colors shrink-0"
-                  >
-                    Regenerate
-                  </button>
-                </div>
-              </div>
-              <button
-                onClick={() => canLeaveStep1 && setStep(2)}
-                disabled={!canLeaveStep1}
-                className="w-full bg-black hover:bg-neutral-800 text-white py-3 rounded-xl text-sm font-bold transition-all disabled:opacity-50"
-              >
-                Continue
-              </button>
-            </div>
-          )}
-
-          {step === 2 && (
-            <div className="space-y-4">
               <p className="text-sm text-muted">
-                This is the domain visitors will access. It must be a domain you own.
+                Your link needs its own address — a subdomain like{' '}
+                <span className="font-mono text-slate-700">go.yoursite.com</span>. It can't be
+                your main domain, because that has to keep pointing at your website.
               </p>
 
-              {redirectDomains && redirectDomains.length === 0 && (
-                <div className="p-3 bg-slate-50 border border-neutral-200 rounded-xl text-xs text-muted">
-                  You don't have any usable domains yet. Add one below, or verify a domain on
-                  the Domains page — verified domains can be used for redirects too.
-                </div>
-              )}
-
-              {redirectDomains && redirectDomains.length > 0 && (
+              {readyDomains.length > 0 && (
                 <div>
-                  <label className="text-sm font-bold text-slate-900 block mb-1">Select existing domain</label>
+                  <label className="text-sm font-bold text-slate-900 block mb-1">
+                    Use an address you've already set up
+                  </label>
                   <select
                     value={domainId}
-                    onChange={(e) => setDomainId(e.target.value)}
+                    onChange={(e) => {
+                      setDomainId(e.target.value)
+                      if (e.target.value) setStep(3)
+                    }}
                     className="w-full bg-slate-50 border border-neutral-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-black"
                   >
-                    <option value="">Select a domain…</option>
-                    {redirectDomains.map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {d.domain}
-                        {!d.verified ? ' (unverified)' : d.purpose === 'protection' ? ' (protected domain)' : ''}
-                      </option>
+                    <option value="">Choose an address…</option>
+                    {readyDomains.map((d) => (
+                      <option key={d.id} value={d.id}>{d.domain}</option>
                     ))}
                   </select>
+                  <div className="flex items-center gap-2 text-xs text-muted mt-4">
+                    <span className="flex-1 h-px bg-neutral-200" />
+                    or create a new one
+                    <span className="flex-1 h-px bg-neutral-200" />
+                  </div>
                 </div>
               )}
 
-              <div className="flex items-center gap-2 text-xs text-muted">
-                <span className="flex-1 h-px bg-neutral-200" />
-                or add new
-                <span className="flex-1 h-px bg-neutral-200" />
-              </div>
+              {rootDomains.length === 0 && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800">
+                  You don't have a verified domain yet. Add and verify one on the Domains
+                  page first — then you can build a link address on it here.
+                </div>
+              )}
 
-              {rootDomains.length > 0 && !manualDomain ? (
-                <div className="space-y-2">
+              {usingBuilder ? (
+                <div className="space-y-3">
                   <div className="flex gap-2">
                     <input
                       type="text"
                       value={subPrefix}
-                      onChange={(e) => setSubPrefix(
-                        e.target.value.replace(/[^a-zA-Z0-9-]/g, '').toLowerCase().slice(0, 63),
-                      )}
-                      placeholder="go"
+                      onChange={(e) => setSubPrefix(e.target.value.replace(/[^a-zA-Z0-9-]/g, '').toLowerCase().slice(0, 63))}
                       aria-label="Subdomain prefix"
                       className="w-24 bg-slate-50 border border-neutral-200 rounded-xl px-3 py-3 text-sm text-center focus:outline-none focus:border-black font-mono"
                     />
@@ -382,6 +292,7 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
                       {rootDomains.map((r) => <option key={r} value={r}>{r}</option>)}
                     </select>
                   </div>
+
                   <div className="flex flex-wrap gap-1.5">
                     {['go', 't', 'link', 'r'].map((p) => (
                       <button
@@ -396,18 +307,21 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
                       </button>
                     ))}
                   </div>
-                  <p className="text-xs text-muted">
-                    Creates <strong className="font-mono text-slate-700">{builtDomain || '—'}</strong>.
-                    You'll point this subdomain at our edge proxy in the next step — your main
-                    site keeps working untouched.
-                  </p>
+
+                  {builtDomain && (
+                    <div className="p-3 bg-slate-50 border border-neutral-200 rounded-xl">
+                      <p className="text-xs text-muted mb-0.5">Your link will live at</p>
+                      <p className="text-sm font-mono text-slate-900 break-all">{builtDomain}</p>
+                    </div>
+                  )}
+
                   <div className="flex gap-2">
                     <button
                       onClick={() => domainToAdd && addDomainMutation.mutate(domainToAdd)}
                       disabled={!domainToAdd || addDomainMutation.isPending}
-                      className="flex-1 bg-black hover:bg-neutral-800 text-white px-4 py-3 rounded-xl text-sm font-bold transition-all disabled:opacity-50"
+                      className="flex-1 bg-black hover:bg-neutral-800 text-white py-3 rounded-xl text-sm font-bold transition-all disabled:opacity-50"
                     >
-                      {addDomainMutation.isPending ? 'Adding…' : 'Add'}
+                      {addDomainMutation.isPending ? 'Adding…' : 'Continue'}
                     </button>
                     <button
                       type="button"
@@ -433,12 +347,12 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
                       disabled={!domainToAdd || addDomainMutation.isPending}
                       className="bg-black hover:bg-neutral-800 text-white px-4 py-3 rounded-xl text-sm font-bold transition-all disabled:opacity-50"
                     >
-                      {addDomainMutation.isPending ? 'Adding…' : 'Add'}
+                      {addDomainMutation.isPending ? 'Adding…' : 'Continue'}
                     </button>
                   </div>
                   <p className="text-xs text-muted">
-                    Use a subdomain such as <span className="font-mono">go.yourdomain.com</span> — an
-                    apex domain can't hold the CNAME record this needs.
+                    Use a subdomain such as <span className="font-mono">go.yourdomain.com</span> —
+                    an apex domain can't hold the record this needs.
                   </p>
                   {rootDomains.length > 0 && (
                     <button
@@ -451,52 +365,46 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
                   )}
                 </div>
               )}
+            </div>
+          )}
 
-              {selectedDomain && !selectedDomain.verified && challenge && (
-                <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-3">
-                  <p className="text-sm font-bold text-amber-700">Verify domain ownership</p>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setVerifyMethod('html_meta')}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold ${verifyMethod === 'html_meta' ? 'bg-black text-white' : 'bg-slate-100'}`}
-                    >
-                      HTML Meta Tag
-                    </button>
-                    <button
-                      onClick={() => setVerifyMethod('dns_txt')}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold ${verifyMethod === 'dns_txt' ? 'bg-black text-white' : 'bg-slate-100'}`}
-                    >
-                      DNS TXT
+          {/* ---- Step 2: point the address at us ---- */}
+          {step === 2 && selectedDomain && (
+            <div className="space-y-4">
+              <p className="text-sm text-muted">
+                One DNS record connects <strong>{selectedDomain.domain}</strong> to VeriClick.
+                Add it wherever you manage your domain — Cloudflare, Namecheap, GoDaddy.
+              </p>
+
+              <div className="p-4 bg-slate-50 border border-neutral-200 rounded-xl space-y-3">
+                <p className="text-sm font-bold text-slate-900">Add this record</p>
+                <div className="bg-slate-900 text-emerald-400 text-xs font-mono p-3 rounded-lg space-y-1 overflow-x-auto">
+                  <div><span className="text-muted">Type: </span>CNAME</div>
+                  <div className="flex items-center gap-2">
+                    <span><span className="text-muted">Name: </span>{selectedDomain.domain.split('.')[0]}</span>
+                    <button onClick={() => copyToClipboard(selectedDomain.domain.split('.')[0])} className="p-0.5 rounded bg-slate-700 text-white shrink-0">
+                      <HugeiconsIcon icon={Copy01Icon} className="w-3 h-3" />
                     </button>
                   </div>
-                  {verifyMethod === 'html_meta' ? (
-                    <div className="relative">
-                      <code className="block bg-slate-900 text-emerald-400 text-xs p-3 rounded-lg break-all pr-10">
-                        {challenge.metaTag}
-                      </code>
-                      <button onClick={() => copyToClipboard(challenge.metaTag)} className="absolute top-2 right-2 p-1 rounded bg-slate-700 text-white">
-                        <HugeiconsIcon icon={Copy01Icon} className="w-3 h-3" />
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <div className="relative">
-                        <label className="text-xs text-muted">Name</label>
-                        <code className="block bg-slate-900 text-emerald-400 text-xs p-2 rounded-lg">{challenge.dnsName}</code>
-                      </div>
-                      <div className="relative">
-                        <label className="text-xs text-muted">Value</label>
-                        <code className="block bg-slate-900 text-emerald-400 text-xs p-2 rounded-lg break-all">{challenge.dnsValue}</code>
-                      </div>
-                    </div>
-                  )}
-                  <button
-                    onClick={() => verifyMutation.mutate()}
-                    disabled={verifyMutation.isPending}
-                    className="w-full bg-black hover:bg-neutral-800 text-white py-2.5 rounded-xl text-sm font-bold transition-all disabled:opacity-50"
-                  >
-                    {verifyMutation.isPending ? 'Verifying…' : 'Verify'}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <span><span className="text-muted">Value:</span> edge.vericlick.cc</span>
+                    <button onClick={() => copyToClipboard('edge.vericlick.cc')} className="p-0.5 rounded bg-slate-700 text-white shrink-0">
+                      <HugeiconsIcon icon={Copy01Icon} className="w-3 h-3" />
+                    </button>
+                  </div>
+                  <div><span className="text-muted">TTL:  </span>Auto</div>
+                </div>
+              </div>
+
+              <p className="text-xs text-muted">
+                Only <span className="font-mono">{selectedDomain.domain}</span> changes. Your main
+                site and email keep working exactly as they do now. DNS usually updates within
+                a few minutes.
+              </p>
+
+              {cnameResult && !cnameResult.cnameOk && (
+                <div className="p-3 rounded-xl text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                  {cnameResult.detail}
                 </div>
               )}
 
@@ -505,63 +413,119 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
                   Back
                 </button>
                 <button
-                  onClick={() => {
-                    if (selectedDomain?.verified) setStep(3)
-                    else toast.error('Domain must be verified first')
-                  }}
-                  disabled={!selectedDomain?.verified}
+                  onClick={() => cnameVerifyMutation.mutate()}
+                  disabled={cnameVerifyMutation.isPending}
                   className="flex-1 bg-black hover:bg-neutral-800 text-white py-3 rounded-xl text-sm font-bold transition-all disabled:opacity-50"
                 >
-                  Continue
+                  {cnameVerifyMutation.isPending ? 'Checking DNS…' : "I've added it — check DNS"}
                 </button>
               </div>
             </div>
           )}
 
-          {step === 3 && (
+          {/* ---- Step 3: where does it send people? ---- */}
+          {step === 3 && selectedDomain && (
             <div className="space-y-4">
-              <p className="text-sm text-muted">
-                Point your domain to our edge proxy so traffic can be routed through VeriClick.
-              </p>
-
-              {selectedDomain && cnameHost === '@' && (
-                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 space-y-1">
-                  <p className="font-bold">
-                    {selectedDomain.domain} is an apex domain
-                    {selectedDomain.purpose === 'protection' ? ' and is running your protected site' : ''}.
-                  </p>
-                  <p>
-                    Most DNS providers won't accept a CNAME at the apex, and routing it here sends
-                    all of {selectedDomain.domain}'s traffic through the edge proxy
-                    {selectedDomain.purpose === 'protection' ? ', including your site itself' : ''}.
-                    Go back and use a subdomain such as{' '}
-                    <span className="font-mono">go.{selectedDomain.domain}</span> instead.
-                  </p>
-                </div>
-              )}
-
-              <div className="p-4 bg-slate-50 rounded-xl space-y-3">
-                <p className="text-sm font-bold text-slate-900">CNAME Setup</p>
-                <p className="text-xs text-muted">
-                  Add a CNAME record in your DNS settings for <strong>{selectedDomain?.domain}</strong>:
-                </p>
-                <div className="bg-slate-900 text-emerald-400 text-xs font-mono p-3 rounded-lg space-y-1">
-                  <div><span className="text-muted">Host:</span> {cnameHost}</div>
-                  <div><span className="text-muted">Value:</span> edge.vericlick.cc</div>
-                  <div><span className="text-muted">TTL:</span> 300 (or Auto)</div>
-                </div>
-                <p className="text-xs text-muted">
-                  This tells DNS to route traffic for your domain to our edge proxy.
-                  Changes may take a few minutes to propagate.
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
+                <p className="text-xs font-bold text-emerald-700 uppercase tracking-wider mb-0.5">Your link</p>
+                <p className="text-sm font-mono text-emerald-900 break-all">
+                  {selectedDomain.domain}{slug ? `/${slug}` : ''}
                 </p>
               </div>
 
-              {cnameResult && (
-                <div className={`p-3 rounded-xl text-xs font-bold ${cnameResult.cnameOk
-                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                    : 'bg-amber-50 text-amber-700 border border-amber-200'
-                  }`}>
-                  {cnameResult.detail}
+              <div>
+                <label className="text-sm font-bold text-slate-900 block mb-1">Where should it send people?</label>
+                <input
+                  type="url"
+                  value={destinationUrl}
+                  onChange={(e) => setDestinationUrl(e.target.value)}
+                  placeholder="https://example.com/my-offer"
+                  autoFocus
+                  className="w-full bg-slate-50 border border-neutral-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-black"
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-bold text-slate-900 block mb-1">Link ending (optional)</label>
+                <input
+                  type="text"
+                  value={slug}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, SLUG_MAX)
+                    setSlug(val)
+                    setSlugPool(val + makeSlugPool().slice(val.length))
+                  }}
+                  placeholder="offer"
+                  className="w-full bg-slate-50 border border-neutral-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-black font-mono"
+                />
+                <div className="flex items-center gap-3 mt-2">
+                  <input
+                    type="range"
+                    min={0}
+                    max={SLUG_MAX}
+                    value={slug.length}
+                    onChange={(e) => setSlug(slugPool.slice(0, Number(e.target.value)))}
+                    className="flex-1 accent-black h-1.5"
+                    aria-label="Generated link ending length"
+                  />
+                  <span className="text-xs text-muted font-mono w-14 text-right">{slug.length}/{SLUG_MAX}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3 mt-2">
+                  <p className="text-xs text-muted">
+                    Drag for a random ending, or type your own. Longer is harder to guess.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const pool = makeSlugPool()
+                      setSlugPool(pool)
+                      setSlug(pool.slice(0, slug.length || 8))
+                    }}
+                    className="text-xs font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition-colors shrink-0"
+                  >
+                    Regenerate
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-sm font-bold text-slate-900 block mb-1">What should bots get instead?</label>
+                <p className="text-xs text-muted mb-2">
+                  Real visitors always go to your destination. This is only for traffic we flag as automated.
+                </p>
+                {[
+                  { value: 'honeypot', label: 'A decoy page', hint: 'Looks real, wastes their time' },
+                  { value: 'block', label: 'Nothing — 404', hint: 'Looks like the link does not exist' },
+                  { value: 'neutral', label: 'A blank page', hint: 'Quietly gives them nothing' },
+                  { value: 'redirect', label: 'A different URL', hint: 'Send them somewhere of your choosing' },
+                ].map((opt) => (
+                  <label key={opt.value} className="flex items-start gap-2 py-1.5 text-sm text-slate-700 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="botAction"
+                      value={opt.value}
+                      checked={botAction === opt.value}
+                      onChange={(e) => setBotAction(e.target.value)}
+                      className="accent-black mt-0.5"
+                    />
+                    <span>
+                      <span className="font-medium">{opt.label}</span>
+                      <span className="block text-xs text-muted">{opt.hint}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+
+              {botAction === 'redirect' && (
+                <div>
+                  <label className="text-sm font-bold text-slate-900 block mb-1">Send bots to</label>
+                  <input
+                    type="url"
+                    value={fallbackUrl}
+                    onChange={(e) => setFallbackUrl(e.target.value)}
+                    placeholder="https://example.com/blocked"
+                    className="w-full bg-slate-50 border border-neutral-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-black"
+                  />
                 </div>
               )}
 
@@ -570,42 +534,11 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
                   Back
                 </button>
                 <button
-                  onClick={() => cnameVerifyMutation.mutate()}
-                  disabled={!selectedDomain || cnameVerifyMutation.isPending}
-                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-3 rounded-xl text-sm font-bold transition-colors disabled:opacity-50"
-                >
-                  {cnameVerifyMutation.isPending ? 'Checking…' : 'Verify CNAME'}
-                </button>
-                <button
-                  onClick={() => setStep(4)}
-                  disabled={!selectedDomain?.verified}
-                  className="flex-1 bg-black hover:bg-neutral-800 text-white py-3 rounded-xl text-sm font-bold transition-all disabled:opacity-50"
-                >
-                  Continue
-                </button>
-              </div>
-            </div>
-          )}
-
-          {step === 4 && (
-            <div className="space-y-4">
-              <div className="p-4 bg-slate-50 rounded-xl space-y-2 text-sm">
-                <div className="flex justify-between"><span className="text-muted">Domain</span><span className="font-bold">{selectedDomain?.domain}</span></div>
-                {slug && <div className="flex justify-between"><span className="text-muted">Path</span><span className="font-bold font-mono">/{slug}</span></div>}
-                <div className="flex justify-between"><span className="text-muted">Destination</span><span className="font-bold truncate ml-4">{destinationUrl}</span></div>
-                <div className="flex justify-between"><span className="text-muted">Bot handling</span><span className="font-bold capitalize">{botAction}</span></div>
-                <div className="flex justify-between"><span className="text-muted">Valid for</span><span className="font-bold">7 days</span></div>
-              </div>
-              <div className="flex gap-2">
-                <button onClick={() => setStep(3)} className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-3 rounded-xl text-sm font-bold transition-colors">
-                  Back
-                </button>
-                <button
                   onClick={() => createMutation.mutate()}
-                  disabled={createMutation.isPending}
+                  disabled={!canCreate || createMutation.isPending}
                   className="flex-1 bg-black hover:bg-neutral-800 text-white py-3 rounded-xl text-sm font-bold transition-all disabled:opacity-50"
                 >
-                  {createMutation.isPending ? 'Creating…' : 'Activate Redirect'}
+                  {createMutation.isPending ? 'Creating…' : 'Create my link'}
                 </button>
               </div>
             </div>
