@@ -45,6 +45,10 @@ services:
   backend:
     build:
       context: ./vericlick-backend
+    # Named explicitly because the scheduler runs the same image. Relying on
+    # Compose's implicit <project>-backend name would also tie the rollback
+    # tags in deploy.sh to the directory the repo happens to sit in.
+    image: vericlick-backend:latest
     restart: unless-stopped
     environment: *backend-env
     depends_on:
@@ -57,9 +61,12 @@ services:
   # only thing standing between a customer and losing access. The same checks
   # run lazily on an owner's own requests — which is no help at all for the
   # person this is for: the one who is not logging in.
+  # Runs the backend image rather than building its own. Two builds of one
+  # Dockerfile would be two images to keep in step, and `deploy.sh rollback`
+  # only moves the backend tag — so a separate scheduler image would stay on
+  # the new code after a rollback put the app back on the old.
   scheduler:
-    build:
-      context: ./vericlick-backend
+    image: vericlick-backend:latest
     restart: unless-stopped
     environment: *backend-env
     command: python manage.py check_billing --interval 3600

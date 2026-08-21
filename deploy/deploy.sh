@@ -122,6 +122,13 @@ cmd_update() {
   echo "==> Backing up the database + Caddy certs before any change..."
   cmd_backup
 
+  # Tag BEFORE building. `docker compose build` overwrites :latest, so tagging
+  # afterwards captured the image just built and pointed :previous at it —
+  # rollback restored the version it was supposed to undo.
+  echo "==> Tagging the running images so 'deploy.sh rollback' can restore them..."
+  docker tag vericlick-backend:latest vericlick-backend:previous || true
+  docker tag vericlick-frontend:latest vericlick-frontend:previous || true
+
   echo "==> Building the new images (the running stack keeps serving)..."
   docker compose build backend frontend
 
@@ -137,10 +144,6 @@ cmd_update() {
 
   echo "==> Applying migrations with the NEW code while the OLD app still serves..."
   docker compose run --rm --no-deps backend python manage.py migrate --noinput
-
-  echo "==> Tagging the current images so 'deploy.sh rollback' can restore them..."
-  docker tag vericlick-backend vericlick-backend:previous || true
-  docker tag vericlick-frontend vericlick-frontend:previous || true
 
   echo "==> Swapping the stack to the new images..."
   docker compose up -d --no-build
