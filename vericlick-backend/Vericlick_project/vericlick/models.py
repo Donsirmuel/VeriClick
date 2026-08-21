@@ -77,11 +77,28 @@ class Workspace(models.Model):
         ),
     )
     onboarding_complete = models.BooleanField(default=False)
+    tour_completed = models.BooleanField(
+        default=False,
+        help_text=(
+            'Whether the user has seen the product tour. Stored per account, not '
+            'in the browser, so signing in on a second device does not replay the '
+            'pitch to someone who already sat through it.'
+        ),
+    )
     onboarding_type = models.CharField(
         max_length=20,
-        choices=[('shield', 'Site Shield'), ('redirect', 'Smart Redirect')],
+        choices=[
+            ('both', 'Shield + Redirect'),
+            ('shield', 'Site Shield'),
+            ('redirect', 'Smart Redirect'),
+        ],
         null=True,
         blank=True,
+        help_text=(
+            'Which setup path the workspace took. New signups use "both": one '
+            'verified domain runs the anti-bot script and backs a redirect link. '
+            'The single-purpose values are kept for workspaces onboarded earlier.'
+        ),
     )
 
     class Meta:

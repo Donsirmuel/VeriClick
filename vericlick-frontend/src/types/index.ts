@@ -53,7 +53,8 @@ export interface Workspace {
   domainsUsed: number
   domainLimit: number
   onboardingComplete: boolean
-  onboardingType: 'shield' | 'redirect' | null
+  tourCompleted: boolean
+  onboardingType: 'both' | 'shield' | 'redirect' | null
 }
 
 export interface Domain {

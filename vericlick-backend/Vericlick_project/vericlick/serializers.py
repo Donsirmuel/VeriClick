@@ -78,7 +78,7 @@ class WorkspaceSerializer(serializers.ModelSerializer):
             'created_at', 'plan', 'plan_name',
             'plan_billing_mode', 'plan_billing_period', 'plan_expires_at', 'plan_status', 'grace_expires_at',
             'trial_expires_at', 'trial_active', 'domains_used', 'domain_limit',
-            'onboarding_complete', 'onboarding_type',
+            'onboarding_complete', 'onboarding_type', 'tour_completed',
         ]
         read_only_fields = [
             'id', 'tracker_secret', 'created_at',

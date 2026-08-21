@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
+import { updateWorkspace } from '@/api/workspace'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
   Shield02Icon,
@@ -59,19 +61,28 @@ interface ProductTourProps {
 
 export function ProductTour({ onComplete }: ProductTourProps) {
   const [step, setStep] = useState(0)
+  const queryClient = useQueryClient()
   const current = STEPS[step]
   const Icon = current.icon
   const isLast = step === STEPS.length - 1
 
-  const skip = () => {
+  // Record against the account so a second device does not replay the pitch.
+  // localStorage is kept as an offline-safe fallback, not the source of truth.
+  const finish = () => {
     localStorage.setItem(TOUR_KEY, '1')
+    updateWorkspace({ tourCompleted: true })
+      .then(() => queryClient.invalidateQueries({ queryKey: ['workspace'] }))
+      .catch(() => {
+        /* Never block the user on this — localStorage already covers them here. */
+      })
     onComplete()
   }
 
+  const skip = () => finish()
+
   const next = () => {
     if (isLast) {
-      localStorage.setItem(TOUR_KEY, '1')
-      onComplete()
+      finish()
     } else {
       setStep(step + 1)
     }

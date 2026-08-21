@@ -120,8 +120,10 @@ def workspace_onboarding(request):
     onboarding_type = request.data.get('type')  # 'shield' or 'redirect'
     domain_name = request.data.get('domain', '').strip().lower()
 
-    if onboarding_type not in ('shield', 'redirect'):
-        return Response({'errors': [{'field': 'type', 'detail': 'Must be shield or redirect'}]}, status=400)
+    if not onboarding_type:
+        onboarding_type = 'both'
+    if onboarding_type not in ('both', 'shield', 'redirect'):
+        return Response({'errors': [{'field': 'type', 'detail': 'Must be both, shield or redirect'}]}, status=400)
     if not domain_name:
         return Response({'errors': [{'field': 'domain', 'detail': 'Domain is required'}]}, status=400)
 
@@ -153,7 +155,10 @@ def workspace_onboarding(request):
             workspace.save(update_fields=['onboarding_complete', 'onboarding_type'])
             return Response({'errors': [{'field': 'domain', 'detail': f'Domain limit reached ({active_plan.domain_limit})'}]}, status=400)
 
-        purpose = 'protection' if onboarding_type == 'shield' else 'redirect'
+        # 'both' registers a protection domain: installing the script verifies it
+        # and switches anti-bot on, and a verified protection domain is reusable
+        # as a redirect target, so one domain covers the whole flow.
+        purpose = 'redirect' if onboarding_type == 'redirect' else 'protection'
         domain = DomainRegistry.objects.create(
             workspace=workspace,
             domain=domain_name,

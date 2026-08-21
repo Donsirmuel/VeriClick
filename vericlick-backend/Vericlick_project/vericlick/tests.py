@@ -1368,6 +1368,79 @@ class OnboardingCompletionTests(APITestCase):
         self.assertTrue(self._complete())
 
 
+class UnifiedOnboardingTests(APITestCase):
+    """Setup is one path for everyone now: the domain it registers must serve
+    both the anti-bot script and a redirect."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='uni', email='u@example.com', password='pw')
+        self.client.force_authenticate(user=self.user)
+        self.workspace = Workspace.objects.get(owner=self.user)
+        self.workspace.plan = Plan.objects.get(code='basic')
+        self.workspace.plan_expires_at = timezone.now() + timedelta(days=7)
+        self.workspace.save(update_fields=['plan', 'plan_expires_at'])
+
+    def _onboard(self, domain='example.com', type_='both'):
+        return self.client.post('/api/workspace/onboarding/', {
+            'type': type_, 'domain': domain,
+        }, format='json')
+
+    def test_both_registers_a_protection_domain(self):
+        res = self._onboard()
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        domain = DomainRegistry.objects.get(workspace=self.workspace, domain='example.com')
+        # Protection purpose is what the script verifies.
+        self.assertEqual(domain.purpose, 'protection')
+
+    def test_type_defaults_to_both_when_omitted(self):
+        res = self.client.post('/api/workspace/onboarding/', {'domain': 'example.com'}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.workspace.refresh_from_db()
+        self.assertEqual(self.workspace.onboarding_type, 'both')
+
+    def test_the_onboarded_domain_can_back_a_redirect_once_verified(self):
+        # The whole point of dropping the fork: one domain, both features.
+        self._onboard()
+        domain = DomainRegistry.objects.get(workspace=self.workspace, domain='example.com')
+        domain.verified = True
+        domain.script_installed = True
+        domain.save(update_fields=['verified', 'script_installed'])
+
+        listed = [d['domain'] for d in self.client.get('/api/redirect-domains/').json()]
+        self.assertIn('example.com', listed)
+
+        res = self.client.post('/api/redirect-routes/', {
+            'domain_id': str(domain.id),
+            'destination_url': 'https://example.com/offer',
+            'slug': 'offer',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+
+    def test_legacy_single_purpose_values_still_accepted(self):
+        res = self._onboard(type_='redirect')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        domain = DomainRegistry.objects.get(workspace=self.workspace, domain='example.com')
+        self.assertEqual(domain.purpose, 'redirect')
+
+    def test_unknown_type_is_rejected(self):
+        self.assertEqual(self._onboard(type_='nonsense').status_code, status.HTTP_400_BAD_REQUEST)
+
+
+class TourStateTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='tour', email='t@example.com', password='pw')
+        self.client.force_authenticate(user=self.user)
+
+    def test_tour_starts_unseen(self):
+        self.assertFalse(self.client.get('/api/workspace/').json()['tourCompleted'])
+
+    def test_tour_can_be_marked_done_and_persists(self):
+        # Stored on the account, so a second device does not replay the pitch.
+        res = self.client.patch('/api/workspace/', {'tourCompleted': True}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertTrue(self.client.get('/api/workspace/').json()['tourCompleted'])
+
+
 class PricingEndpointTests(APITestCase):
     def test_pricing_returns_seeded_plans(self):
         res = self.client.get('/api/pricing/')

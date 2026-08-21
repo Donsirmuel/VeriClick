@@ -26,7 +26,11 @@ export default function DashboardLayout() {
     return <Navigate to="/auth/login" replace />
   }
 
-  if (workspace && !workspace.onboardingComplete && !tourDone && location.pathname !== '/app/onboarding') {
+  // The account flag is authoritative; localStorage only covers the gap before
+  // the workspace query resolves, or if the PATCH failed offline.
+  const seenTour = tourDone || !!workspace?.tourCompleted
+
+  if (workspace && !workspace.onboardingComplete && !seenTour && location.pathname !== '/app/onboarding') {
     return (
       <ProductTour onComplete={() => {
         setTourDone(true)

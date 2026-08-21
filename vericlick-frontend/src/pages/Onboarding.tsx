@@ -1,410 +1,497 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useMutation } from '@tanstack/react-query'
+import { useEffect, useMemo, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
-  Shield02Icon,
+  Globe02Icon,
   LinkSquare02Icon,
-  ShieldIcon,
-  DashboardSquare01Icon,
   ArrowLeft02Icon,
   Copy01Icon,
   CheckmarkCircle02Icon,
+  ArrowRight01Icon,
 } from '@hugeicons/core-free-icons'
 import toast from 'react-hot-toast'
-import { completeOnboarding, fetchSnippet, updateShieldConfig } from '@/api/workspace'
+import {
+  completeOnboarding, fetchSnippet, fetchWorkspace, fetchDomains,
+  testInstallation, startCheckout, createRedirectRoute, fetchRedirectRoutes,
+} from '@/api/workspace'
+import { fetchPricing } from '@/api/pricing'
+import {
+  BillingPeriodToggle, bestMonthlySavings, monthlySavings, periodLabel, priceFor, PERIOD_DAYS,
+} from '@/components/shared/BillingPeriodToggle'
 import { parseApiError } from '@/lib/errors'
+import type { BillingPeriod, Domain, Plan } from '@/types'
 
-type OnboardingType = 'shield' | 'redirect'
-type ProtectionMode = 'strict' | 'balanced' | 'monitor'
+/**
+ * Setup runs in one order for everyone: pay, add a domain, install the script
+ * (which verifies the domain and switches anti-bot on), then create a redirect
+ * on that same domain.
+ *
+ * The current step is DERIVED from what the workspace actually has rather than
+ * held in local state. Checkout sends the user out to Bachs and back, so any
+ * step counter kept in memory would be lost on the return trip.
+ */
+const STEPS = [
+  { n: 1, label: 'Plan' },
+  { n: 2, label: 'Domain' },
+  { n: 3, label: 'Protect' },
+  { n: 4, label: 'Redirect' },
+] as const
 
-const TOTAL_STEPS = 4
+function StepRail({ current }: { current: number }) {
+  return (
+    <div className="mb-6">
+      <div className="flex items-center gap-1.5 sm:gap-2">
+        {STEPS.map((s) => {
+          const done = s.n < current
+          const active = s.n === current
+          return (
+            <div key={s.n} className="flex-1 min-w-0">
+              <div
+                className={`h-1.5 rounded-full transition-all duration-500 ${
+                  done || active ? 'bg-black' : 'bg-neutral-200'
+                }`}
+              />
+              <div className="flex items-center gap-1 mt-2">
+                {done && <HugeiconsIcon icon={CheckmarkCircle02Icon} className="w-3 h-3 text-black shrink-0" />}
+                <span
+                  className={`text-[11px] font-bold truncate ${
+                    active ? 'text-black' : done ? 'text-neutral-500' : 'text-neutral-400'
+                  }`}
+                >
+                  {s.label}
+                </span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function Card({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="bg-white rounded-2xl border border-neutral-200 shadow-sm p-5 sm:p-8">{children}</div>
+  )
+}
+
+// --------------------------------------------------------------------------
+// Step 1 — Choose a plan
+// --------------------------------------------------------------------------
+
+function StepPlan() {
+  const [period, setPeriod] = useState<BillingPeriod>('weekly')
+  const { data: pricing, isLoading } = useQuery({ queryKey: ['pricing'], queryFn: fetchPricing })
+  const plans = useMemo(() => pricing?.plans ?? [], [pricing])
+
+  const checkout = useMutation({
+    mutationFn: (planCode: string) => startCheckout(planCode, period, ['crypto']),
+    onSuccess: (session) => {
+      // Leaves the app; the user returns to /app/onboarding and resumes at
+      // whichever step their new state puts them on.
+      window.location.href = session.checkoutUrl
+    },
+    onError: (err) => toast.error(parseApiError(err) || 'Could not open checkout'),
+  })
+
+  return (
+    <div>
+      <h1 className="text-xl font-bold text-slate-900 mb-1">Choose your plan</h1>
+      <p className="text-sm text-neutral-500 mb-5">
+        Your plan sets how many domains you can protect. Every plan includes the full
+        anti-bot engine and unlimited protected pages.
+      </p>
+
+      <div className="flex justify-center mb-5">
+        <BillingPeriodToggle
+          value={period}
+          onChange={setPeriod}
+          savings={bestMonthlySavings(plans)}
+          tone="light"
+        />
+      </div>
+
+      {isLoading && <p className="text-sm text-neutral-500 py-6 text-center">Loading plans…</p>}
+
+      <div className="space-y-3">
+        {plans.map((plan: Plan) => {
+          const price = priceFor(plan, period)
+          const saving = monthlySavings(plan)
+          const unavailable = period === 'monthly' && !plan.monthlyAvailable
+          const popular = plan.code === 'plus'
+          return (
+            <button
+              key={plan.code}
+              type="button"
+              onClick={() => !unavailable && checkout.mutate(plan.code)}
+              disabled={unavailable || checkout.isPending}
+              className={`w-full text-left p-4 rounded-xl border transition-all disabled:opacity-60 disabled:cursor-not-allowed ${
+                popular ? 'border-black bg-black/[0.03]' : 'border-neutral-200 hover:border-neutral-400'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2 mb-0.5">
+                    <span className="text-sm font-bold text-slate-900">{plan.name}</span>
+                    {popular && (
+                      <span className="text-[10px] font-bold uppercase tracking-wider bg-black text-white px-2 py-0.5 rounded-full">
+                        Most popular
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-neutral-500">
+                    {plan.domainLimit} domain{plan.domainLimit !== 1 ? 's' : ''} · unlimited pages ·{' '}
+                    {PERIOD_DAYS[period]} days access
+                  </p>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="text-lg font-bold text-slate-900">${price}</div>
+                  <div className="text-[11px] text-neutral-500">/{periodLabel(period)}</div>
+                </div>
+              </div>
+              {unavailable ? (
+                <p className="text-xs text-amber-600 font-bold mt-2">Monthly coming soon</p>
+              ) : period === 'monthly' && saving > 0 ? (
+                <p className="text-xs text-emerald-600 font-bold mt-2">Save {saving}% vs weekly</p>
+              ) : null}
+            </button>
+          )
+        })}
+      </div>
+
+      <p className="text-xs text-neutral-500 mt-4 text-center">
+        {checkout.isPending ? 'Opening secure checkout…' : 'Pay once with crypto. Renew manually — no auto-billing.'}
+      </p>
+    </div>
+  )
+}
+
+// --------------------------------------------------------------------------
+// Step 2 — Add a domain
+// --------------------------------------------------------------------------
+
+function StepDomain({ onDone }: { onDone: () => void }) {
+  const [domain, setDomain] = useState('')
+
+  const register = useMutation({
+    // 'both' registers a protection domain: the script verifies it, and a
+    // verified protection domain can also back a redirect.
+    mutationFn: (name: string) => completeOnboarding('both', name),
+    onSuccess: () => {
+      toast.success('Domain added')
+      onDone()
+    },
+    onError: (err) => toast.error(parseApiError(err) || 'Could not add that domain'),
+  })
+
+  const clean = domain.trim().toLowerCase()
+
+  return (
+    <div>
+      <h1 className="text-xl font-bold text-slate-900 mb-1">Add your domain</h1>
+      <p className="text-sm text-neutral-500 mb-5">
+        The website you want to protect. You'll use this same domain for your redirect
+        link in a moment.
+      </p>
+
+      <div className="flex flex-col sm:flex-row gap-2 mb-3">
+        <input
+          type="text"
+          value={domain}
+          onChange={(e) => setDomain(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && clean && register.mutate(clean)}
+          placeholder="example.com"
+          autoFocus
+          className="flex-1 min-w-0 bg-slate-50 border border-neutral-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-black transition-colors"
+        />
+        <button
+          onClick={() => clean && register.mutate(clean)}
+          disabled={!clean || register.isPending}
+          className="bg-black hover:bg-neutral-800 text-white px-5 py-3 rounded-xl text-sm font-bold transition-all disabled:opacity-50 whitespace-nowrap"
+        >
+          {register.isPending ? 'Adding…' : 'Continue'}
+        </button>
+      </div>
+
+      <p className="text-xs text-neutral-500">
+        Enter it without <span className="font-mono">https://</span> — just the domain itself.
+      </p>
+    </div>
+  )
+}
+
+// --------------------------------------------------------------------------
+// Step 3 — Install the script (verifies the domain, switches anti-bot on)
+// --------------------------------------------------------------------------
+
+function StepScript({ domain, onDone }: { domain: Domain; onDone: () => void }) {
+  const queryClient = useQueryClient()
+  const { data: snippet, isLoading } = useQuery({
+    queryKey: ['snippet', domain.domain],
+    queryFn: () => fetchSnippet(domain.domain),
+  })
+
+  const tag = snippet
+    ? `<script src="${snippet.apiBase}/shield.js" data-api-key="${snippet.apiKey}" defer></script>`
+    : ''
+
+  const check = useMutation({
+    mutationFn: () => testInstallation(domain.id),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['domains'] })
+      queryClient.invalidateQueries({ queryKey: ['workspace'] })
+      if (result.installed) {
+        toast.success('Script found — your domain is verified and protected')
+        onDone()
+      } else {
+        toast.error(result.error || "We couldn't find the script on your site yet")
+      }
+    },
+    onError: (err) => toast.error(parseApiError(err) || 'Check failed'),
+  })
+
+  return (
+    <div>
+      <h1 className="text-xl font-bold text-slate-900 mb-1">Turn on protection</h1>
+      <p className="text-sm text-neutral-500 mb-5">
+        Paste this one line into your site's <code className="bg-neutral-100 px-1.5 py-0.5 rounded text-xs font-mono">&lt;head&gt;</code>.
+        It proves you own <strong>{domain.domain}</strong> and starts blocking bots — both at once.
+      </p>
+
+      {isLoading && <p className="text-sm text-neutral-500 mb-4">Preparing your snippet…</p>}
+
+      {tag && (
+        <div className="relative mb-4">
+          <code className="block bg-slate-900 text-emerald-400 text-xs font-mono p-4 rounded-xl break-all pr-12 leading-relaxed">
+            {tag}
+          </code>
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText(tag)
+              toast.success('Copied')
+            }}
+            className="absolute top-2 right-2 p-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-white transition-colors"
+            title="Copy snippet"
+          >
+            <HugeiconsIcon icon={Copy01Icon} className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      <div className="bg-slate-50 border border-neutral-200 rounded-xl p-4 mb-5">
+        <p className="text-xs font-bold text-slate-700 mb-2">How to add it</p>
+        <ol className="text-xs text-neutral-600 space-y-1.5 leading-relaxed">
+          <li>1. Open your site's theme or HTML editor.</li>
+          <li>2. Find the <span className="font-mono">&lt;head&gt;</span> section near the top.</li>
+          <li>3. Paste the line above, then save and publish.</li>
+        </ol>
+      </div>
+
+      <button
+        onClick={() => check.mutate()}
+        disabled={check.isPending || !tag}
+        className="w-full bg-black hover:bg-neutral-800 text-white py-3 rounded-xl text-sm font-bold transition-all disabled:opacity-50"
+      >
+        {check.isPending ? 'Checking your site…' : "I've added it — check now"}
+      </button>
+
+      <p className="text-xs text-neutral-500 mt-3 text-center">
+        Verification also happens on its own the first time a visitor loads your site.
+      </p>
+    </div>
+  )
+}
+
+// --------------------------------------------------------------------------
+// Step 4 — Create the redirect link
+// --------------------------------------------------------------------------
+
+function StepRedirect({ domain, onDone }: { domain: Domain; onDone: () => void }) {
+  const queryClient = useQueryClient()
+  const [destinationUrl, setDestinationUrl] = useState('')
+  const [slug, setSlug] = useState('')
+
+  const create = useMutation({
+    mutationFn: () => createRedirectRoute({
+      domainId: domain.id,
+      slug,
+      destinationUrl,
+      botAction: 'honeypot',
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['redirect-routes'] })
+      queryClient.invalidateQueries({ queryKey: ['domains'] })
+      toast.success('Your redirect link is live')
+      onDone()
+    },
+    onError: (err) => toast.error(parseApiError(err) || 'Could not create the link'),
+  })
+
+  const ready = destinationUrl.trim().startsWith('http')
+
+  return (
+    <div>
+      <h1 className="text-xl font-bold text-slate-900 mb-1">Create your redirect link</h1>
+      <p className="text-sm text-neutral-500 mb-5">
+        A link on <strong>{domain.domain}</strong> that sends real people to your page and
+        traps bots instead.
+      </p>
+
+      <label className="text-sm font-bold text-slate-900 block mb-1">Where should people land?</label>
+      <input
+        type="url"
+        value={destinationUrl}
+        onChange={(e) => setDestinationUrl(e.target.value)}
+        placeholder="https://example.com/my-offer"
+        autoFocus
+        className="w-full bg-slate-50 border border-neutral-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-black mb-4"
+      />
+
+      <label className="text-sm font-bold text-slate-900 block mb-1">Link ending (optional)</label>
+      <input
+        type="text"
+        value={slug}
+        onChange={(e) => setSlug(e.target.value.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 200))}
+        placeholder="offer"
+        className="w-full bg-slate-50 border border-neutral-200 rounded-xl px-4 py-3 text-sm font-mono focus:outline-none focus:border-black mb-2"
+      />
+      <p className="text-xs text-neutral-500 mb-5">
+        Your link will be{' '}
+        <span className="font-mono text-slate-700">{domain.domain}{slug ? `/${slug}` : ''}</span>
+      </p>
+
+      <button
+        onClick={() => create.mutate()}
+        disabled={!ready || create.isPending}
+        className="w-full bg-black hover:bg-neutral-800 text-white py-3 rounded-xl text-sm font-bold transition-all disabled:opacity-50"
+      >
+        {create.isPending ? 'Creating…' : 'Create my link'}
+      </button>
+
+      <button
+        onClick={onDone}
+        className="w-full mt-2 text-xs font-bold text-neutral-400 hover:text-black transition-colors py-2"
+      >
+        I'll do this later
+      </button>
+    </div>
+  )
+}
+
+// --------------------------------------------------------------------------
 
 export default function Onboarding() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const [params, setParams] = useSearchParams()
+  const [finished, setFinished] = useState(false)
+  const [skippedRedirect, setSkippedRedirect] = useState(false)
 
-  const [step, setStep] = useState(1)
-  const [type, setType] = useState<OnboardingType | null>(null)
-  const [domain, setDomain] = useState('')
-  const [snippetData, setSnippetData] = useState<{ snippet: string; apiKey: string; apiBase: string } | null>(null)
-  const [protectionMode, setProtectionMode] = useState<ProtectionMode>('balanced')
-  const [completed, setCompleted] = useState(false)
-  const [planNotice, setPlanNotice] = useState(false)
-
-  const onboardingMutation = useMutation({
-    mutationFn: ({ type, domain }: { type: OnboardingType; domain: string }) => completeOnboarding(type, domain),
-    onSuccess: async (_data, variables) => {
-      if (variables.type === 'shield') {
-        try {
-          const snippet = await fetchSnippet(variables.domain)
-          setSnippetData(snippet)
-        } catch {
-          // proceed even if snippet fetch fails
-        }
-      }
-      setStep(3)
-    },
-    onError: (err: unknown) => {
-      const status = (err as { response?: { status?: number } })?.response?.status
-      if (status === 403) {
-        setPlanNotice(true)
-        return
-      }
-      toast.error(parseApiError(err) || 'Something went wrong. Please try again.')
-    },
+  const { data: workspace, isLoading: wsLoading } = useQuery({
+    queryKey: ['workspace'], queryFn: fetchWorkspace,
+  })
+  const { data: domains, isLoading: domLoading } = useQuery({
+    queryKey: ['domains'], queryFn: fetchDomains,
+  })
+  const { data: routes } = useQuery({
+    queryKey: ['redirect-routes'], queryFn: fetchRedirectRoutes,
   })
 
-  const snippetMutation = useMutation({
-    mutationFn: async () => {
-      const snippet = await fetchSnippet(domain)
-      setSnippetData(snippet)
-      return snippet
-    },
-    onError: () => {
-      toast.error('Could not fetch snippet')
-    },
-  })
-
-  const shieldConfigMutation = useMutation({
-    mutationFn: async (mode: ProtectionMode) => {
-      await updateShieldConfig({
-        protectionMode: mode,
-        botAction: mode === 'monitor' ? 'log' : 'block',
-        rateLimitPerHour: 100,
-        protectedPaths: [],
-        blockedPaths: [],
-      })
-    },
-    onSuccess: () => {
-      setCompleted(true)
-    },
-    onError: () => {
-      toast.error('Failed to save protection level')
-    },
-  })
-
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text)
-    toast.success('Copied to clipboard')
-  }
-
-  const canGoBack = step > 1 && !completed
-
-  const goBack = () => {
-    if (step === 3 && type === 'shield') {
-      setStep(2)
-    } else if (step === 3 && type === 'redirect') {
-      setStep(2)
-    } else if (step === 2) {
-      setStep(1)
-      setType(null)
-      setDomain('')
-    } else if (step === 4) {
-      setStep(3)
+  // Coming back from Bachs: refresh so the new plan is reflected immediately.
+  useEffect(() => {
+    if (params.get('billing') === 'success') {
+      queryClient.invalidateQueries({ queryKey: ['workspace'] })
+      toast.success('Payment received — welcome aboard')
+      params.delete('billing')
+      setParams(params, { replace: true })
     }
+  }, [params, setParams, queryClient])
+
+  const activeDomain = domains?.find((d) => d.isActive) ?? null
+  const hasPlan = !!workspace?.planName
+  const isProtected = !!activeDomain?.verified || !!activeDomain?.scriptInstalled
+  const hasRoute = (routes?.length ?? 0) > 0
+
+  // Derived, not stored: checkout navigates away and back, so any in-memory
+  // step counter would be gone by the time the user returns.
+  const step = !hasPlan ? 1 : !activeDomain ? 2 : !isProtected ? 3 : 4
+  const done = finished || (hasPlan && !!activeDomain && isProtected && (hasRoute || skippedRedirect))
+
+  if (wsLoading || domLoading) {
+    return (
+      <div className="min-h-screen bg-neutral-100 flex items-center justify-center p-4">
+        <p className="text-sm text-neutral-500">Loading…</p>
+      </div>
+    )
   }
-
-  const handleTypeSelect = (selected: OnboardingType) => {
-    setType(selected)
-    setStep(2)
-  }
-
-  const handleDomainSubmit = () => {
-    const trimmed = domain.trim()
-    if (!trimmed) return
-    if (onboardingMutation.isPending) return
-    onboardingMutation.mutate({ type: type!, domain: trimmed })
-  }
-
-  const handleProtectionSave = () => {
-    if (shieldConfigMutation.isPending) return
-    shieldConfigMutation.mutate(protectionMode)
-  }
-
-  const protectionModes: {
-    value: ProtectionMode
-    label: string
-    description: string
-    badge: string
-    badgeColor: string
-    icon: typeof ShieldIcon
-  }[] = [
-    { value: 'balanced', label: 'Balanced', description: 'Silently blocks confirmed bots. Human visitors notice nothing.', badge: 'Recommended', badgeColor: 'bg-emerald-100 text-emerald-700', icon: ShieldIcon },
-    { value: 'strict', label: 'Strict', description: 'Challenges suspicious traffic including VPNs and data centers.', badge: 'Aggressive', badgeColor: 'bg-amber-100 text-amber-700', icon: Shield02Icon },
-    { value: 'monitor', label: 'Monitor Only', description: 'Logs bot traffic without blocking. Great for learning.', badge: 'Passive', badgeColor: 'bg-blue-100 text-blue-700', icon: DashboardSquare01Icon },
-  ]
-
-  const progressPercent = (step / TOTAL_STEPS) * 100
 
   return (
     <div className="min-h-screen bg-neutral-100 flex items-center justify-center p-4">
       <div className="w-full max-w-lg">
-        {/* Progress bar */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-bold text-neutral-500">
-              Step {completed ? TOTAL_STEPS : step} of {TOTAL_STEPS}
-            </span>
-            <span className="text-xs font-bold text-neutral-500">{Math.round(progressPercent)}%</span>
-          </div>
-          <div className="h-1.5 bg-neutral-200 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-black rounded-full transition-all duration-500 ease-out"
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
-        </div>
+        {!done && <StepRail current={step} />}
 
-        {/* Card */}
-        <div className="bg-white rounded-2xl border border-neutral-200 shadow-sm p-6 sm:p-8">
-          {/* Back button */}
-          {canGoBack && (
-            <button
-              onClick={goBack}
-              className="flex items-center gap-1.5 text-sm font-bold text-neutral-500 hover:text-black transition-colors mb-6"
-            >
-              <HugeiconsIcon icon={ArrowLeft02Icon} className="w-4 h-4" />
-              Back
-            </button>
-          )}
-
-          {/* Step 1: Choose type */}
-          {step === 1 && !completed && (
-            <div>
-              <h1 className="text-xl font-bold text-slate-900 mb-1">What do you want to protect?</h1>
-              <p className="text-sm text-neutral-500 mb-6">Choose the type of protection you need.</p>
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  onClick={() => handleTypeSelect('shield')}
-                  className="p-5 rounded-xl border border-neutral-200 hover:border-black hover:bg-neutral-50 text-left transition-all"
-                >
-                  <HugeiconsIcon icon={Shield02Icon} className="w-8 h-8 text-slate-900 mb-3" />
-                  <div className="text-sm font-bold text-slate-900 mb-1">My Website</div>
-                  <div className="text-xs text-neutral-500 leading-relaxed">
-                    Add a script to your website to block bots and suspicious traffic
-                  </div>
-                </button>
-                <button
-                  onClick={() => handleTypeSelect('redirect')}
-                  className="p-5 rounded-xl border border-neutral-200 hover:border-black hover:bg-neutral-50 text-left transition-all"
-                >
-                  <HugeiconsIcon icon={LinkSquare02Icon} className="w-8 h-8 text-slate-900 mb-3" />
-                  <div className="text-sm font-bold text-slate-900 mb-1">A Short Link</div>
-                  <div className="text-xs text-neutral-500 leading-relaxed">
-                    Create a smart redirect link that filters bot traffic before forwarding
-                  </div>
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Step 2: Domain input */}
-          {step === 2 && !completed && (
-            <div>
-              <h1 className="text-xl font-bold text-slate-900 mb-1">
-                {type === 'shield' ? "What's your website domain?" : 'What domain will you use for redirects?'}
-              </h1>
-              <p className="text-sm text-neutral-500 mb-6">
-                {type === 'shield'
-                  ? 'Enter the domain you want to protect (e.g., example.com)'
-                  : 'This is the domain your short links will use'}
-              </p>
-              <div className="flex gap-2 mb-4">
-                <input
-                  type="text"
-                  value={domain}
-                  onChange={(e) => setDomain(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleDomainSubmit()}
-                  placeholder={type === 'shield' ? 'example.com' : 't.example.com'}
-                  className="flex-1 bg-slate-50 border border-neutral-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-black transition-colors"
-                  autoFocus
-                />
-                <button
-                  onClick={handleDomainSubmit}
-                  disabled={!domain.trim() || onboardingMutation.isPending}
-                  className="bg-black hover:bg-neutral-800 text-white px-5 py-3 rounded-xl text-sm font-bold transition-all disabled:opacity-50"
-                >
-                  {onboardingMutation.isPending ? 'Setting up…' : 'Continue'}
-                </button>
-              </div>
-              {snippetMutation.isError && (
-                <p className="text-xs text-red-500">Failed to fetch snippet. Try again.</p>
-              )}
-              {planNotice && (
-                <div className="mt-3 p-4 bg-blue-50 border border-blue-200 rounded-xl">
-                  <p className="text-sm text-blue-700 mb-3">
-                    A plan is required to register domains. Pick a plan to get started — it only takes a minute.
-                  </p>
-                  <button
-                    onClick={() => navigate('/app/billing')}
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors"
-                  >
-                    Choose a Plan
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Step 3: Setup instructions */}
-          {step === 3 && !completed && (
-            <div>
-              <h1 className="text-xl font-bold text-slate-900 mb-1">Setup instructions</h1>
-              <p className="text-sm text-neutral-500 mb-6">
-                {type === 'shield'
-                  ? 'Paste this script tag in your website.'
-                  : 'Add this CNAME record in your domain\'s DNS settings.'}
-              </p>
-
-              {type === 'shield' && snippetData && (
-                <div className="mb-6">
-                  <p className="text-sm text-neutral-600 mb-3">
-                    Your domain is registered. Paste this script in your website's{' '}
-                    <code className="bg-neutral-100 px-1.5 py-0.5 rounded text-xs font-mono">&lt;head&gt;</code>:
-                  </p>
-                  <div className="relative">
-                    <code className="block bg-slate-900 text-emerald-400 text-xs font-mono p-4 rounded-xl break-all pr-12 leading-relaxed">
-                      {`<script src="${snippetData.apiBase}/shield.js" data-api-key="${snippetData.apiKey}" defer></script>`}
-                    </code>
-                    <button
-                      onClick={() =>
-                        copyToClipboard(
-                          `<script src="${snippetData.apiBase}/shield.js" data-api-key="${snippetData.apiKey}" defer></script>`
-                        )
-                      }
-                      className="absolute top-2 right-2 p-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-white transition-colors"
-                      title="Copy snippet"
-                    >
-                      <HugeiconsIcon icon={Copy01Icon} className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                  <p className="text-xs text-neutral-500 mt-3">
-                    That's it — VeriClick will verify your domain automatically when the script first loads.
-                  </p>
-                </div>
-              )}
-
-              {type === 'shield' && !snippetData && (
-                <div className="mb-6">
-                  <p className="text-sm text-neutral-500 mb-3">Loading snippet…</p>
-                  <button
-                    onClick={() => snippetMutation.mutate()}
-                    disabled={snippetMutation.isPending}
-                    className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors disabled:opacity-50"
-                  >
-                    {snippetMutation.isPending ? 'Loading…' : 'Retry'}
-                  </button>
-                </div>
-              )}
-
-              {type === 'redirect' && (
-                <div className="p-4 bg-slate-50 rounded-xl space-y-3">
-                  <p className="text-sm font-bold text-slate-900">CNAME Setup</p>
-                  <p className="text-xs text-neutral-500">
-                    Add a CNAME record in your DNS settings:
-                  </p>
-                  <div className="bg-slate-900 text-emerald-400 text-xs font-mono p-3 rounded-lg space-y-1">
-                    <div>
-                      <span className="text-neutral-400">Type:</span> CNAME
-                    </div>
-                    <div>
-                      <span className="text-neutral-400">Host:</span>{' '}
-                      {domain.split('.')[0] || 't'}
-                    </div>
-                    <div>
-                      <span className="text-neutral-400">Value:</span> edge.vericlick.cc
-                    </div>
-                    <div>
-                      <span className="text-neutral-400">TTL:</span> Auto
-                    </div>
-                  </div>
-                  <p className="text-xs text-neutral-500">
-                    Once the CNAME is active, your redirect domain is ready.
-                  </p>
-                </div>
-              )}
-
-              <button
-                onClick={() => setStep(4)}
-                className="mt-6 w-full bg-black hover:bg-neutral-800 text-white py-3 rounded-xl text-sm font-bold transition-all"
-              >
-                Next
-              </button>
-            </div>
-          )}
-
-          {/* Step 4: Protection level */}
-          {step === 4 && !completed && (
-            <div>
-              <h1 className="text-xl font-bold text-slate-900 mb-1">Choose your protection level</h1>
-              <p className="text-sm text-neutral-500 mb-6">
-                You can change this later in your dashboard settings.
-              </p>
-
-              {type === 'shield' && (
-                <div className="space-y-3 mb-6">
-                  {protectionModes.map(({ value, label, description, badge, badgeColor, icon }) => (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() => setProtectionMode(value)}
-                      className={`w-full p-4 rounded-xl border text-left transition-all ${
-                        protectionMode === value
-                          ? 'border-black bg-black/5'
-                          : 'border-neutral-200 bg-white hover:border-neutral-400'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 mb-1">
-                        <HugeiconsIcon icon={icon} className="w-4 h-4" />
-                        <span className="text-sm font-bold text-slate-900">{label}</span>
-                        <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${badgeColor}`}>
-                          {badge}
-                        </span>
-                      </div>
-                      <span className="text-xs text-neutral-500">{description}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {type === 'redirect' && (
-                <p className="text-sm text-neutral-600 mb-6">
-                  Your redirect is set up. You can configure bot handling for each redirect in the dashboard.
-                </p>
-              )}
-
-              <button
-                onClick={handleProtectionSave}
-                disabled={shieldConfigMutation.isPending}
-                className="w-full bg-black hover:bg-neutral-800 text-white py-3 rounded-xl text-sm font-bold transition-all disabled:opacity-50"
-              >
-                {shieldConfigMutation.isPending ? 'Saving…' : 'Finish Setup'}
-              </button>
-            </div>
-          )}
-
-          {/* Completion */}
-          {completed && (
+        <Card>
+          {done ? (
             <div className="text-center py-4">
               <div className="w-14 h-14 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <HugeiconsIcon icon={CheckmarkCircle02Icon} className="w-8 h-8 text-emerald-600" />
               </div>
-              <h1 className="text-xl font-bold text-slate-900 mb-2">You're all set!</h1>
-              <p className="text-sm text-neutral-500 mb-8 max-w-sm mx-auto leading-relaxed">
-                Your site is being protected. Visit your dashboard to see traffic analytics.
-              </p>
+              <h1 className="text-xl font-bold text-slate-900 mb-2">You're all set</h1>
+              <div className="text-sm text-neutral-600 mb-6 space-y-1.5">
+                <p className="flex items-center justify-center gap-1.5">
+                  <HugeiconsIcon icon={Globe02Icon} className="w-4 h-4 text-emerald-600" />
+                  {activeDomain?.domain} is verified and protected
+                </p>
+                {hasRoute && (
+                  <p className="flex items-center justify-center gap-1.5">
+                    <HugeiconsIcon icon={LinkSquare02Icon} className="w-4 h-4 text-emerald-600" />
+                    Your redirect link is live
+                  </p>
+                )}
+              </div>
               <button
                 onClick={() => navigate('/app/dashboard')}
-                className="bg-black hover:bg-neutral-800 text-white px-8 py-3.5 rounded-xl text-sm font-bold transition-all"
+                className="inline-flex items-center gap-2 bg-black hover:bg-neutral-800 text-white px-8 py-3.5 rounded-xl text-sm font-bold transition-all"
               >
-                Go to Dashboard
+                Go to dashboard
+                <HugeiconsIcon icon={ArrowRight01Icon} className="w-4 h-4" />
               </button>
             </div>
-          )}
-        </div>
+          ) : (
+            <>
+              {step > 1 && (
+                <button
+                  onClick={() => navigate('/app/dashboard')}
+                  className="flex items-center gap-1.5 text-sm font-bold text-neutral-500 hover:text-black transition-colors mb-5"
+                >
+                  <HugeiconsIcon icon={ArrowLeft02Icon} className="w-4 h-4" />
+                  Finish later
+                </button>
+              )}
 
-        {/* Skip / billing link */}
-        {!completed && (
+              {step === 1 && <StepPlan />}
+              {step === 2 && <StepDomain onDone={() => queryClient.invalidateQueries({ queryKey: ['domains'] })} />}
+              {step === 3 && activeDomain && (
+                <StepScript
+                  domain={activeDomain}
+                  onDone={() => queryClient.invalidateQueries({ queryKey: ['domains'] })}
+                />
+              )}
+              {step === 4 && activeDomain && (
+                <StepRedirect
+                  domain={activeDomain}
+                  onDone={() => {
+                    setSkippedRedirect(true)
+                    setFinished(true)
+                  }}
+                />
+              )}
+            </>
+          )}
+        </Card>
+
+        {!done && step === 1 && (
           <div className="text-center mt-4">
             <button
               onClick={() => navigate('/app/dashboard')}

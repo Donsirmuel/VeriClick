@@ -4,6 +4,8 @@ import type { BillingHistory, BillingPeriod, CheckoutSession, PaymentMethod, Wor
 interface WorkspaceUpdateInput {
   name?: string
   safeDestination?: string
+  /** Stored per account so the tour does not replay on a second device. */
+  tourCompleted?: boolean
 }
 
 export async function fetchWorkspace(): Promise<Workspace> {
@@ -186,7 +188,7 @@ export async function testInstallation(domainId: string): Promise<{
 
 // --- Onboarding ---
 
-export async function completeOnboarding(type: 'shield' | 'redirect', domain: string): Promise<{
+export async function completeOnboarding(type: 'both' | 'shield' | 'redirect', domain: string): Promise<{
   domain: { id: string; domain: string; purpose: string }
   workspace: Workspace
 }> {
