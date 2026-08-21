@@ -92,6 +92,11 @@ MIDDLEWARE = [
     # in production where DEBUG=False; Nginx proxies /static/ to gunicorn.
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    # Must sit BEFORE CorsMiddleware: corsheaders short-circuits a preflight
+    # (OPTIONS carrying Access-Control-Request-Method) and answers it itself, so
+    # anything listed after it never sees the request. Being outermost also
+    # means our headers are applied last on the way out and cannot be stripped.
+    'vericlick.middleware.PublicShieldCorsMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'vericlick.middleware.TLSFingerprintMiddleware',
     'django.middleware.common.CommonMiddleware',

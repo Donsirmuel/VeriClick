@@ -741,6 +741,22 @@ def redirect_domain_verify_cname(request, domain_id):
 # Redirect Routes
 # ---------------------------------------------------------------------------
 
+def _workspace_for_api_key(api_key):
+    """Look up a workspace by site key, tolerating junk.
+
+    tracker_secret is a UUIDField, so filtering on a non-UUID string raises
+    ValidationError and surfaced as a 500 on public, unauthenticated endpoints —
+    anyone could trigger it with `api_key=nope`. A malformed key is simply not a
+    valid key, so it resolves to None and the caller returns 401.
+    """
+    import uuid as _uuid
+    try:
+        _uuid.UUID(str(api_key))
+    except (ValueError, AttributeError, TypeError):
+        return None
+    return Workspace.objects.filter(tracker_secret=api_key).first()
+
+
 def _route_expiry(workspace):
     """When a link should stop working.
 
@@ -1469,7 +1485,7 @@ def shield_verify(request):
     if install_token_raw:
         workspace, _ = InstallToken.verify_token(install_token_raw)
     elif api_key:
-        workspace = Workspace.objects.filter(tracker_secret=api_key).first()
+        workspace = _workspace_for_api_key(api_key)
 
     if not workspace:
         return Response(
@@ -1625,7 +1641,7 @@ def shield_config_view(request):
     if install_token_raw:
         workspace, _ = InstallToken.verify_token(install_token_raw)
     elif api_key:
-        workspace = Workspace.objects.filter(tracker_secret=api_key).first()
+        workspace = _workspace_for_api_key(api_key)
 
     if not workspace:
         return Response(
@@ -1659,7 +1675,7 @@ def shield_telemetry(request):
     if install_token_raw:
         workspace, _ = InstallToken.verify_token(install_token_raw)
     elif api_key:
-        workspace = Workspace.objects.filter(tracker_secret=api_key).first()
+        workspace = _workspace_for_api_key(api_key)
 
     if not workspace:
         return Response(

@@ -1735,6 +1735,57 @@ class RouteExpiryFollowsPlanTests(APITestCase):
         self.assertGreater(route.expires_at, timezone.now())
 
 
+class PublicShieldCorsTests(APITestCase):
+    """The script runs on customer domains, so its calls are cross-origin. The
+    dashboard's CORS allowlist was silently dropping every one of them, which is
+    why no telemetry ever arrived from a protected site."""
+
+    CUSTOMER = 'https://donlabs.site'
+
+    def test_preflight_from_a_customer_domain_is_allowed(self):
+        res = self.client.options(
+            '/api/shield/verify/',
+            HTTP_ORIGIN=self.CUSTOMER,
+            HTTP_ACCESS_CONTROL_REQUEST_METHOD='POST',
+            HTTP_ACCESS_CONTROL_REQUEST_HEADERS='content-type',
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res['Access-Control-Allow-Origin'], '*')
+        self.assertIn('POST', res['Access-Control-Allow-Methods'])
+        self.assertIn('content-type', res['Access-Control-Allow-Headers'])
+
+    def test_actual_post_carries_the_cors_header(self):
+        res = self.client.post(
+            '/api/shield/verify/', {'api_key': 'nope', 'page_url': 'https://donlabs.site/'},
+            format='json', HTTP_ORIGIN=self.CUSTOMER,
+        )
+        # Rejected on the key, but the browser must still be allowed to read it.
+        self.assertEqual(res['Access-Control-Allow-Origin'], '*')
+
+    def test_telemetry_is_reachable_cross_origin(self):
+        res = self.client.options('/api/shield/telemetry/', HTTP_ORIGIN=self.CUSTOMER)
+        self.assertEqual(res['Access-Control-Allow-Origin'], '*')
+
+    def test_the_script_itself_is_reachable_cross_origin(self):
+        res = self.client.options('/api/shield.js', HTTP_ORIGIN=self.CUSTOMER)
+        self.assertEqual(res['Access-Control-Allow-Origin'], '*')
+
+    def test_a_malformed_api_key_is_rejected_not_a_500(self):
+        # tracker_secret is a UUIDField: filtering on junk raised
+        # ValidationError, so `api_key=nope` returned 500 from a public endpoint.
+        for path in ('/api/shield/verify/', '/api/shield/telemetry/'):
+            res = self.client.post(
+                path, {'api_key': 'nope', 'page_url': 'https://donlabs.site/'},
+                format='json',
+            )
+            self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED, path)
+
+    def test_dashboard_api_keeps_its_allowlist(self):
+        # The wildcard must not leak onto authenticated endpoints.
+        res = self.client.options('/api/workspace/', HTTP_ORIGIN=self.CUSTOMER)
+        self.assertNotEqual(res.get('Access-Control-Allow-Origin'), '*')
+
+
 class PricingEndpointTests(APITestCase):
     def test_pricing_returns_seeded_plans(self):
         res = self.client.get('/api/pricing/')

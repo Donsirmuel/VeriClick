@@ -1,4 +1,49 @@
 from django.conf import settings
+from django.http import HttpResponse
+
+
+class PublicShieldCorsMiddleware:
+    """Allow any origin to reach the customer-facing shield endpoints.
+
+    The anti-bot script runs on customer sites and POSTs JSON to these paths,
+    which makes every call cross-origin with a preflight. CORS_ALLOWED_ORIGINS
+    lists only VeriClick's own domains, so the browser silently dropped every
+    request — no telemetry ever arrived from a protected site and dashboards
+    stayed empty.
+
+    Origin is not the security boundary here: these endpoints authenticate on
+    api_key / install_token and are declared AllowAny by design. The dashboard
+    API keeps the strict allowlist, which is why this is scoped by path rather
+    than loosening the global setting.
+    """
+
+    PUBLIC_PREFIXES = ('/api/shield/', '/api/shield.js', '/api/tracker/event/')
+    ALLOW_HEADERS = 'content-type, accept'
+    ALLOW_METHODS = 'GET, POST, OPTIONS'
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def _is_public(self, path):
+        return path.startswith(self.PUBLIC_PREFIXES)
+
+    def __call__(self, request):
+        if not self._is_public(request.path):
+            return self.get_response(request)
+
+        # Answer the preflight here; it never needs to reach a view.
+        if request.method == 'OPTIONS':
+            response = HttpResponse(status=200)
+        else:
+            response = self.get_response(request)
+
+        # No credentials are sent, so a wildcard origin is both valid and the
+        # only workable answer for an unbounded set of customer domains.
+        response['Access-Control-Allow-Origin'] = '*'
+        response['Access-Control-Allow-Methods'] = self.ALLOW_METHODS
+        response['Access-Control-Allow-Headers'] = self.ALLOW_HEADERS
+        response['Access-Control-Max-Age'] = '86400'
+        return response
 
 
 class TLSFingerprintMiddleware:
