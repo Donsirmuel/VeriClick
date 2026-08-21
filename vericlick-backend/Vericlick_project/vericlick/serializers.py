@@ -274,17 +274,34 @@ class ShieldConfigSerializer(serializers.ModelSerializer):
 
 
 class DomainRegistrySerializer(serializers.ModelSerializer):
+    # Deleting a domain cascades to its redirect route, so the client needs to
+    # know what would be lost *before* asking the user to confirm.
+    redirect_slug = serializers.SerializerMethodField()
+    has_redirect = serializers.SerializerMethodField()
+
     class Meta:
         model = DomainRegistry
         fields = [
             'id', 'domain', 'purpose', 'verification_method', 'verified',
             'verified_at', 'health_status', 'last_health_check', 'script_installed',
+            'has_redirect', 'redirect_slug',
             'is_active', 'created_at',
         ]
         read_only_fields = [
             'id', 'verification_method', 'verified', 'verified_at',
-            'health_status', 'last_health_check', 'script_installed', 'is_active', 'created_at',
+            'health_status', 'last_health_check', 'script_installed',
+            'has_redirect', 'redirect_slug', 'is_active', 'created_at',
         ]
+
+    def _route(self, obj):
+        return getattr(obj, 'redirect_route', None)
+
+    def get_has_redirect(self, obj):
+        return self._route(obj) is not None
+
+    def get_redirect_slug(self, obj):
+        route = self._route(obj)
+        return route.slug if route else ''
 
     def validate_domain(self, value):
         import re

@@ -493,7 +493,10 @@ class DomainRegistry(models.Model):
     # Soft delete
     is_active = models.BooleanField(
         default=True,
-        help_text='Soft-delete flag — removed domains keep their slot until period ends.',
+        help_text=(
+            'Deactivated domains do not count toward the plan limit. Deleting a '
+            'domain removes the row outright and frees its slot immediately.'
+        ),
     )
     created_at = models.DateTimeField(auto_now_add=True)
 

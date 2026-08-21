@@ -136,7 +136,9 @@ def workspace_onboarding(request):
             workspace.save(update_fields=['onboarding_type'])
             return Response({'errors': [{'field': 'domain', 'detail': f'Domain limit reached ({active_plan.domain_limit})'}]}, status=400)
 
-        if DomainRegistry.objects.filter(domain=domain_name, is_active=True).exists():
+        # Scoped to this workspace: a global check would let the first tenant to
+        # claim a domain lock every other tenant out of it.
+        if workspace.domains.filter(domain=domain_name, is_active=True).exists():
             workspace.save(update_fields=['onboarding_type'])
             return Response({'errors': [{'field': 'domain', 'detail': 'This domain is already registered'}]}, status=400)
 
@@ -249,8 +251,24 @@ def domain_delete(request, domain_id):
             {'errors': [{'field': 'domain', 'detail': 'Domain not found.'}]},
             status=status.HTTP_404_NOT_FOUND,
         )
+
+    # RedirectRoute.domain cascades, so the link goes with the domain. Capture
+    # it first so the response can say exactly what was removed.
+    route = getattr(domain, 'redirect_route', None)
+    removed_route = (
+        {'slug': route.slug, 'destination_url': route.destination_url} if route else None
+    )
+
+    # Hard delete — the slot is freed immediately and can be reused right away.
     domain.delete()
-    return Response(status=status.HTTP_204_NO_CONTENT)
+
+    active_plan = workspace.active_plan
+    return Response({
+        'deleted': True,
+        'removed_redirect': removed_route,
+        'domains_used': workspace.domains.filter(is_active=True).count(),
+        'domain_limit': active_plan.domain_limit if active_plan else 0,
+    })
 
 
 # ---------------------------------------------------------------------------

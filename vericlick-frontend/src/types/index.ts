@@ -66,8 +66,18 @@ export interface Domain {
   healthStatus: 'healthy' | 'unhealthy' | 'unknown'
   lastHealthCheck: string | null
   scriptInstalled: boolean
+  /** Deleting the domain cascades to its redirect route — warn before doing so. */
+  hasRedirect: boolean
+  redirectSlug: string
   isActive: boolean
   createdAt: string
+}
+
+export interface DomainDeleteResult {
+  deleted: boolean
+  removedRedirect: { slug: string; destinationUrl: string } | null
+  domainsUsed: number
+  domainLimit: number
 }
 
 export interface InstallToken {

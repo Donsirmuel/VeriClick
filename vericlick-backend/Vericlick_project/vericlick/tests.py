@@ -1180,6 +1180,115 @@ class BillingPeriodGrantTests(APITestCase):
         self.assertEqual(self.workspace.period_days, 30)
 
 
+class DomainSlotTests(APITestCase):
+    """Deleting a domain frees its slot immediately and takes its redirect with
+    it. Both halves are billing-visible, so both are pinned."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='slots', email='s@example.com', password='pw')
+        self.client.force_authenticate(user=self.user)
+        self.workspace = Workspace.objects.get(owner=self.user)
+        self.workspace.plan = Plan.objects.get(code='basic')
+        self.workspace.plan_expires_at = timezone.now() + timedelta(days=7)
+        self.workspace.save(update_fields=['plan', 'plan_expires_at'])
+        self.limit = self.workspace.plan.domain_limit
+
+    def _add(self, name):
+        return self.client.post('/api/domains/', {'domain': name}, format='json')
+
+    def _used(self):
+        return self.client.get('/api/workspace/').json()['domainsUsed']
+
+    def test_can_fill_up_to_the_plan_limit(self):
+        for i in range(self.limit):
+            self.assertEqual(self._add(f'd{i}.example.com').status_code, status.HTTP_201_CREATED)
+        self.assertEqual(self._used(), self.limit)
+
+    def test_adding_past_the_limit_is_rejected(self):
+        for i in range(self.limit):
+            self._add(f'd{i}.example.com')
+        res = self._add('one-too-many.example.com')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_deleting_frees_a_slot_immediately(self):
+        for i in range(self.limit):
+            self._add(f'd{i}.example.com')
+        doomed = DomainRegistry.objects.filter(workspace=self.workspace).first()
+
+        res = self.client.delete(f'/api/domains/{doomed.id}/')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.json()['domainsUsed'], self.limit - 1)
+        self.assertEqual(self._used(), self.limit - 1)
+
+        # The freed slot is reusable right away — not at period end.
+        self.assertEqual(self._add('replacement.example.com').status_code, status.HTTP_201_CREATED)
+        self.assertEqual(self._used(), self.limit)
+
+    def test_deleted_domain_name_can_be_registered_again(self):
+        self._add('reuse.example.com')
+        domain = DomainRegistry.objects.get(workspace=self.workspace, domain='reuse.example.com')
+        self.client.delete(f'/api/domains/{domain.id}/')
+        self.assertEqual(self._add('reuse.example.com').status_code, status.HTTP_201_CREATED)
+
+    def test_deleting_a_domain_deletes_its_redirect_and_reports_it(self):
+        domain = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='go.example.com',
+            purpose='redirect', verified=True,
+        )
+        RedirectRoute.objects.create(
+            workspace=self.workspace, domain=domain, slug='promo',
+            destination_url='https://target.example.com',
+        )
+        res = self.client.delete(f'/api/domains/{domain.id}/')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        # The client needs the specifics to explain what just happened.
+        self.assertEqual(res.json()['removedRedirect']['slug'], 'promo')
+        self.assertFalse(RedirectRoute.objects.filter(domain_id=domain.id).exists())
+
+    def test_domain_list_flags_an_attached_redirect(self):
+        domain = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='go.example.com',
+            purpose='redirect', verified=True,
+        )
+        listed = {d['domain']: d for d in self.client.get('/api/domains/').json()}
+        self.assertFalse(listed['go.example.com']['hasRedirect'])
+
+        RedirectRoute.objects.create(
+            workspace=self.workspace, domain=domain, slug='promo',
+            destination_url='https://target.example.com',
+        )
+        listed = {d['domain']: d for d in self.client.get('/api/domains/').json()}
+        self.assertTrue(listed['go.example.com']['hasRedirect'])
+        self.assertEqual(listed['go.example.com']['redirectSlug'], 'promo')
+
+    def test_another_workspace_may_register_the_same_domain(self):
+        other = User.objects.create_user(username='other', email='o@example.com', password='pw')
+        other_ws = Workspace.objects.get(owner=other)
+        DomainRegistry.objects.create(
+            workspace=other_ws, domain='shared.example.com', purpose='protection',
+        )
+        # A global uniqueness check would lock every other tenant out.
+        self.assertEqual(self._add('shared.example.com').status_code, status.HTTP_201_CREATED)
+
+    def test_onboarding_is_not_blocked_by_another_workspaces_domain(self):
+        # workspace_onboarding checked DomainRegistry globally, so the first
+        # tenant to claim a name locked every later signup out of it.
+        other = User.objects.create_user(username='other2', email='o2@example.com', password='pw')
+        other_ws = Workspace.objects.get(owner=other)
+        DomainRegistry.objects.create(
+            workspace=other_ws, domain='popular.example.com', purpose='protection',
+        )
+        res = self.client.post('/api/workspace/onboarding/', {
+            'type': 'shield', 'domain': 'popular.example.com',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertTrue(
+            DomainRegistry.objects.filter(
+                workspace=self.workspace, domain='popular.example.com',
+            ).exists()
+        )
+
+
 class PricingEndpointTests(APITestCase):
     def test_pricing_returns_seeded_plans(self):
         res = self.client.get('/api/pricing/')

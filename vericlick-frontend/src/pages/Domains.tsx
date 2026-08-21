@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { Globe02Icon, Delete01Icon, CheckmarkCircle02Icon, Add01Icon } from '@hugeicons/core-free-icons'
+import { Globe02Icon, Delete01Icon, CheckmarkCircle02Icon, Add01Icon, LinkSquare02Icon } from '@hugeicons/core-free-icons'
 import toast from 'react-hot-toast'
 import {
   fetchDomains, addDomain, deleteDomain, fetchWorkspace, recheckDomain, testInstallation,
@@ -41,12 +41,87 @@ function VerificationBadge({ verified }: { verified: boolean }) {
   )
 }
 
+function RedirectBadge({ domain }: { domain: Domain }) {
+  if (!domain.hasRedirect) return null
+  return (
+    <span
+      className="inline-flex items-center gap-1 text-xs font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-full"
+      title="Removing this domain also deletes this redirect link"
+    >
+      <HugeiconsIcon icon={LinkSquare02Icon} className="w-3 h-3" />
+      /{domain.redirectSlug || ''}
+    </span>
+  )
+}
+
 function ScriptBadge({ installed }: { installed: boolean }) {
   return installed ? (
     <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
       <HugeiconsIcon icon={CheckmarkCircle02Icon} className="w-3 h-3" /> Script installed
     </span>
   ) : null
+}
+
+function DeleteDomainModal({ domain, onCancel, onConfirm, isDeleting }: {
+  domain: Domain
+  onCancel: () => void
+  onConfirm: () => void
+  isDeleting: boolean
+}) {
+  const linkPath = domain.redirectSlug ? `/${domain.redirectSlug}` : ''
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl border border-neutral-200 shadow-xl max-w-md w-full">
+        <div className="p-6">
+          <h2 className="text-lg font-bold text-slate-900 mb-1">Remove {domain.domain}?</h2>
+
+          {domain.hasRedirect ? (
+            <>
+              <p className="text-sm text-muted mb-4">
+                This will also delete the redirect link on this domain. Anyone who
+                already has the link will stop being forwarded.
+              </p>
+              <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4">
+                <p className="text-xs font-bold text-red-700 uppercase tracking-wider mb-1.5">
+                  Will be deleted
+                </p>
+                <p className="text-sm font-mono text-red-900 break-all">
+                  {domain.domain}{linkPath}
+                </p>
+              </div>
+            </>
+          ) : (
+            <p className="text-sm text-muted mb-4">
+              Protection for this domain stops immediately. There's no redirect link
+              attached, so nothing else is affected.
+            </p>
+          )}
+
+          <p className="text-sm text-muted mb-5">
+            This frees a domain slot straight away — you can add another domain, or
+            re-add this one, right after.
+          </p>
+
+          <div className="flex gap-2">
+            <button
+              onClick={onCancel}
+              disabled={isDeleting}
+              className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-3 rounded-xl text-sm font-bold transition-colors disabled:opacity-50"
+            >
+              Keep it
+            </button>
+            <button
+              onClick={onConfirm}
+              disabled={isDeleting}
+              className="flex-1 bg-red-600 hover:bg-red-700 text-white py-3 rounded-xl text-sm font-bold transition-all disabled:opacity-50"
+            >
+              {isDeleting ? 'Removing…' : 'Remove domain'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function VerifyModal({ domain, onClose, onCheck, isChecking }: {
@@ -119,6 +194,7 @@ export default function Domains() {
   const queryClient = useQueryClient()
   const [newDomain, setNewDomain] = useState('')
   const [verifyDomain, setVerifyDomain] = useState<Domain | null>(null)
+  const [domainToDelete, setDomainToDelete] = useState<Domain | null>(null)
 
   const { data: domains, isLoading: domainsLoading } = useQuery({
     queryKey: ['domains'],
@@ -143,10 +219,19 @@ export default function Domains() {
 
   const deleteMutation = useMutation({
     mutationFn: deleteDomain,
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['domains'] })
       queryClient.invalidateQueries({ queryKey: ['workspace'] })
-      toast.success('Domain removed')
+      queryClient.invalidateQueries({ queryKey: ['redirect-routes'] })
+      queryClient.invalidateQueries({ queryKey: ['redirect-domains'] })
+      setDomainToDelete(null)
+      // Say what actually happened, including the slot that just opened up.
+      const freed = result.domainLimit - result.domainsUsed
+      toast.success(
+        result.removedRedirect
+          ? `Domain and its redirect link removed — ${freed} slot${freed !== 1 ? 's' : ''} free`
+          : `Domain removed — ${freed} slot${freed !== 1 ? 's' : ''} free`,
+      )
     },
     onError: (err) => toast.error(parseApiError(err) || 'Failed to remove domain'),
   })
@@ -218,7 +303,9 @@ export default function Domains() {
             <div className="text-xs text-muted mt-0.5">
               {canAdd
                 ? `You can add ${limit - used} more domain${limit - used !== 1 ? 's' : ''}`
-                : 'Upgrade your plan to add more domains'}
+                : hasPlan
+                  ? 'All slots in use — remove a domain to free one, or upgrade your plan'
+                  : 'Choose a plan to start adding domains'}
             </div>
           </div>
           <div className="h-2 w-full sm:w-40 bg-neutral-100 rounded-full overflow-hidden">
@@ -263,6 +350,7 @@ export default function Domains() {
                       <VerificationBadge verified={d.verified} />
                       <HealthBadge status={d.healthStatus} />
                       <ScriptBadge installed={d.scriptInstalled} />
+                      <RedirectBadge domain={d} />
                     </div>
                   </div>
                 </div>
@@ -299,11 +387,7 @@ export default function Domains() {
                     </button>
                   )}
                   <button
-                    onClick={() => {
-                      if (window.confirm(`Remove ${d.domain}?`)) {
-                        deleteMutation.mutate(d.id)
-                      }
-                    }}
+                    onClick={() => setDomainToDelete(d)}
                     className="text-neutral-400 hover:text-red-500 transition-colors p-1"
                     title="Remove domain"
                   >
@@ -344,6 +428,15 @@ export default function Domains() {
           </li>
         </ul>
       </div>
+
+      {domainToDelete && (
+        <DeleteDomainModal
+          domain={domainToDelete}
+          onCancel={() => setDomainToDelete(null)}
+          onConfirm={() => deleteMutation.mutate(domainToDelete.id)}
+          isDeleting={deleteMutation.isPending}
+        />
+      )}
 
       {verifyDomain && (
         <VerifyModal

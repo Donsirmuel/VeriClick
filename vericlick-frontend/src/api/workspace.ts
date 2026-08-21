@@ -1,5 +1,5 @@
 import { apiClient } from './client'
-import type { BillingHistory, BillingPeriod, CheckoutSession, PaymentMethod, Workspace, Domain, RedirectRoute, RedirectDomain, ShieldConfig } from '@/types'
+import type { BillingHistory, BillingPeriod, CheckoutSession, PaymentMethod, Workspace, Domain, DomainDeleteResult, RedirectRoute, RedirectDomain, ShieldConfig } from '@/types'
 
 interface WorkspaceUpdateInput {
   name?: string
@@ -45,8 +45,9 @@ export async function addDomain(domain: string): Promise<Domain> {
   return data
 }
 
-export async function deleteDomain(domainId: string): Promise<void> {
-  await apiClient.delete(`/domains/${domainId}/`)
+export async function deleteDomain(domainId: string): Promise<DomainDeleteResult> {
+  const { data } = await apiClient.delete<DomainDeleteResult>(`/domains/${domainId}/`)
+  return data
 }
 
 export interface DashboardDomain {
