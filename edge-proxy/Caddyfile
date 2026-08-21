@@ -48,6 +48,15 @@
 # On-demand TLS for customer domains
 https:// {
     header -Server -X-Powered-By
+
+    # `on_demand_tls` in the global block only configures HOW on-demand issuance
+    # behaves (which endpoint to ask). A site must still opt in here, or Caddy
+    # never issues a certificate for an unknown SNI and the handshake fails with
+    # a TLS internal error — which is what every customer redirect domain hit.
+    tls {
+        on_demand
+    }
+
     reverse_proxy app:8000
 }
 

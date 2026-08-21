@@ -741,6 +741,22 @@ def redirect_domain_verify_cname(request, domain_id):
 # Redirect Routes
 # ---------------------------------------------------------------------------
 
+def _route_expiry(workspace):
+    """When a link should stop working.
+
+    A link cannot outlive the plan paying for it, so it expires with the
+    current plan period — a weekly plan gives a week, a monthly plan a month.
+    Previously every link got a flat 7 days, which both cut monthly customers
+    short and let weekly links run on past a lapsed plan.
+
+    Falls back to a full period from now when the workspace has no expiry set
+    (an admin-granted plan), so a link never lands in the past.
+    """
+    if workspace.plan_expires_at and workspace.plan_expires_at > timezone.now():
+        return workspace.plan_expires_at
+    return timezone.now() + timedelta(days=workspace.period_days)
+
+
 # SlugField(max_length=200) with the character set the wizard enforces client-side.
 _SLUG_RE = re.compile(r'^[a-zA-Z0-9_-]*$')
 
@@ -888,7 +904,7 @@ def redirect_route_list_create(request):
         destination_url=destination_url,
         bot_action=bot_action,
         fallback_url=fallback_url,
-        expires_at=timezone.now() + timedelta(days=7),
+        expires_at=_route_expiry(workspace),
         destination_safe=destination_safe,
     )
 
@@ -1009,7 +1025,9 @@ def redirect_route_renew(request, route_id):
             status=status.HTTP_404_NOT_FOUND,
         )
 
-    route.expires_at = timezone.now() + timedelta(days=7)
+    # Re-syncs to the current plan period rather than adding a fixed window, so
+    # renewing a link after renewing the plan carries it to the new period end.
+    route.expires_at = _route_expiry(workspace)
     route.is_active = True
     route.save(update_fields=['expires_at', 'is_active'])
 

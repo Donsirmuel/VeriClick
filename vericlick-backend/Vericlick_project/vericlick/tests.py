@@ -1655,6 +1655,86 @@ class NotificationPreferenceTests(APITestCase):
         )
 
 
+class RouteExpiryFollowsPlanTests(APITestCase):
+    """A link cannot outlive the plan paying for it, and a monthly customer
+    should not have links cut short at a week."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='exp', email='e@example.com', password='pw')
+        self.client.force_authenticate(user=self.user)
+        self.workspace = Workspace.objects.get(owner=self.user)
+        self.workspace.plan = Plan.objects.get(code='basic')
+        self.workspace.save(update_fields=['plan'])
+        self.domain = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='go.example.com',
+            purpose='redirect', verified=True,
+        )
+
+    def _set_period(self, period, days_left):
+        self.workspace.plan_billing_period = period
+        self.workspace.plan_expires_at = timezone.now() + timedelta(days=days_left)
+        self.workspace.save(update_fields=['plan_billing_period', 'plan_expires_at'])
+
+    def _create(self):
+        return self.client.post('/api/redirect-routes/', {
+            'domain_id': str(self.domain.id),
+            'destination_url': 'https://example.com/offer',
+        }, format='json')
+
+    def _days_left(self):
+        route = RedirectRoute.objects.get(domain=self.domain)
+        return round((route.expires_at - timezone.now()).total_seconds() / 86400)
+
+    def test_link_expires_with_the_plan_period(self):
+        self._set_period('monthly', 30)
+        self.assertEqual(self._create().status_code, status.HTTP_201_CREATED)
+        # Previously hardcoded to 7, cutting monthly customers short.
+        self.assertEqual(self._days_left(), 30)
+
+    def test_link_never_outlives_a_plan_ending_sooner(self):
+        # Three days into a weekly plan: the link gets the remaining 4, not 7.
+        self._set_period('weekly', 4)
+        self._create()
+        self.assertEqual(self._days_left(), 4)
+
+    def test_weekly_plan_without_an_expiry_falls_back_to_its_period(self):
+        self.workspace.plan_billing_period = 'weekly'
+        self.workspace.plan_expires_at = None
+        self.workspace.save(update_fields=['plan_billing_period', 'plan_expires_at'])
+        self._create()
+        self.assertEqual(self._days_left(), 7)
+
+    def test_monthly_plan_without_an_expiry_falls_back_to_its_period(self):
+        self.workspace.plan_billing_period = 'monthly'
+        self.workspace.plan_expires_at = None
+        self.workspace.save(update_fields=['plan_billing_period', 'plan_expires_at'])
+        self._create()
+        self.assertEqual(self._days_left(), 30)
+
+    def test_renewing_resyncs_to_the_current_plan_period(self):
+        self._set_period('weekly', 2)
+        self._create()
+        route = RedirectRoute.objects.get(domain=self.domain)
+        self.assertEqual(self._days_left(), 2)
+
+        # The customer renews their plan; renewing the link follows it out.
+        self._set_period('monthly', 30)
+        res = self.client.post(f'/api/redirect-routes/{route.id}/renew/')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(self._days_left(), 30)
+
+    def test_renewing_an_expired_plan_does_not_land_in_the_past(self):
+        self._set_period('weekly', 7)
+        self._create()
+        route = RedirectRoute.objects.get(domain=self.domain)
+        self.workspace.plan_expires_at = timezone.now() - timedelta(days=3)
+        self.workspace.save(update_fields=['plan_expires_at'])
+
+        self.client.post(f'/api/redirect-routes/{route.id}/renew/')
+        route.refresh_from_db()
+        self.assertGreater(route.expires_at, timezone.now())
+
+
 class PricingEndpointTests(APITestCase):
     def test_pricing_returns_seeded_plans(self):
         res = self.client.get('/api/pricing/')
