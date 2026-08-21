@@ -73,11 +73,13 @@ async def shutdown():
         await _redis.close()
 
 
-@app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"])
-async def catch_all(request: Request, path: str = "") -> Response:
-    return await handle_request(request, _redis, _batcher)
-
-
+# Registered BEFORE the catch-all: Starlette matches routes in definition
+# order, so declaring /health afterwards makes it unreachable.
 @app.get("/health")
 async def health():
     return PlainTextResponse("ok")
+
+
+@app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"])
+async def catch_all(request: Request, path: str = "") -> Response:
+    return await handle_request(request, _redis, _batcher)

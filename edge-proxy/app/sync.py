@@ -4,6 +4,7 @@ configs from the backend every SYNC_INTERVAL seconds and caches them in Redis.""
 import asyncio
 import json
 import logging
+import re
 from typing import Optional
 
 import httpx
@@ -15,6 +16,28 @@ logger = logging.getLogger("edge.sync")
 
 SYNC_URL = f"{settings.BACKEND_URL}/api/edge/sync/"
 HEADERS = {"X-Edge-Api-Key": settings.EDGE_API_KEY}
+
+_CAMEL_BOUNDARY = re.compile(r"(?<!^)(?=[A-Z])")
+
+
+def _snake(key: str) -> str:
+    """`destinationUrl` -> `destination_url`. Already-snake keys pass through."""
+    return _CAMEL_BOUNDARY.sub("_", key).lower()
+
+
+def normalize_keys(value):
+    """Recursively convert camelCase keys to snake_case.
+
+    The backend renders every response through CamelCaseJSONRenderer, while the
+    edge speaks snake_case throughout. Normalising once here — rather than at
+    each call site — means a new field added upstream cannot silently read as
+    None and take the whole redirect path down with it.
+    """
+    if isinstance(value, dict):
+        return {_snake(k): normalize_keys(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [normalize_keys(v) for v in value]
+    return value
 
 
 async def sync_loop(redis: aioredis.Redis):
@@ -31,7 +54,7 @@ async def _sync_once(redis: aioredis.Redis):
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.get(SYNC_URL, headers=HEADERS)
         resp.raise_for_status()
-        data = resp.json()
+        data = normalize_keys(resp.json())
 
     pipe = redis.pipeline()
 

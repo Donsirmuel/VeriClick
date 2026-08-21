@@ -4,7 +4,7 @@ looks up the route in Redis, classifies bot vs human, and redirects or blocks.""
 import ipaddress
 import json
 import logging
-import time
+from datetime import datetime
 from typing import Optional
 from urllib.parse import urlparse
 
@@ -73,6 +73,22 @@ def _render(name: str) -> HTMLResponse:
     return HTMLResponse(content=html, status_code=200)
 
 
+def _is_expired(expires_at) -> bool:
+    """Whether a route's expiry has passed.
+
+    An unparseable or missing value is treated as "not expired": a malformed
+    timestamp should not silently take a paying customer's link offline.
+    """
+    if not expires_at:
+        return False
+    try:
+        exp = datetime.fromisoformat(str(expires_at).replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        return False
+    now = datetime.now(exp.tzinfo) if exp.tzinfo else datetime.now()
+    return exp < now
+
+
 async def handle_request(
     request: Request,
     redis: aioredis.Redis,
@@ -101,15 +117,9 @@ async def handle_request(
         return _render("neutral")
 
     # Check expiry
-    expires_at = route.get("expires_at")
-    if expires_at:
-        try:
-            exp_ts = time.fromisoformat(expires_at.replace("Z", "+00:00"))
-            if exp_ts < __import__("datetime").datetime.now(exp_ts.tzinfo):
-                _queue_event(batcher, host, slug, ip, user_agent, "", "expired", False)
-                return _render("neutral")
-        except (ValueError, TypeError):
-            pass
+    if _is_expired(route.get("expires_at")):
+        _queue_event(batcher, host, slug, ip, user_agent, "", "expired", False)
+        return _render("neutral")
 
     destination = route.get("destination_url", "")
     bot_action = route.get("bot_action", "block")
