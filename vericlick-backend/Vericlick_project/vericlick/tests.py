@@ -1795,6 +1795,134 @@ class PublicShieldCorsTests(APITestCase):
         self.assertNotEqual(res.get('Access-Control-Allow-Origin'), '*')
 
 
+class HostnameParsingTests(TestCase):
+    """`.lstrip('www.')` strips characters, not a prefix, so any domain starting
+    with w, o or a dot was mangled and its telemetry silently discarded."""
+
+    def test_www_prefix_is_removed(self):
+        from vericlick.views import _hostname_from_url
+        self.assertEqual(_hostname_from_url('https://www.donlabs.site/x'), 'donlabs.site')
+
+    def test_domains_starting_with_w_survive_intact(self):
+        from vericlick.views import _hostname_from_url
+        # These became 'orld.com' and 'eb.site' before.
+        self.assertEqual(_hostname_from_url('https://world.com/'), 'world.com')
+        self.assertEqual(_hostname_from_url('https://web.site/'), 'web.site')
+        self.assertEqual(_hostname_from_url('https://wow.site/'), 'wow.site')
+
+    def test_ordinary_domain_is_unchanged(self):
+        from vericlick.views import _hostname_from_url
+        self.assertEqual(_hostname_from_url('https://donlabs.site/about'), 'donlabs.site')
+
+    def test_case_is_normalised(self):
+        from vericlick.views import _hostname_from_url
+        self.assertEqual(_hostname_from_url('https://DonLabs.SITE/'), 'donlabs.site')
+
+    def test_junk_returns_empty_rather_than_raising(self):
+        from vericlick.views import _hostname_from_url
+        for bad in ('', 'not a url', None):
+            self.assertEqual(_hostname_from_url(bad), '')
+
+
+class TelemetryRecordingTests(APITestCase):
+    """A telemetry POST must actually produce a row — the endpoint returns
+    {"status": "ok"} whether it logged or silently dropped, so the difference
+    is invisible from the outside."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='tel', email='t@example.com', password='pw')
+        self.workspace = Workspace.objects.get(owner=self.user)
+        self.workspace.plan = Plan.objects.get(code='basic')
+        self.workspace.save(update_fields=['plan'])
+        DomainRegistry.objects.create(
+            workspace=self.workspace, domain='donlabs.site',
+            purpose='protection', verified=True,
+        )
+
+    def _post(self, page_url):
+        return self.client.post('/api/shield/telemetry/', {
+            'api_key': str(self.workspace.tracker_secret),
+            'page_url': page_url, 'signals': {}, 'engagement': {},
+        }, format='json')
+
+    def test_a_visit_to_a_registered_domain_is_recorded(self):
+        self.assertEqual(self._post('https://donlabs.site/').status_code, status.HTTP_200_OK)
+        self.assertEqual(TrackerEvent.objects.filter(workspace=self.workspace).count(), 1)
+
+    def test_the_www_form_of_a_registered_domain_is_recorded(self):
+        self._post('https://www.donlabs.site/')
+        self.assertEqual(TrackerEvent.objects.filter(workspace=self.workspace).count(), 1)
+
+    def test_an_unregistered_domain_is_dropped(self):
+        self._post('https://somewhere-else.example/')
+        self.assertEqual(TrackerEvent.objects.filter(workspace=self.workspace).count(), 0)
+
+    def test_a_w_domain_is_recorded_not_mangled(self):
+        DomainRegistry.objects.create(
+            workspace=self.workspace, domain='world.com',
+            purpose='protection', verified=True,
+        )
+        self._post('https://world.com/')
+        self.assertEqual(
+            TrackerEvent.objects.filter(workspace=self.workspace, domain='world.com').count(), 1,
+        )
+
+
+class EdgeEventAttributionTests(APITestCase):
+    """Only a hit on the actual link is a click. The edge queues an event for
+    every request to the hostname, so attributing them by domain alone counted
+    favicons and scanner probes as clicks."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='edge', email='e2@example.com', password='pw')
+        self.workspace = Workspace.objects.get(owner=self.user)
+        self.domain = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='r.donlabs.site',
+            purpose='redirect', verified=True,
+        )
+        self.route = RedirectRoute.objects.create(
+            workspace=self.workspace, domain=self.domain, slug='promo',
+            destination_url='https://donlabs.site/about',
+        )
+        self.raw_key, self.cred = EdgeSyncCredential.create_for_workspace(self.workspace)
+
+    def _push(self, slug, verdict='allowed'):
+        return self.client.post('/api/edge/events/', {'events': [{
+            'domain': 'r.donlabs.site', 'slug': slug, 'ip': '203.0.113.9',
+            'user_agent': 'curl/8', 'destination': 'https://donlabs.site/about',
+            'verdict': verdict, 'is_bot': False,
+        }]}, format='json', HTTP_X_EDGE_API_KEY=self.raw_key)
+
+    def _clicks(self):
+        self.route.refresh_from_db()
+        return self.route.clicks_count
+
+    def test_a_hit_on_the_link_counts(self):
+        res = self._push('promo')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.json()['created'], 1)
+        self.assertEqual(self._clicks(), 1)
+
+    def test_favicon_does_not_count(self):
+        self._push('favicon.ico')
+        self.assertEqual(self._clicks(), 0)
+
+    def test_robots_txt_does_not_count(self):
+        self._push('robots.txt')
+        self.assertEqual(self._clicks(), 0)
+
+    def test_a_scanner_probing_random_paths_does_not_count(self):
+        for probe in ('wp-login.php', '.env', 'admin', 'api'):
+            self._push(probe, verdict='neutral')
+        self.assertEqual(self._clicks(), 0)
+        self.assertEqual(RedirectEvent.objects.filter(workspace=self.workspace).count(), 0)
+
+    def test_repeated_real_hits_each_count_once(self):
+        for _ in range(3):
+            self._push('promo')
+        self.assertEqual(self._clicks(), 3)
+
+
 class PricingEndpointTests(APITestCase):
     def test_pricing_returns_seeded_plans(self):
         res = self.client.get('/api/pricing/')
@@ -3359,6 +3487,9 @@ class EdgeEventsBatchTests(APITestCase):
             workspace=self.workspace, domain='go.example.com',
             purpose='redirect', verified=True,
         )
+        # Root-path link: events below post no slug, which is a hit on it. An
+        # event only counts when its slug matches the route's, not merely the
+        # hostname.
         self.route = RedirectRoute.objects.create(
             workspace=self.workspace, domain=self.domain,
             destination_url='https://target.example.com',
@@ -3373,7 +3504,7 @@ class EdgeEventsBatchTests(APITestCase):
         res = self.client.post('/api/edge/events/', {
             'events': [{
                 'domain': 'go.example.com',
-                'slug': 'promo',
+                'slug': '',
                 'ip': '1.2.3.4',
                 'user_agent': 'Mozilla/5.0',
                 'destination': 'https://target.example.com',

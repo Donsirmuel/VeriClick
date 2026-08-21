@@ -741,6 +741,54 @@ def redirect_domain_verify_cname(request, domain_id):
 # Redirect Routes
 # ---------------------------------------------------------------------------
 
+def _traffic_counts(workspace, since, until=None, domain=''):
+    """Combined visit counts across BOTH enforcement paths.
+
+    Protected pages report through the script (TrackerEvent) and redirect links
+    report from the edge (RedirectEvent). The dashboard read only the first, so
+    a link with a hundred clicks showed nothing at all — the number on the
+    Redirects page and the number on the dashboard described different worlds.
+
+    Returns (total, bots, blocked).
+    """
+    from .models import RedirectEvent
+
+    def _window(qs):
+        qs = qs.filter(workspace=workspace, created_at__gte=since)
+        if until:
+            qs = qs.filter(created_at__lt=until)
+        if domain:
+            qs = qs.filter(domain=domain)
+        return qs
+
+    tracker = _window(TrackerEvent.objects.all())
+    redirect = _window(RedirectEvent.objects.all())
+
+    total = tracker.count() + redirect.count()
+    bots = tracker.filter(is_bot=True).count() + redirect.filter(is_bot=True).count()
+    blocked = (
+        tracker.filter(verdict='blocked').count()
+        + redirect.filter(verdict='blocked').count()
+    )
+    return total, bots, blocked
+
+
+def _hostname_from_url(url):
+    """Registrable hostname from a page URL, with a leading `www.` removed.
+
+    Previously `.lstrip('www.')`, which strips CHARACTERS rather than a prefix:
+    `world.com` became `orld.com` and `web.site` became `eb.site`. Those never
+    matched a registered domain, so telemetry from any customer whose domain
+    starts with w, o or a dot was silently discarded.
+    """
+    from urllib.parse import urlparse
+    try:
+        host = (urlparse(url).hostname or '').lower()
+    except (ValueError, AttributeError):
+        return ''
+    return host[4:] if host.startswith('www.') else host
+
+
 def _workspace_for_api_key(api_key):
     """Look up a workspace by site key, tolerating junk.
 
@@ -1429,8 +1477,7 @@ def receive_tracker_event(request):
     page_url_val = request.data.get('page_url', '')
     if page_url_val:
         try:
-            from urllib.parse import urlparse
-            domain = (urlparse(page_url_val).hostname or '').lower().lstrip('www.')
+            domain = _hostname_from_url(page_url_val)
         except Exception:
             pass
 
@@ -1595,8 +1642,7 @@ def _log_shield_event(request, workspace, page_url, blocked=False, reason=''):
     domain = ''
     if page_url:
         try:
-            from urllib.parse import urlparse
-            domain = (urlparse(page_url).hostname or '').lower().lstrip('www.')
+            domain = _hostname_from_url(page_url)
         except Exception:
             pass
 
@@ -1691,8 +1737,7 @@ def shield_telemetry(request):
     if page_url:
         from urllib.parse import urlparse
         try:
-            parsed = urlparse(page_url)
-            domain = (parsed.hostname or '').lower().lstrip('www.')
+            domain = _hostname_from_url(page_url)
         except Exception:
             domain = ''
         if domain and not DomainRegistry.objects.filter(
@@ -1941,21 +1986,18 @@ def dashboard_stats(request):
     # Optional domain filter
     domain_filter = request.query_params.get('domain', '').strip().lower()
 
-    # Use TrackerEvent (script telemetry) instead of ClickLog (link redirects)
-    events_24h = TrackerEvent.objects.filter(
-        workspace=workspace, created_at__gte=twenty_four_hours_ago
+    # Both paths count: script telemetry on protected pages, and edge events
+    # from redirect links.
+    total_events_24h, bot_events_24h, blocked_24h = _traffic_counts(
+        workspace, twenty_four_hours_ago, domain=domain_filter,
     )
-    if domain_filter:
-        events_24h = events_24h.filter(domain=domain_filter)
-    total_events_24h = events_24h.count()
-    bot_events_24h = events_24h.filter(is_bot=True).count()
-    blocked_24h = events_24h.filter(verdict='blocked').count()
 
-    previous_events_24h = TrackerEvent.objects.filter(
-        workspace=workspace,
-        created_at__gte=twenty_four_hours_ago - timedelta(hours=24),
-        created_at__lt=twenty_four_hours_ago,
-    ).count()
+    previous_events_24h, _, _ = _traffic_counts(
+        workspace,
+        twenty_four_hours_ago - timedelta(hours=24),
+        until=twenty_four_hours_ago,
+        domain=domain_filter,
+    )
     if previous_events_24h > 0:
         clicks_trend = round(
             ((total_events_24h - previous_events_24h) / previous_events_24h) * 100, 1
@@ -1994,28 +2036,37 @@ def dashboard_traffic(request):
 
     since = timezone.now() - timedelta(days=days)
 
-    qs = TrackerEvent.objects.filter(workspace=workspace, created_at__gte=since)
-    if domain_filter:
-        qs = qs.filter(domain=domain_filter)
+    from .models import RedirectEvent
 
-    qs = (
-        qs
-        .annotate(date=TruncDate('created_at'))
-        .values('date')
-        .annotate(
-            human=Count('id', filter=Q(is_bot=False)),
-            bot=Count('id', filter=Q(is_bot=True)),
+    def _by_day(model):
+        qs = model.objects.filter(workspace=workspace, created_at__gte=since)
+        if domain_filter:
+            qs = qs.filter(domain=domain_filter)
+        return (
+            qs
+            .annotate(date=TruncDate('created_at'))
+            .values('date')
+            .annotate(
+                human=Count('id', filter=Q(is_bot=False)),
+                bot=Count('id', filter=Q(is_bot=True)),
+            )
+            .order_by('date')
         )
-        .order_by('date')
-    )
+
+    # Protected pages and redirect links are one traffic story, so the chart
+    # sums both per day rather than plotting only script telemetry.
+    totals = {}
+    for source in (_by_day(TrackerEvent), _by_day(RedirectEvent)):
+        for entry in source:
+            if not entry['date']:
+                continue
+            day = totals.setdefault(entry['date'], {'human': 0, 'bot': 0})
+            day['human'] += entry['human']
+            day['bot'] += entry['bot']
 
     data = [
-        {
-            'date': entry['date'].isoformat() if entry['date'] else None,
-            'human': entry['human'],
-            'bot': entry['bot'],
-        }
-        for entry in qs
+        {'date': day.isoformat(), 'human': v['human'], 'bot': v['bot']}
+        for day, v in sorted(totals.items())
     ]
     return Response(data)
 
@@ -2215,14 +2266,51 @@ def dashboard_activity(request):
     if not workspace:
         return Response({'error': 'No workspace found'}, status=status.HTTP_404_NOT_FOUND)
 
-    qs = TrackerEvent.objects.filter(workspace=workspace)
-    domain_filter = request.query_params.get('domain', '').strip().lower()
-    if domain_filter:
-        qs = qs.filter(domain=domain_filter)
+    from .models import RedirectEvent
 
-    events = qs.order_by('-created_at')[:50]
-    serializer = TrackerEventSerializer(events, many=True)
-    return Response(serializer.data)
+    domain_filter = request.query_params.get('domain', '').strip().lower()
+
+    def _recent(model):
+        qs = model.objects.filter(workspace=workspace)
+        if domain_filter:
+            qs = qs.filter(domain=domain_filter)
+        return list(qs.order_by('-created_at')[:50])
+
+    rows = []
+    for e in _recent(TrackerEvent):
+        rows.append({
+            'id': str(e.id),
+            'ip': e.ip,
+            'domain': e.domain,
+            'page_url': e.page_url,
+            'verdict': e.verdict,
+            'is_bot': e.is_bot,
+            'reason': e.reason,
+            'reason_label': reason_label(e.verdict, e.reason, ''),
+            'source': 'script',
+            'created_at': e.created_at,
+        })
+    # Redirect clicks belong in the same feed — they are the other half of the
+    # traffic and were invisible here.
+    for e in _recent(RedirectEvent):
+        rows.append({
+            'id': str(e.id),
+            'ip': e.ip,
+            'domain': e.domain,
+            'page_url': f'{e.domain}/{e.slug}'.rstrip('/'),
+            'verdict': e.verdict,
+            'is_bot': e.is_bot,
+            'reason': 'redirect',
+            'reason_label': (
+                'Bot stopped at your redirect link' if e.is_bot
+                else 'Forwarded through your redirect link'
+            ),
+            'source': 'redirect',
+            'created_at': e.created_at,
+        })
+
+    rows.sort(key=lambda r: r['created_at'], reverse=True)
+    return Response(rows[:50])
 
 
 @api_view(['POST'])
@@ -2547,9 +2635,13 @@ def edge_events_batch(request):
         if not domain or not ip:
             continue
 
-        # Find the route
+        # Match on domain AND slug. Matching the domain alone attributed every
+        # request to the hostname — /favicon.ico, /robots.txt, and any scanner
+        # probing paths — to the single route on it, so the click counter
+        # measured background noise rather than clicks on the link.
         route = RedirectRoute.objects.filter(
             domain__domain=domain,
+            slug=slug,
             workspace=workspace,
         ).first()
 

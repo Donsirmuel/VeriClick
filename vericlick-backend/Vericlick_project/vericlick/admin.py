@@ -20,11 +20,15 @@ class WorkspaceAdmin(admin.ModelAdmin):
     list_display = ('name', 'owner', 'plan', 'plan_status', 'plan_billing_period', 'plan_expires_at', 'created_at')
     # `plan` is editable inline from the list page so an admin can upgrade a
     # workspace (e.g. hand testers a higher tier) without going through checkout.
-    list_editable = ('plan',)
+    list_editable = ('plan', 'plan_billing_period')
     list_select_related = ('owner', 'plan')
     list_filter = ('plan', 'plan_billing_period', 'created_at')
     search_fields = ('name', 'owner__username', 'owner__email')
-    readonly_fields = ('id', 'tracker_secret', 'created_at', 'plan_started_at', 'plan_billing_mode', 'plan_billing_period', 'plan_expires_at', 'plan_status', 'grace_expires_at')
+    # plan_billing_period stays EDITABLE: a Plan row holds both prices, so the
+    # tier says nothing about whether this workspace bought a week or a month.
+    # Granting a plan by hand means choosing both, and expiry has to be settable
+    # alongside it or the grant has no end date.
+    readonly_fields = ('id', 'tracker_secret', 'created_at', 'plan_started_at', 'plan_billing_mode', 'plan_status', 'grace_expires_at')
     inlines = []
     autocomplete_fields = ['owner']
     date_hierarchy = 'created_at'
