@@ -15,12 +15,25 @@ import type { BillingPeriod, Plan } from '@/types'
 
 export default function Billing() {
   const queryClient = useQueryClient()
-  const [justPaid, setJustPaid] = useState(false)
+  // Which way the customer came back from Bachs, if they came back at all.
+  const [returned, setReturned] = useState<'success' | 'cancelled' | null>(null)
+  const [waitedTooLong, setWaitedTooLong] = useState(false)
   const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('weekly')
 
   const { data: pricing } = useQuery({ queryKey: ['pricing'], queryFn: fetchPricing })
   const { data: workspace } = useQuery({ queryKey: ['workspace'], queryFn: fetchWorkspace })
-  const { data: history } = useQuery({ queryKey: ['billing-history'], queryFn: fetchBillingHistory })
+  const { data: history } = useQuery({
+    queryKey: ['billing-history'],
+    queryFn: fetchBillingHistory,
+    // Returning from checkout is a race: Bachs sends the customer back
+    // immediately, but the plan is only granted when the signed webhook
+    // arrives, which for a bank transfer can be a while. Poll until it lands
+    // rather than making the customer refresh and wonder.
+    refetchInterval: (query) =>
+      returned === 'success' && !query.state.data?.subscription?.active && !waitedTooLong
+        ? 3000
+        : false,
+  })
 
   const checkoutMutation = useMutation({
     mutationFn: ({ planCode, billingPeriod }: {
@@ -34,19 +47,29 @@ export default function Billing() {
     onError: (err) => toast.error(parseApiError(err) || "Couldn't start the checkout right now."),
   })
 
-  // Coming back from Bachs: after a successful payment the success URL gets
-  // ?billing=success appended, so refresh the workspace (the webhook will have
-  // granted the plan) and show a confirmation banner.
+  // Coming back from Bachs. Both outcomes land here with a query param; the
+  // param is stripped either way so a refresh does not replay the banner.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
-    if (params.get('billing') === 'success') {
-      setJustPaid(true)
+    const outcome = params.get('billing')
+    if (outcome === 'success' || outcome === 'cancelled') {
+      setReturned(outcome)
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+    if (outcome === 'success') {
       queryClient.invalidateQueries({ queryKey: ['workspace'] })
       queryClient.invalidateQueries({ queryKey: ['billing-history'] })
-      window.history.replaceState({}, '', window.location.pathname)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Stop polling after a minute. Past that it is not "still processing", it is
+  // something a person needs to look at, and saying so beats a spinner.
+  useEffect(() => {
+    if (returned !== 'success') return
+    const timer = setTimeout(() => setWaitedTooLong(true), 60_000)
+    return () => clearTimeout(timer)
+  }, [returned])
 
   const current = workspace?.plan ?? null
   const plans = pricing?.plans ?? []
@@ -68,7 +91,12 @@ export default function Billing() {
         </p>
       </div>
 
-      {justPaid && (
+      {/* Returning from checkout said "Payment confirmed. Your new plan is
+          active." purely because the URL had ?billing=success on it. The plan
+          is granted by the signed webhook, which arrives separately and can be
+          slow or fail — so the banner could tell someone their plan was live
+          while it was not. It now reports what the account actually says. */}
+      {returned === 'success' && sub?.active && (
         <div className="flex items-start gap-3 bg-green-50 border border-green-200 rounded-2xl p-5">
           <div className="w-9 h-9 bg-green-600 rounded-xl flex items-center justify-center shrink-0">
             <HugeiconsIcon icon={CheckmarkCircle02Icon} className="w-4 h-4 text-white" />
@@ -76,7 +104,51 @@ export default function Billing() {
           <div>
             <h3 className="text-sm font-bold text-green-900 mb-1">Payment confirmed</h3>
             <p className="text-sm text-green-700 leading-relaxed">
-              Your new plan is active. Configure your anti-bot settings.
+              Your <strong>{sub.planName}</strong> plan is active
+              {sub.expiresAt ? ` until ${formatDate(sub.expiresAt)}` : ''}.{' '}
+              <Link to="/app/shield" className="font-bold underline">Set up your anti-bot protection</Link>.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {returned === 'success' && !sub?.active && !waitedTooLong && (
+        <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-2xl p-5">
+          <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center shrink-0">
+            <HugeiconsIcon icon={RefreshIcon} className="w-4 h-4 text-white animate-spin" />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-blue-900 mb-1">Confirming your payment…</h3>
+            <p className="text-sm text-blue-700 leading-relaxed">
+              Your payment went through and we're waiting for it to be confirmed. This is
+              usually seconds, but a bank transfer can take longer. You can leave this page —
+              your plan turns on by itself, and we'll email you a receipt.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {returned === 'success' && !sub?.active && waitedTooLong && (
+        <div className="flex items-start gap-3 bg-amber-50 border border-amber-300 rounded-2xl p-5">
+          <div>
+            <h3 className="text-sm font-bold text-amber-900 mb-1">Your payment is still being confirmed</h3>
+            <p className="text-sm text-amber-800 leading-relaxed">
+              This is taking longer than usual. If you've been charged, nothing is lost — the
+              plan turns on as soon as the payment clears, and we'll email your receipt. If it
+              hasn't turned on within an hour,{' '}
+              <Link to="/contact" className="font-bold underline">let us know</Link> and we'll
+              sort it out.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {returned === 'cancelled' && (
+        <div className="flex items-start gap-3 bg-neutral-50 border border-neutral-300 rounded-2xl p-5">
+          <div>
+            <h3 className="text-sm font-bold text-slate-900 mb-1">Checkout cancelled</h3>
+            <p className="text-sm text-slate-700 leading-relaxed">
+              You haven't been charged. Pick a plan below whenever you're ready.
             </p>
           </div>
         </div>
