@@ -273,11 +273,8 @@ export default function Landing() {
               </h1>
 
               <p className="text-lg md:text-xl text-neutral-400 mb-10 leading-relaxed max-w-lg opacity-0" style={{ animation: 'fade-in-up 0.6s ease-out 0.35s forwards' }}>
-                VeriClick keeps bots away from your website and your links. Paste one script tag into
-                your site's head, or send clicks through a short link on your own domain — either way
-                every visitor is checked before they get anywhere: device fingerprinting first, then bot
-                detection, then rate limits. Humans get through; bots never reach you.
-                Simple plans, from $25 a week or $80 a month.
+                Bots stopped before they reach your site or your links. Humans never notice.
+                From $25 a week.
               </p>
 
               <div className="flex flex-col sm:flex-row items-center gap-4 mb-14 opacity-0" style={{ animation: 'fade-in-up 0.6s ease-out 0.45s forwards' }}>
