@@ -159,6 +159,31 @@ def verify_webhook_signature(raw_body, timestamp_header, signature_header):
     return hmac.compare_digest(expected, signature_header)
 
 
+def extend_routes_to_plan(workspace):
+    """Carry active redirect links out to the workspace's current period end.
+
+    Link expiry is stored (the edge reads it), so it is fixed at creation. When
+    a customer renews — or moves from weekly to monthly — links created earlier
+    keep the old, shorter date and expire while the plan they are paid for is
+    still running. Paying should extend what you already have, not only what you
+    create next.
+    """
+    from datetime import timedelta
+    from django.utils import timezone
+    from .models import RedirectRoute, BILLING_PERIOD_DAYS, PLAN_PERIOD_DAYS
+
+    if workspace.plan_expires_at and workspace.plan_expires_at > timezone.now():
+        new_expiry = workspace.plan_expires_at
+    else:
+        days = BILLING_PERIOD_DAYS.get(workspace.plan_billing_period, PLAN_PERIOD_DAYS)
+        new_expiry = timezone.now() + timedelta(days=days)
+
+    # Only ever push a date forward — never shorten a link someone already has.
+    return RedirectRoute.objects.filter(
+        workspace=workspace, is_active=True, expires_at__lt=new_expiry,
+    ).update(expires_at=new_expiry)
+
+
 def fulfil_paid_checkout(checkout_id, charge_id=''):
     """Grant a workspace its paid plan once a verified webhook confirms payment.
 
@@ -205,6 +230,8 @@ def fulfil_paid_checkout(checkout_id, charge_id=''):
         workspace.save(update_fields=[
             'plan', 'plan_billing_mode', 'plan_billing_period', 'plan_expires_at',
         ])
+        # Paying carries existing links forward too, not just future ones.
+        extend_routes_to_plan(workspace)
 
         kind = BillingEvent.Kind.PLAN_PERIOD_PAID if is_period else BillingEvent.Kind.PLAN_PURCHASED
         BillingEvent.objects.create(

@@ -1201,18 +1201,18 @@ class DomainSlotTests(APITestCase):
 
     def test_can_fill_up_to_the_plan_limit(self):
         for i in range(self.limit):
-            self.assertEqual(self._add(f'd{i}.example.com').status_code, status.HTTP_201_CREATED)
+            self.assertEqual(self._add(f'tenant{i}.example').status_code, status.HTTP_201_CREATED)
         self.assertEqual(self._used(), self.limit)
 
     def test_adding_past_the_limit_is_rejected(self):
         for i in range(self.limit):
-            self._add(f'd{i}.example.com')
-        res = self._add('one-too-many.example.com')
+            self._add(f'tenant{i}.example')
+        res = self._add('one-too-many.example')
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_deleting_frees_a_slot_immediately(self):
         for i in range(self.limit):
-            self._add(f'd{i}.example.com')
+            self._add(f'tenant{i}.example')
         doomed = DomainRegistry.objects.filter(workspace=self.workspace).first()
 
         res = self.client.delete(f'/api/domains/{doomed.id}/')
@@ -1346,7 +1346,7 @@ class OnboardingCompletionTests(APITestCase):
         self._grant_plan()
         limit = self.workspace.plan.domain_limit
         for i in range(limit):
-            self.client.post('/api/domains/', {'domain': f'd{i}.example.com'}, format='json')
+            self.client.post('/api/domains/', {'domain': f'tenant{i}.example'}, format='json')
         res = self.client.post('/api/workspace/onboarding/', {
             'type': 'shield', 'domain': 'extra.example.com',
         }, format='json')
@@ -2003,6 +2003,72 @@ class EdgeVerdictTests(APITestCase):
         other_key, _ = EdgeSyncCredential.create_for_workspace(Workspace.objects.get(owner=other))
         body = self._ask(key=other_key).json()
         self.assertEqual(body['reason'], 'no-route')
+
+
+class DomainSlotCountingTests(APITestCase):
+    """Slots are counted by registrable domain. The setup flow requires a
+    redirect subdomain, so billing it as a second slot would charge people for
+    following our own instructions."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='slot2', email='s2@example.com', password='pw')
+        self.client.force_authenticate(user=self.user)
+        self.workspace = Workspace.objects.get(owner=self.user)
+        self.workspace.plan = Plan.objects.get(code='basic')
+        self.workspace.save(update_fields=['plan'])
+        self.limit = self.workspace.plan.domain_limit
+
+    def _add(self, name):
+        return self.client.post('/api/domains/', {'domain': name}, format='json')
+
+    def _used(self):
+        return self.client.get('/api/workspace/').json()['domainsUsed']
+
+    def test_a_subdomain_shares_its_parents_slot(self):
+        self._add('donlabs.site')
+        DomainRegistry.objects.create(
+            workspace=self.workspace, domain='r.donlabs.site', purpose='redirect',
+        )
+        self.assertEqual(self._used(), 1)
+
+    def test_separate_domains_take_separate_slots(self):
+        self._add('donlabs.site')
+        self._add('example.com')
+        self.assertEqual(self._used(), 2)
+
+    def test_com_and_com_ng_are_different_registrations(self):
+        # Same label, different registrable domain — and different owners.
+        self._add('example.com')
+        self._add('example.com.ng')
+        self.assertEqual(self._used(), 2)
+
+    def test_co_uk_is_not_treated_as_the_registrable_domain(self):
+        # Naive last-two-labels would merge these into one "co.uk" slot.
+        self._add('alpha.co.uk')
+        self._add('beta.co.uk')
+        self.assertEqual(self._used(), 2)
+
+    def test_a_subdomain_is_free_at_the_limit(self):
+        for i in range(self.limit):
+            self._add(f'd{i}.example.com' if i else 'zero.example.org')
+        used_before = self._used()
+        # A redirect host on a domain already held must still be addable.
+        existing = DomainRegistry.objects.filter(workspace=self.workspace).first()
+        res = self.client.post(
+            '/api/redirect-domains/', {'domain': f'go.{existing.domain}'}, format='json',
+        )
+        self.assertIn(res.status_code, (status.HTTP_200_OK, status.HTTP_201_CREATED))
+        self.assertEqual(self._used(), used_before)
+
+    def test_a_brand_new_domain_is_still_refused_at_the_limit(self):
+        for i in range(self.limit):
+            self._add(f'site{i}.example.com')
+        # Those are all one registrable domain, so there is room; fill it out.
+        while self._used() < self.limit:
+            self._add(f'filler{self._used()}.org')
+        self.assertEqual(
+            self._add('one-too-many.net').status_code, status.HTTP_400_BAD_REQUEST,
+        )
 
 
 class PricingEndpointTests(APITestCase):
@@ -3150,7 +3216,7 @@ class RedirectDomainTests(APITestCase):
     def test_domain_limit_enforced(self):
         for i in range(10):
             DomainRegistry.objects.create(
-                workspace=self.workspace, domain=f'd{i}.example.com', purpose='redirect',
+                workspace=self.workspace, domain=f'tenant{i}.example', purpose='redirect',
             )
         res = self.client.post('/api/redirect-domains/', {
             'domain': 'extra.example.com',

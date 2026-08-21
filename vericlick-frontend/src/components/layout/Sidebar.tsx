@@ -137,12 +137,17 @@ export function Sidebar({ onClose }: { onClose: () => void }) {
           <div className="flex items-center gap-2 mb-2">
             <span className="text-xs font-bold text-white uppercase tracking-wider">Current plan</span>
           </div>
-          <div className="flex items-center justify-between text-sm font-bold text-white mb-1">
-            <span>{workspace?.planName ?? 'No plan'}</span>
+          <div className="flex items-center justify-between gap-2 text-sm font-bold text-white mb-1">
+            <span className="truncate">{workspace?.planName ?? 'No plan'}</span>
+            {workspace?.planName && (
+              <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-neutral-700 text-neutral-200 shrink-0">
+                {workspace.planBillingPeriod === 'monthly' ? 'Monthly' : 'Weekly'}
+              </span>
+            )}
           </div>
           <p className="text-[11px] text-neutral-400 leading-relaxed">
             {workspace?.planName
-              ? `${workspace.planName} plan active.`
+              ? `${workspace.planBillingPeriod === 'monthly' ? '30' : '7'}-day access. Renew when it runs out.`
               : 'Pick a plan to start protecting your site.'}
           </p>
         </Link>

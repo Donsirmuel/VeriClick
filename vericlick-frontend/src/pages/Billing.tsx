@@ -114,8 +114,17 @@ export default function Billing() {
       <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <div className="bg-white border border-neutral-200 rounded-2xl p-5">
           <div className="text-xs font-bold text-muted uppercase tracking-wider mb-1">Current plan</div>
-          <div className="text-xl font-bold text-slate-900">
-            {sub?.status === 'suspended' ? 'Suspended' : (workspace?.planName ?? 'No plan')}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xl font-bold text-slate-900">
+              {sub?.status === 'suspended' ? 'Suspended' : (workspace?.planName ?? 'No plan')}
+            </span>
+            {/* "Basic" alone does not say what was bought — the tier and the
+                period are separate choices at the same price point. */}
+            {workspace?.planName && sub?.status !== 'suspended' && (
+              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
+                {workspace.planBillingPeriod === 'monthly' ? 'Monthly' : 'Weekly'}
+              </span>
+            )}
           </div>
           {sub?.mode && (
             <div className="text-xs text-muted mt-1">

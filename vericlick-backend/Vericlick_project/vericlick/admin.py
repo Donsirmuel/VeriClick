@@ -100,6 +100,9 @@ class WorkspaceAdmin(admin.ModelAdmin):
                     base = ws.plan_expires_at or now
                     ws.plan_expires_at = base + timedelta(days=ws.period_days)
                     ws.save()
+                    # Same as a real payment: carry existing links forward.
+                    from .payments import extend_routes_to_plan
+                    extend_routes_to_plan(ws)
                 recorded += 1
 
             self.message_user(

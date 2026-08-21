@@ -104,7 +104,8 @@ class WorkspaceSerializer(serializers.ModelSerializer):
         return obj.trial_active
 
     def get_domains_used(self, obj):
-        return obj.domains.filter(is_active=True).count()
+        # Slots, not hostnames: a subdomain shares its parent's slot.
+        return obj.domain_slots_used()
 
     def get_onboarding_complete(self, obj):
         # Derived, so setup done outside the wizard still counts.

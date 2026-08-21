@@ -12,3 +12,4 @@ psycopg2-binary==2.9.11
 dnspython==2.7.0
 resend==2.34.0
 user-agents==2.2.0
+tldextract==5.3.0

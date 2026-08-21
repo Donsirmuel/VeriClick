@@ -147,8 +147,7 @@ def workspace_onboarding(request):
                 'workspace': WorkspaceSerializer(workspace).data,
             })
 
-        current_count = workspace.domains.filter(is_active=True).count()
-        if current_count >= active_plan.domain_limit:
+        if not workspace.can_add_domain(domain_name):
             # At the limit means domains already exist, so setup is done — the
             # user just cannot add another one here.
             workspace.onboarding_complete = True
@@ -271,11 +270,11 @@ def domain_list_create(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    # Check limit
+    # Check limit. Counted by registrable domain, so a subdomain of one you
+    # already hold is free rather than a second slot.
     active_plan = workspace.active_plan
-    current_count = DomainRegistry.objects.filter(workspace=workspace, is_active=True).count()
     limit = active_plan.domain_limit
-    if current_count >= limit:
+    if not workspace.can_add_domain(domain_name):
         plan_name = active_plan.name
         return Response(
             {'errors': [{'field': 'domain', 'detail': f'You\'ve reached the {limit}-domain limit on {plan_name}. Upgrade to add more.'}]},
@@ -626,11 +625,12 @@ def redirect_domain_list_create(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    # Check limit (redirect domains count toward the same domain limit)
+    # Redirect domains share the same limit — and a redirect subdomain of a
+    # domain already registered here costs nothing extra, which matters because
+    # the setup flow requires one.
     active_plan = workspace.active_plan
-    current_count = DomainRegistry.objects.filter(workspace=workspace, is_active=True).count()
     limit = active_plan.domain_limit
-    if current_count >= limit:
+    if not workspace.can_add_domain(domain_name):
         plan_name = active_plan.name
         return Response(
             {'errors': [{'field': 'domain', 'detail': f'You\'ve reached the {limit}-domain limit on {plan_name}. Upgrade to add more.'}]},

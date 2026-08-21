@@ -1,6 +1,39 @@
 import re
+import tldextract
 from rest_framework.renderers import JSONRenderer
 from rest_framework.parsers import JSONParser
+
+
+# Built from tldextract's bundled Public Suffix List snapshot. suffix_list_urls=()
+# keeps it OFFLINE — the default fetches the list over the network on first use,
+# which has no business happening inside a request.
+_extract = tldextract.TLDExtract(suffix_list_urls=())
+
+
+def registrable_domain(host: str) -> str:
+    """The domain a customer actually owns.
+
+    `r.donlabs.site` and `donlabs.site` are one registration and count as one
+    slot; our own design forces the subdomain, since a redirect cannot live on
+    the apex, so charging for both would bill people for following our setup.
+
+    The Public Suffix List is what makes this correct: naive "last two labels"
+    would reduce `example.com.ng` to `com.ng` and `example.co.uk` to `co.uk`,
+    merging unrelated customers into one slot. It also keeps `example.com` and
+    `example.com.ng` distinct, which they are.
+    """
+    host = (host or '').strip().lower().rstrip('.')
+    if not host:
+        return ''
+    parsed = _extract(host)
+    # `top_domain_under_public_suffix` on modern tldextract; `registered_domain`
+    # on older releases. Falls back to the raw host for something unparseable
+    # (an IP, or a bare label), so a slot is never silently shared.
+    return (
+        getattr(parsed, 'top_domain_under_public_suffix', '')
+        or getattr(parsed, 'registered_domain', '')
+        or host
+    )
 
 
 def snake_to_camel(snake: str) -> str:

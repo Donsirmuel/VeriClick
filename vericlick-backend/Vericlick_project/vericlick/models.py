@@ -182,6 +182,39 @@ class Workspace(models.Model):
         # The plan that is currently in force (None once a grace period lapses).
         return self.plan if self.has_plan_access() else None
 
+    def domain_slots_used(self, excluding=None):
+        """How many of the plan's domain slots are taken.
+
+        Counted by registrable domain, so donlabs.site and r.donlabs.site are
+        one slot. Our own setup forces that subdomain — a redirect cannot live
+        on the apex — so billing both would charge people for following it.
+        """
+        from .utils import registrable_domain
+        names = self.domains.filter(is_active=True).values_list('domain', flat=True)
+        roots = {registrable_domain(n) for n in names}
+        if excluding:
+            roots.discard(registrable_domain(excluding))
+        return len(roots)
+
+    def can_add_domain(self, domain_name):
+        """Whether `domain_name` fits within the plan's domain limit.
+
+        A hostname on a domain already registered here is free: it occupies the
+        slot that domain already holds.
+        """
+        plan = self.active_plan
+        if not plan:
+            return False
+        from .utils import registrable_domain
+        root = registrable_domain(domain_name)
+        existing = {
+            registrable_domain(n)
+            for n in self.domains.filter(is_active=True).values_list('domain', flat=True)
+        }
+        if root in existing:
+            return True
+        return len(existing) < plan.domain_limit
+
     @property
     def period_days(self):
         # How long one paid period runs for this workspace, from the cadence it
