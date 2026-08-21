@@ -37,9 +37,23 @@ class PublicShieldCorsMiddleware:
         else:
             response = self.get_response(request)
 
-        # No credentials are sent, so a wildcard origin is both valid and the
-        # only workable answer for an unbounded set of customer domains.
-        response['Access-Control-Allow-Origin'] = '*'
+        # Echo the caller's origin rather than sending a wildcard.
+        # navigator.sendBeacon — which the script uses to report a pageview —
+        # always sends with credentials mode "include", and the browser rejects
+        # `Allow-Origin: *` on a credentialed request. A wildcard therefore let
+        # the verify call through while silently dropping every telemetry beacon,
+        # so nothing was ever recorded for an allowed visitor.
+        origin = request.headers.get('Origin')
+        if origin:
+            response['Access-Control-Allow-Origin'] = origin
+            response['Access-Control-Allow-Credentials'] = 'true'
+            # The response varies per caller, so it must not be cached across them.
+            existing_vary = response.get('Vary', '')
+            if 'origin' not in existing_vary.lower():
+                response['Vary'] = f'{existing_vary}, Origin'.lstrip(', ')
+        else:
+            response['Access-Control-Allow-Origin'] = '*'
+
         response['Access-Control-Allow-Methods'] = self.ALLOW_METHODS
         response['Access-Control-Allow-Headers'] = self.ALLOW_HEADERS
         response['Access-Control-Max-Age'] = '86400'

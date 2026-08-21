@@ -1750,9 +1750,18 @@ class PublicShieldCorsTests(APITestCase):
             HTTP_ACCESS_CONTROL_REQUEST_HEADERS='content-type',
         )
         self.assertEqual(res.status_code, status.HTTP_200_OK)
-        self.assertEqual(res['Access-Control-Allow-Origin'], '*')
+        self.assertEqual(res['Access-Control-Allow-Origin'], self.CUSTOMER)
         self.assertIn('POST', res['Access-Control-Allow-Methods'])
         self.assertIn('content-type', res['Access-Control-Allow-Headers'])
+
+    def test_credentialed_beacons_are_accepted(self):
+        # navigator.sendBeacon always sends credentials: include, and a browser
+        # rejects `Allow-Origin: *` on such a request — so telemetry beacons were
+        # dropped even though the verify fetch got through.
+        res = self.client.options('/api/shield/telemetry/', HTTP_ORIGIN=self.CUSTOMER)
+        self.assertEqual(res['Access-Control-Allow-Origin'], self.CUSTOMER)
+        self.assertEqual(res['Access-Control-Allow-Credentials'], 'true')
+        self.assertIn('Origin', res['Vary'])
 
     def test_actual_post_carries_the_cors_header(self):
         res = self.client.post(
@@ -1760,15 +1769,15 @@ class PublicShieldCorsTests(APITestCase):
             format='json', HTTP_ORIGIN=self.CUSTOMER,
         )
         # Rejected on the key, but the browser must still be allowed to read it.
-        self.assertEqual(res['Access-Control-Allow-Origin'], '*')
+        self.assertEqual(res['Access-Control-Allow-Origin'], self.CUSTOMER)
 
     def test_telemetry_is_reachable_cross_origin(self):
         res = self.client.options('/api/shield/telemetry/', HTTP_ORIGIN=self.CUSTOMER)
-        self.assertEqual(res['Access-Control-Allow-Origin'], '*')
+        self.assertEqual(res['Access-Control-Allow-Origin'], self.CUSTOMER)
 
     def test_the_script_itself_is_reachable_cross_origin(self):
         res = self.client.options('/api/shield.js', HTTP_ORIGIN=self.CUSTOMER)
-        self.assertEqual(res['Access-Control-Allow-Origin'], '*')
+        self.assertEqual(res['Access-Control-Allow-Origin'], self.CUSTOMER)
 
     def test_a_malformed_api_key_is_rejected_not_a_500(self):
         # tracker_secret is a UUIDField: filtering on junk raised
