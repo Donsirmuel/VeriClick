@@ -18,11 +18,12 @@ export interface ChatMessage {
 
 export const QUICK_QUESTIONS = [
   'How does VeriClick work?',
+  'How do I verify my domain?',
   'How do I install the script?',
-  'How do I configure my shield?',
+  'How do redirect links work?',
   'How do I set up traffic rules?',
-  'How do I delete my account?',
   'How much does it cost?',
+  'How do I delete my account?',
   'How can I contact support?',
 ]
 
@@ -30,22 +31,32 @@ const TOPICS: ChatTopic[] = [
   {
     id: 'what-is',
     keywords: ['what is', 'whats', "what's", 'vericlick', 'about', 'product', 'do you do', 'purpose', 'tool'],
-    answer: `VeriClick is a website protection tool. You add a single script tag to your site, and every visitor is checked before they reach your page: IP allow/deny rules first, then bot detection via device signals, then rate limits. Real visitors pass through; suspicious requests are sent to a protected page. Every decision is recorded and explained in plain language on your dashboard.`,
+    answer: `VeriClick keeps bots away from two things: your site and your links. The anti-bot script checks every visitor before they reach one of your pages — IP allow/deny rules first, then bot detection from device signals, then rate limits. Smart redirect links do the same check on every click before forwarding someone to your destination. Real visitors pass through; suspicious ones are stopped or diverted. Every decision is recorded and explained in plain language on your dashboard.`,
   },
   {
     id: 'how-it-works',
     keywords: ['how', 'works', 'work', 'function', 'mechanism', 'process', 'flow', 'what happens', 'step by step'],
-    answer: `Here's the flow: 1) Add the VeriClick script tag to your site. 2) Configure your shield (strict, balanced, or monitor mode). 3) When someone visits your site, VeriClick checks the request against your IP rules, bot detection, and rate limits. 4) Real visitors pass through; flagged requests are sent to a protected page. You see all of it — visits, verdicts, and reasons — on the dashboard.`,
+    answer: `Here's the flow: 1) Add a domain under Domains and verify you own it. 2) Paste the script from the Anti-Bot page into your site's <head>, create a redirect link under Redirects, or both. 3) On every visit or click, VeriClick checks the request against your IP rules, then bot detection, then rate limits. 4) Real visitors pass through; flagged ones are blocked, diverted to a safe page, or just recorded — your choice. You see all of it — visits, clicks, verdicts and reasons — on the dashboard.`,
   },
   {
     id: 'install-script',
     keywords: ['install', 'script', 'install script', 'add script', 'script tag', 'embed', 'snippet', 'setup', 'getting started', 'first step'],
-    answer: `Go to the Install page in your dashboard and copy the script tag. Paste it into the <head> section of your website. That's it — VeriClick starts protecting your site immediately. No domain verification or DNS changes needed.`,
+    answer: `First add your domain under Domains and verify it — either by pasting a meta tag into your site or by adding a DNS record. Then open the Anti-Bot page, copy the script tag, and paste it into the <head> of your site. Once it is live, visit your own site and the visit will show up on your dashboard within a minute.`,
   },
   {
     id: 'configure-shield',
     keywords: ['shield', 'configure', 'configure shield', 'protection mode', 'strict', 'balanced', 'monitor', 'mode'],
-    answer: `Open the Shield page in your dashboard. Choose between Strict (block all suspicious traffic), Balanced (challenge suspicious visitors), or Monitor (log only, no blocking). Your rules, your site — you can change this anytime.`,
+    answer: `Open the Anti-Bot page in your dashboard. Protection mode sets how suspicious a visitor has to be: Strict (also stops VPNs and anything borderline), Balanced (stops confirmed bots — the recommended setting), or Monitor (records everything, stops nothing). Separately, bot action decides what happens to the ones it catches: show a block page, quietly send them to a safe page you nominate, or log only. You can change both at any time.`,
+  },
+  {
+    id: 'redirect-links',
+    keywords: ['redirect', 'redirect link', 'link', 'links', 'short link', 'shortener', 'slug', 'cname', 'dns', 'subdomain', 'destination', 'smart link'],
+    answer: `A smart redirect link is a short link on your own domain — something like go.yoursite.com/promo — that checks each click before forwarding it to your destination. Create one under Redirects: pick a verified domain, choose or generate a slug, and paste the destination. You'll get a CNAME record to add at your DNS provider, which is what points that subdomain at us. Links last as long as your plan period, and renewing extends the ones you already have. Deactivating or deleting a link takes it offline within a minute.`,
+  },
+  {
+    id: 'domains',
+    keywords: ['domain', 'domains', 'verify domain', 'verification', 'meta tag', 'txt record', 'add domain', 'limit', 'slot'],
+    answer: `Add a domain under Domains and verify you own it, using either a meta tag in your site's <head> or a DNS record. A verified domain can run the anti-bot script and back your redirect links — you only need one. Your plan sets how many you can have; subdomains of a domain you already have count as the same one, so go.yoursite.com does not cost you a second slot. Deleting a domain frees its slot immediately and removes any redirect link on it, which is why it asks you to confirm.`,
   },
   {
     id: 'ip-rules',
@@ -60,27 +71,27 @@ const TOPICS: ChatTopic[] = [
   {
     id: 'safe-destination',
     keywords: ['safe', 'destination', 'safe destination', 'safe page', 'divert', 'redirect', 'suspicious', 'protected page', 'neutral page'],
-    answer: `When VeriClick flags a request it never sends it to your real page and never returns a 403 — it redirects to the "page for blocked visitors" you set in Settings (Workspace). Leave it blank and VeriClick uses its own built-in "This site is protected" page instead. This keeps bots away from your real content while humans are unaffected.`,
+    answer: `Set bot action to "Redirect to safe page" on the Anti-Bot page and give it a safe destination URL — that is where flagged visitors go instead of your real content. Leave it blank and VeriClick uses its own built-in "This site is protected" page. Either way a bot never reaches your real page, and humans never notice a thing.`,
   },
   {
     id: 'dashboard',
     keywords: ['dashboard', 'stats', 'statistics', 'activity', 'traffic', 'chart', 'analytics', 'metrics', 'click', 'clicks'],
-    answer: `The dashboard shows your last 24 hours of traffic, how many visitors were blocked as bots, human visitor counts, protection status, a daily human/bot traffic chart, a live activity feed, and the blocked-IP review queue. Every entry explains why a request was let through or blocked.`,
+    answer: `The dashboard covers both halves together: the last 24 hours of traffic, how many were bots, a daily people-vs-bots chart over 7, 30 or 90 days, your top countries and devices, and a live activity feed of the most recent visits and clicks. Every entry explains why that request was let through or stopped. Use the domain picker at the top to narrow it to one site or link.`,
   },
   {
     id: 'pricing',
     keywords: ['price', 'pricing', 'cost', 'free', 'paid', 'plan', 'money', 'charge', 'billing', 'subscription', 'upgrade', 'premium', 'trial'],
-    answer: `VeriClick is paid from the start — there's no free tier. Pick Basic, Plus or Pro, and choose weekly (7 days) or monthly (30 days) access. Weekly starts at $25; monthly starts at $80 and works out cheaper per day. You pay once with crypto and renew manually — nothing auto-charges. See the Pricing page to compare, or Billing to upgrade.`,
+    answer: `VeriClick is paid from the start — there's no free tier. Pick Basic, Plus or Pro (they differ only by how many domains you can cover) and choose weekly (7 days) or monthly (30 days) access. Weekly starts at $25; monthly starts at $80 and works out cheaper per day. You pay once — card, bank transfer, mobile money or crypto — and renew when you want. Nothing auto-charges and there is no subscription. When a period ends, protection pauses and links stop forwarding until you renew; nothing is deleted, and any days you have left are added on top when you buy again. See the Pricing page to compare, or Billing & Plan to buy.`,
   },
   {
     id: 'site-script',
     keywords: ['script', 'site script', 'tracker', 'javascript', 'embed', 'install', 'snippet', 'browser signals', 'tracker.js', 'add script', 'script tag'],
-    answer: `The VeriClick script is a small tag you add to your site's <head> to start protecting it. You'll find the copy-ready snippet under Install in your dashboard. Paste it on your site and VeriClick handles the rest. Keep your token value private.`,
+    answer: `The VeriClick script is a small tag you add to your site's <head>. You'll find the copy-ready snippet on the Anti-Bot page in your dashboard, with step-by-step guides for WordPress, Shopify, Wix, Squarespace and Webflow. Your domain has to be verified first. Keep your site key private.`,
   },
   {
     id: 'get-started',
     keywords: ['start', 'get started', 'begin', 'setup', 'onboarding', 'first', 'beginner', 'tutorial', 'guide', 'quick start'],
-    answer: `To get started: 1) Create an account (free, no card) and click the verification link we email you. 2) Go to Install and copy the script tag. 3) Paste it in your site's <head>. 4) Configure your shield on the Shield page. 5) Watch your dashboard for live traffic. Your dashboard has a step-by-step onboarding checklist that walks you through all of it.`,
+    answer: `To get started: 1) Create an account and click the verification link we email you. 2) Choose a plan on the Billing & Plan page. 3) Add your domain under Domains and verify it. 4) Paste the script from the Anti-Bot page into your site's <head>, and/or create a link under Redirects and add the CNAME record it gives you. 5) Visit your own site and open your own link, then watch them appear on the dashboard. Your dashboard has a checklist that walks you through all of it.`,
   },
   {
     id: 'account',
@@ -90,12 +101,12 @@ const TOPICS: ChatTopic[] = [
   {
     id: 'contact',
     keywords: ['contact', 'support', 'help me', 'email', 'reach', 'reach out', 'talk', 'human', 'report', 'issue', 'bug', 'problem', 'helpdesk'],
-    answer: `You can reach a human through the Contact page on the site (link in the footer, or the "Contact" link at the top of this widget). For instant answers, I can help right here — just ask about the script, shield, IP rules, blocked traffic, or pricing.`,
+    answer: `You can reach a human through the Contact page on the site (link in the footer, or the "Contact" link at the top of this widget). For instant answers, I can help right here — just ask about domains, the script, redirect links, traffic rules, blocked traffic, or pricing.`,
   },
   {
     id: 'data-privacy',
     keywords: ['privacy', 'data', 'gdpr', 'collect', 'tracking', 'information', 'stored', 'ip address', 'user agent', 'personal data'],
-    answer: `VeriClick stores what it needs to protect your site: account details (username/email), and for each visit the IP address, user agent, and location where available. This data powers the bot detection and your dashboard analytics. Your configuration is only visible to you.`,
+    answer: `VeriClick stores what it needs to protect you: your account details (username and email), and for each visit or click the IP address, user agent, device type and location where available. That data is what the bot detection and your dashboard run on. We never see your card details — payments go through our payment provider. Your configuration and traffic are visible only to you, and closing your account in Settings removes all of it permanently.`,
   },
   {
     id: 'technical',
@@ -104,7 +115,7 @@ const TOPICS: ChatTopic[] = [
   },
 ]
 
-const FALLBACK_ANSWER = `I'm not sure I can answer that one yet. I'm best with questions about the script, shield configuration, IP rules, blocked traffic, the dashboard, pricing, and your account. For anything else, use the Contact page (link in the footer) or open the Help page in your dashboard.`
+const FALLBACK_ANSWER = `I'm not sure I can answer that one yet. I'm best with questions about domains, the anti-bot script, redirect links, traffic rules, blocked traffic, the dashboard, pricing, and your account. For anything else, use the Contact page (link in the footer) or open the Help page in your dashboard.`
 
 function tokenize(text: string): Set<string> {
   return new Set(text.split(' ').filter(Boolean))

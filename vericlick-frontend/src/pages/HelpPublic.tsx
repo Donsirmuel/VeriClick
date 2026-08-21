@@ -6,53 +6,83 @@ import { PublicFooter } from '@/components/PublicFooter'
 
 const sections = [
   {
-    icon: Globe02Icon,
-    title: 'Script Installation',
+    icon: ShieldIcon,
+    title: 'What VeriClick does',
     body: (
       <>
-        Your site is protected by a single <strong>&lt;script&gt;</strong> tag — no custom domains, no DNS changes.
-        Copy the script tag from the <strong>Install</strong> page and paste it in your site's{' '}
-        <span className="font-mono text-xs bg-neutral-800 px-1 rounded">&lt;head&gt;</span>.
-        That's it — VeriClick starts collecting visitor signals and blocking bots automatically.
+        VeriClick has two halves that share one bot-detection engine. The <strong>anti-bot script</strong> protects
+        pages on your own site. <strong>Smart redirect links</strong> are short links on your domain that check a
+        visitor before forwarding them to wherever you are sending them. Use either on its own, or both — a single
+        verified domain covers the two.
+      </>
+    ),
+  },
+  {
+    icon: Globe02Icon,
+    title: 'Adding a domain',
+    body: (
+      <>
+        Everything starts with a domain you own. Add it in <strong>Domains</strong> and verify it, either by pasting
+        a meta tag into your site's{' '}
+        <span className="font-mono text-xs bg-neutral-800 px-1 rounded">&lt;head&gt;</span> or by adding a DNS record —
+        whichever is easier for you. Verification is what proves the domain is yours, so nobody else can protect it or
+        build links on it.
       </>
     ),
   },
   {
     icon: LinkSquare02Icon,
-    title: 'Bot Detection',
+    title: 'The anti-bot script',
     body: (
       <>
-        The script collects device signals — browser fingerprint, mouse movement, click timing, and more — and sends them
-        for analysis on every page load. Visitors flagged as bots are shown a challenge page instead of your real content.
-        Legitimate visitors pass through with no friction.
+        One <strong>&lt;script&gt;</strong> tag, pasted into your site's{' '}
+        <span className="font-mono text-xs bg-neutral-800 px-1 rounded">&lt;head&gt;</span>. It reads signals from each
+        visitor — the browser they claim to be, how the page is being used, where the request came from — and decides
+        whether it is a person. You choose what happens to the ones that are not: block them, quietly send them to a
+        safe page of your choosing, or record them and let them through while you watch.
+      </>
+    ),
+  },
+  {
+    icon: ArrowRight02Icon,
+    title: 'Smart redirect links',
+    body: (
+      <>
+        A redirect link lives on a subdomain of yours — something like{' '}
+        <span className="font-mono text-xs bg-neutral-800 px-1 rounded">go.yoursite.com/promo</span> — and points
+        wherever you want. Pointing that subdomain at us takes one CNAME record, which we show you when you create the
+        link. Every click is checked before it is forwarded, so the traffic that reaches your destination is traffic
+        worth having.
       </>
     ),
   },
   {
     icon: ShieldIcon,
-    title: 'IP Rules',
+    title: 'IP and country rules',
     body: (
       <>
-        Every computer has a unique number on the internet called an <strong>IP address</strong>. IP Rules let you allow
-        or block specific addresses from reaching your site. <strong>Allow</strong> rules are checked first and always win,
-        so whitelisted addresses are never flagged again. <strong>Deny</strong> rules are checked next, followed by automatic
-        bot detection and rate limits.
+        Every device on the internet has an address called an <strong>IP address</strong>. IP rules let you allow or
+        block specific ones by hand. <strong>Allow</strong> rules are checked first and always win, so an address you
+        trust is never flagged again. <strong>Deny</strong> rules come next, then automatic bot detection and rate
+        limits. Country rules work the same way for whole regions.
       </>
     ),
   },
   {
     icon: DashboardSquare01Icon,
     title: 'Dashboard',
-    body: 'Shows your traffic, recent activity, and how many bots have been detected and blocked. The numbers update automatically as visitors interact with your site.',
+    body: 'One view over both halves: visits to your protected pages and clicks on your links, how many were bots, where they came from, and what was decided about each one. It fills in as traffic arrives — usually within a minute.',
   },
   {
     icon: UserIcon,
-    title: 'Your account',
+    title: 'Plans and your account',
     body: (
       <>
-        Your login email is shown in <strong>Settings → Account</strong>. You can close your account there too — it removes
-        your workspace, sites, and traffic data permanently. It asks you to type DELETE to confirm, so it can't
-        happen by accident.
+        Plans are one-time payments for a fixed stretch of access — 7 or 30 days — with no subscription and no automatic
+        renewal. We email you before your access runs out; when it does, protection pauses and links stop forwarding
+        until you renew, and nothing is deleted. Days you have not used carry over when you buy again. You can close
+        your account any time in <strong>Settings → Account</strong>; it removes your workspace, domains, links and
+        traffic data permanently, and asks you to type DELETE so it cannot happen by accident.
       </>
     ),
   },
@@ -62,38 +92,48 @@ const tutorialSteps = [
   {
     title: 'Create your account',
     steps: [
-      <>Sign up with your email and confirm the verification link we send you — accounts have to be verified before you can log in.</>,
+      <>Sign up with your email, or with Google.</>,
+      <>Confirm the verification link we send you — accounts have to be verified before you can log in.</>,
+    ],
+  },
+  {
+    title: 'Choose a plan',
+    steps: [
+      <>Pick a tier by how many domains you need to cover; every tier has the same features.</>,
+      <>Choose 7 or 30 days and pay once — by card, bank transfer, mobile money or crypto.</>,
+      <>Access starts as soon as the payment clears. Nothing renews on its own.</>,
+    ],
+  },
+  {
+    title: 'Add and verify your domain',
+    steps: [
+      <>Open <strong>Domains</strong> and add the domain you want to cover.</>,
+      <>Verify it with the meta tag or the DNS record we give you — whichever suits your setup.</>,
+      <>Once it is verified, that one domain can run the anti-bot script and back your redirect links.</>,
     ],
   },
   {
     title: 'Install the script',
     steps: [
-      <>Open <strong>Install</strong> and copy the script tag VeriClick generates for you.</>,
-      <>Paste it inside the <strong>&lt;head&gt;</strong> of your website and deploy your changes.</>,
-      <>The script starts collecting visitor signals immediately — no further configuration needed.</>,
+      <>Open <strong>Anti-Bot</strong> and copy the script tag generated for your site.</>,
+      <>Paste it inside the <strong>&lt;head&gt;</strong> of your site and deploy. There are step-by-step guides for WordPress, Shopify, Wix, Squarespace and Webflow.</>,
+      <>Visit your own site once, then check the <strong>Dashboard</strong> — your visit should appear within a minute.</>,
     ],
   },
   {
-    title: 'Test it',
+    title: 'Create a redirect link',
     steps: [
-      <>Visit your site in a normal browser — you should see your pages load as usual.</>,
-      <>Open the <strong>Dashboard</strong> to confirm traffic is being captured in real time.</>,
-      <>Try accessing your site with a known bot tool — it should be flagged and shown a challenge page.</>,
+      <>Open <strong>Redirects</strong> and choose your verified domain, a short slug, and the destination.</>,
+      <>Add the CNAME record we show you at your DNS provider — this is what points the subdomain at us.</>,
+      <>Open the finished link yourself to confirm it forwards, then share it.</>,
     ],
   },
   {
-    title: 'Configure protection',
+    title: 'Tune it, then watch it',
     steps: [
-      <>Under <strong>IP Rules</strong>, add allow/deny rules for specific addresses as needed.</>,
-      <>Adjust challenge and rate-limit settings to match your traffic patterns.</>,
-      <>Review blocked IPs regularly and whitelist trusted sources.</>,
-    ],
-  },
-  {
-    title: 'Watch the dashboard',
-    steps: [
-      <>Your traffic chart, activity feed, and blocked-bot count update automatically.</>,
-      <>Review blocked IPs and add allow/deny rules under <strong>IP Rules</strong> so good visitors keep flowing.</>,
+      <>In <strong>Anti-Bot</strong>, decide what happens to bots: block, send to a safe page, or log only.</>,
+      <>In <strong>Traffic Rules</strong>, add IP or country rules, and allow anything you know is friendly.</>,
+      <>Check the dashboard as traffic builds — the activity feed shows what was decided about each visitor and why.</>,
     ],
   },
 ]

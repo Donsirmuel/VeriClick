@@ -4,15 +4,19 @@ import { PublicFooter } from '@/components/PublicFooter'
 const SECTIONS = [
   {
     title: 'The service',
-    body: 'VeriClick is a website-protection service. It provides website protection and bot detection through a single script tag, diverts suspicious traffic to a safe page, and provides analytics in a dashboard. It is a product of MAILIONDEV TECHNOLOGY LTD (RC 9233525), referred to below as "VeriClick".',
+    body: 'VeriClick is a traffic-protection service with two parts. An anti-bot script, added to pages you own, detects automated visitors and can divert them to a safe page. Smart redirect links route clicks through our edge network, applying the same checks before forwarding a visitor to your destination. Both report into a dashboard. It is a product of MAILIONDEV TECHNOLOGY LTD (RC 9233525), referred to below as "VeriClick".',
   },
   {
     title: 'Accounts',
     body: 'You must provide accurate account information and keep your credentials secure. You are responsible for everything that happens under your account, including any sites you protect and the pages they point to. One free workspace is created per account.',
   },
   {
-    title: 'Plans',
-    body: 'A plan is required to manage site protection. Paid plans are billed monthly through our payment provider.',
+    title: 'Plans and payment',
+    body: 'A paid plan is required to protect a site or run a redirect link. Plans are sold as one-time payments for a fixed period of access — 7 days or 30 days, whichever you choose at checkout. There is no automatic renewal and no recurring charge: nothing is taken from you again unless you buy another period yourself. Payments are handled by our payment provider, who receives the details needed to process them; we never see or store your card details.',
+  },
+  {
+    title: 'When a period ends',
+    body: 'Access lasts exactly as long as the period you paid for. When it ends, bot protection stops and redirect links stop forwarding visitors — there is no grace period beyond the paid date. We email you before the period ends and again when it does. Nothing is deleted: your domains, links, settings and traffic history remain, and buying another period restores them on the same links your visitors already have. Time you have not used is never taken away — if you buy again before your current period ends, the new period is added to the days you have left.',
   },
   {
     title: 'Acceptable use',

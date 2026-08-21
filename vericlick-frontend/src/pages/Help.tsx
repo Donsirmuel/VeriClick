@@ -4,53 +4,78 @@ import { Globe02Icon, LinkSquare02Icon, ShieldIcon, DashboardSquare01Icon, Arrow
 
 const sections = [
   {
-    icon: Globe02Icon,
-    title: 'Script Installation',
+    icon: ShieldIcon,
+    title: 'The two halves',
     body: (
       <>
-        Your site is protected by a single <strong>&lt;script&gt;</strong> tag — no custom domains, no DNS changes.
-        Copy the script tag from the <strong>Install</strong> page and paste it in your site's{' '}
-        <span className="font-mono text-xs bg-neutral-100 px-1 rounded">&lt;head&gt;</span>.
-        That's it — VeriClick starts collecting visitor signals and blocking bots automatically.
+        The <strong>anti-bot script</strong> protects pages on your own site. <strong>Smart redirect links</strong> are
+        short links on your domain that check a visitor before forwarding them on. Both run through the same detection
+        engine, and one verified domain covers the two — use either, or both.
+      </>
+    ),
+  },
+  {
+    icon: Globe02Icon,
+    title: 'Domains',
+    body: (
+      <>
+        Everything starts with a domain you own. Add it under <strong>Domains</strong> and verify it with the meta tag
+        or the DNS record — whichever is easier. Verification proves the domain is yours. Deleting a domain frees its
+        slot straight away and removes any redirect link on it, so you are asked to confirm first.
       </>
     ),
   },
   {
     icon: LinkSquare02Icon,
-    title: 'Bot Detection',
+    title: 'The anti-bot script',
     body: (
       <>
-        The script collects device signals — browser fingerprint, mouse movement, click timing, and more — and sends them
-        for analysis on every page load. Visitors flagged as bots are shown a challenge page instead of your real content.
-        Legitimate visitors pass through with no friction.
+        One <strong>&lt;script&gt;</strong> tag from the <strong>Anti-Bot</strong> page, pasted into your site's{' '}
+        <span className="font-mono text-xs bg-neutral-100 px-1 rounded">&lt;head&gt;</span>. It reads signals from each
+        visitor and decides whether it is a person. You choose what happens to the rest: block them, send them quietly
+        to a safe page you nominate, or just record them and let them through.
+      </>
+    ),
+  },
+  {
+    icon: ArrowRight02Icon,
+    title: 'Redirect links',
+    body: (
+      <>
+        A link like <span className="font-mono text-xs bg-neutral-100 px-1 rounded">go.yoursite.com/promo</span> that
+        points wherever you choose. Creating one gives you a CNAME record to add at your DNS provider — that is what
+        points the subdomain at us. Every click is checked before it is forwarded. Links last as long as your plan
+        period, and renewing extends the ones you already have.
       </>
     ),
   },
   {
     icon: ShieldIcon,
-    title: 'IP Rules',
+    title: 'Traffic rules',
     body: (
       <>
-        Every computer has a unique number on the internet called an <strong>IP address</strong>. IP Rules let you allow
-        or block specific addresses from reaching your site. <strong>Allow</strong> rules are checked first and always win,
-        so whitelisted addresses are never flagged again. <strong>Deny</strong> rules are checked next, followed by automatic
-        bot detection and rate limits.
+        Every device on the internet has an address called an <strong>IP address</strong>. IP rules let you allow or
+        block specific ones. <strong>Allow</strong> rules are checked first and always win, so an address you trust is
+        never flagged again. <strong>Deny</strong> rules come next, then automatic detection and rate limits. Country
+        and device rules work the same way.
       </>
     ),
   },
   {
     icon: DashboardSquare01Icon,
     title: 'Dashboard',
-    body: 'Shows your traffic, recent activity, and how many bots have been detected and blocked. The numbers update automatically as visitors interact with your site.',
+    body: 'Visits to your protected pages and clicks on your links, together: how many were bots, which countries and devices they came from, and what was decided about each one. New traffic usually appears within a minute.',
   },
   {
     icon: UserIcon,
-    title: 'Your account',
+    title: 'Plan and account',
     body: (
       <>
-        Your login email is shown in <strong>Settings → Account</strong>. You can close your account there too — it removes
-        your workspace, sites, and traffic data permanently. It asks you to type DELETE to confirm, so it can't
-        happen by accident.
+        Plans are one-time payments for 7 or 30 days — no subscription, nothing renews on its own. We email you before
+        your access ends; when it does, protection pauses and links stop forwarding until you renew, and nothing is
+        deleted. Unused days carry over when you buy again. You can close your account in{' '}
+        <strong>Settings → Account</strong>; it removes your workspace, domains, links and traffic data permanently,
+        and asks you to type DELETE so it cannot happen by accident.
       </>
     ),
   },
@@ -62,7 +87,7 @@ export default function HelpPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-8">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Help & Docs</h1>
-          <p className="text-sm text-muted mt-1">Everything you need to protect your website with VeriClick.</p>
+          <p className="text-sm text-muted mt-1">How VeriClick protects your site and your links.</p>
         </div>
       </div>
 
@@ -88,19 +113,19 @@ export default function HelpPage() {
         <ol className="space-y-3 text-sm text-neutral-300 leading-relaxed">
           <li className="flex gap-3">
             <span className="w-6 h-6 rounded-full bg-white text-black text-xs font-bold flex items-center justify-center shrink-0">1</span>
-            <span>Go to <strong>Install</strong> and copy the script tag</span>
+            <span>Add your domain under <strong>Domains</strong> and verify it</span>
           </li>
           <li className="flex gap-3">
             <span className="w-6 h-6 rounded-full bg-white text-black text-xs font-bold flex items-center justify-center shrink-0">2</span>
-            <span>Paste it in your site's <strong>&lt;head&gt;</strong> and deploy</span>
+            <span>Copy the script tag from <strong>Anti-Bot</strong> into your site's <strong>&lt;head&gt;</strong> and deploy</span>
           </li>
           <li className="flex gap-3">
             <span className="w-6 h-6 rounded-full bg-white text-black text-xs font-bold flex items-center justify-center shrink-0">3</span>
-            <span>VeriClick starts collecting visitor signals automatically</span>
+            <span>Create a link under <strong>Redirects</strong> and add the CNAME record it gives you</span>
           </li>
           <li className="flex gap-3">
             <span className="w-6 h-6 rounded-full bg-white text-black text-xs font-bold flex items-center justify-center shrink-0">4</span>
-            <span>Check the <strong>Dashboard</strong> to see traffic and blocked bots</span>
+            <span>Visit your own site and open your own link, then check the <strong>Dashboard</strong> — both should show up within a minute</span>
           </li>
         </ol>
       </div>

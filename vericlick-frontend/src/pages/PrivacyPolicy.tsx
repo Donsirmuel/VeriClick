@@ -7,7 +7,8 @@ const SECTIONS = [
     body: [
       'Account information: your username and email address, plus the password you choose (stored as a secure hash). If you sign in with Google, we store the email Google provides.',
       'Workspace data: your workspace name, the sites you protect, and their protected pages.',
-      'Click logs: for every visit to a protected page we record the IP address, user agent, and (where available) the country/region/city. This data powers bot detection and the dashboard analytics.',
+      'Click logs: for every visit to a protected page we record the IP address, user agent, device type, and (where available) the country/region/city. This data powers bot detection and the dashboard analytics.',
+      'Redirect click logs: when someone clicks one of your smart redirect links, our edge network records the same details before forwarding them to your destination. Visitors are not tracked after they arrive there.',
       'Tracker events (optional): if you install the protection script on pages you own, it sends browser signals (language, timezone, screen size, engagement) back to VeriClick.',
       'IP rules: the allow/deny rules and blocked-IP review records you create in your workspace.',
     ],
@@ -24,6 +25,7 @@ const SECTIONS = [
     title: 'What we do not do',
     body: [
       'We do not sell your personal data.',
+      'We do not see or store your card details. Payments are processed by our payment provider, who receives your email address and the plan you bought in order to take the payment and issue a receipt.',
       'We do not run third-party advertising or analytics trackers on the VeriClick site.',
       'Your protected sites and their traffic data are visible only to you and your workspace.',
     ],
@@ -31,8 +33,9 @@ const SECTIONS = [
   {
     title: 'Data retention & deletion',
     body: [
-      'We keep your data for as long as your account is active. If you delete your account, we remove your workspace data (protected sites, rules, and traffic logs) and your account details.',
-      'Contact us to request account deletion at any time.',
+      'We keep your data for as long as your account is active.',
+      'You can delete your account yourself at any time, from Settings. Doing so removes your account and everything in your workspace — protected sites, redirect links, rules, settings, traffic logs and billing history — and it cannot be undone. Redirect links stop working within a minute of deletion.',
+      'If you would rather we did it for you, or you want a copy of your data first, contact us.',
     ],
   },
   {

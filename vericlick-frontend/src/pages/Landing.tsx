@@ -185,12 +185,13 @@ function FloatingParticles() {
 const HERO_POINTS = [
   { title: 'Simple plans', desc: 'Basic, Plus, and Pro.' },
   { title: 'IP allow/deny rules', desc: 'Allow rules always win.' },
-  { title: 'Instant setup', desc: 'One script tag, zero DNS changes.' },
+  { title: 'Two ways in', desc: 'A script tag, a redirect link, or both.' },
   { title: 'Every decision explained', desc: 'Plain-language reasons.' },
 ]
 
 const FEATURES = [
-  { icon: LinkSquare02Icon, title: 'Script-based protection', desc: 'Paste one script tag into your site\'s head. Every visitor is verified before your page loads — no link creation, no DNS changes.' },
+  { icon: LinkSquare02Icon, title: 'Script-based protection', desc: 'Paste one script tag into your site\'s head. Every visitor is verified before your page loads — no DNS changes needed.' },
+  { icon: ArrowRight01Icon, title: 'Smart redirect links', desc: 'Short links on your own domain that check every click before forwarding it. Bots are stopped at the link; real people reach your destination.' },
   { icon: FingerPrintIcon, title: 'Device fingerprinting', desc: 'Canvas fingerprinting, mouse trajectory analysis, and TLS fingerprinting identify real users from automated traffic in milliseconds.' },
   { icon: LockIcon, title: 'IP rules', desc: 'Allow trusted addresses through and deny known-bad ones. Allow rules are checked first and always win, so whitelisted IPs are never flagged again.' },
   { icon: Globe02Icon, title: 'Real-time bot detection', desc: 'Every visitor is analyzed in real time against known bot signatures, behavioral patterns, and proof-of-work challenges.' },
@@ -199,14 +200,14 @@ const FEATURES = [
 ]
 
 const STEPS = [
-  { step: 1, title: 'Paste one line of code', desc: 'Copy the VeriClick script snippet and paste it into your site\'s <head>. Works with any platform — HTML, WordPress, Shopify, Next.js.', icon: LinkSquare02Icon },
-  { step: 2, title: 'Every visitor is checked', desc: 'When someone visits, VeriClick collects device signals, checks IP allow/deny rules, runs bot detection, and applies rate limits.', icon: FingerPrintIcon },
-  { step: 3, title: 'Bots blocked, humans through', desc: 'Real visitors see your site instantly. Suspicious traffic is blocked before your page loads — and the reason is logged.', icon: ShieldIcon },
+  { step: 1, title: 'Verify your domain', desc: 'Add the domain you want to cover and prove it is yours with a meta tag or a DNS record. One verified domain covers both the script and your links.', icon: Globe02Icon },
+  { step: 2, title: 'Add the script, a link, or both', desc: 'Paste the snippet into your site\'s <head> — HTML, WordPress, Shopify, Next.js, anything — or create a short link on your domain and point it wherever you like.', icon: LinkSquare02Icon },
+  { step: 3, title: 'Bots stopped, humans through', desc: 'Every visit and every click is checked against your rules, then bot detection, then rate limits. Real visitors never notice; everything else is logged with a reason.', icon: ShieldIcon },
 ]
 
 const USE_CASES = [
   { title: 'E-commerce stores', desc: 'Protect product pages and checkout flows from scalper bots, credential stuffing, and inventory scrapers.', icon: UserGroupIcon },
-  { title: 'Website operations', desc: 'Configure protection, IP rules, and visitor analytics in one dashboard. No DNS changes, no domain setup.', icon: Activity01Icon },
+  { title: 'Paid traffic and campaigns', desc: 'Send ad clicks through a redirect link so bot traffic is filtered out before it ever reaches your landing page — or your ad budget.', icon: Activity01Icon },
   { title: 'Traffic review', desc: 'Inspect who visits your site, see why anyone was blocked, and whitelist a mistake in one click.', icon: EyeIcon },
   { title: 'Automation bursts', desc: 'Slow and divert bursts of automated requests with rate limiting and proof-of-work challenges so they never reach your page.', icon: ZapIcon },
 ]
@@ -272,10 +273,11 @@ export default function Landing() {
               </h1>
 
               <p className="text-lg md:text-xl text-neutral-400 mb-10 leading-relaxed max-w-lg opacity-0" style={{ animation: 'fade-in-up 0.6s ease-out 0.35s forwards' }}>
-                VeriClick protects your website from bots and suspicious traffic. Paste one script tag
-                into your site's head, and every visitor is checked — device fingerprinting first,
-                then bot detection, then rate limits. Humans get through; bots are blocked before your page loads.
-                Simple plans, from just $25/month.
+                VeriClick keeps bots away from your website and your links. Paste one script tag into
+                your site's head, or send clicks through a short link on your own domain — either way
+                every visitor is checked before they get anywhere: device fingerprinting first, then bot
+                detection, then rate limits. Humans get through; bots never reach you.
+                Simple plans, from $25 a week or $80 a month.
               </p>
 
               <div className="flex flex-col sm:flex-row items-center gap-4 mb-14 opacity-0" style={{ animation: 'fade-in-up 0.6s ease-out 0.45s forwards' }}>
