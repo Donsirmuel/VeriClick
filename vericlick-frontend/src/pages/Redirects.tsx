@@ -14,6 +14,7 @@ import {
   getVerifyChallenge, confirmVerification,
   verifyRedirectDomainCname, fetchWorkspace,
 } from '@/api/workspace'
+import type { CnameCheckResult } from '@/api/workspace'
 import type { RedirectRoute } from '@/types'
 import { parseApiError } from '@/lib/errors'
 import { DashboardSkeleton } from '@/components/ui/DashboardSkeleton'
@@ -115,7 +116,7 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
   const [subRoot, setSubRoot] = useState('')
   const [manualDomain, setManualDomain] = useState(false)
   const [verifyMethod, setVerifyMethod] = useState<'html_meta' | 'dns_txt'>('html_meta')
-  const [cnameResult, setCnameResult] = useState<{ cname_ok: boolean; target: string | null; detail: string } | null>(null)
+  const [cnameResult, setCnameResult] = useState<CnameCheckResult | null>(null)
 
   const { data: redirectDomains } = useQuery({
     queryKey: ['redirect-domains'],
@@ -155,14 +156,14 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
 
   const cnameVerifyMutation = useMutation({
     mutationFn: () => verifyRedirectDomainCname(domainId),
-    onSuccess: (data: { cname_ok: boolean; target: string | null; detail: string }) => {
+    onSuccess: (data: CnameCheckResult) => {
       setCnameResult(data)
-      if (data.cname_ok) {
+      if (data.cnameOk) {
         toast.success('CNAME verified!')
       }
     },
     onError: () => {
-      setCnameResult({ cname_ok: false, target: null, detail: 'DNS lookup failed. Try again in a few minutes.' })
+      setCnameResult({ cnameOk: false, target: null, detail: 'DNS lookup failed. Try again in a few minutes.' })
     },
   })
 
@@ -556,7 +557,7 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
               </div>
 
               {cnameResult && (
-                <div className={`p-3 rounded-xl text-xs font-bold ${cnameResult.cname_ok
+                <div className={`p-3 rounded-xl text-xs font-bold ${cnameResult.cnameOk
                     ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                     : 'bg-amber-50 text-amber-700 border border-amber-200'
                   }`}>

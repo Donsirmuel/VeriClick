@@ -315,22 +315,144 @@ function StepScript({ domain, onDone }: { domain: Domain; onDone: () => void }) 
 // Step 4 — Create the redirect link
 // --------------------------------------------------------------------------
 
-function StepRedirect({ domain, onDone }: { domain: Domain; onDone: () => void }) {
+function StepLinkAddress({ protectedDomain, existing, onDone }: {
+  protectedDomain: Domain
+  existing: RedirectDomain | null
+  onDone: () => void
+}) {
+  const queryClient = useQueryClient()
+  const [prefix, setPrefix] = useState('go')
+
+  // The link cannot live on the protected site's own hostname: pointing that
+  // at our edge would take their website off their server. Build a subdomain
+  // on the same registrable domain instead.
+  const parts = protectedDomain.domain.split('.')
+  const root = parts.length > 2 ? parts.slice(1).join('.') : protectedDomain.domain
+  const linkHost = existing?.domain ?? (prefix ? `${prefix}.${root}` : '')
+
+  const add = useMutation({
+    mutationFn: () => addRedirectDomain(linkHost),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['redirect-domains'] })
+      toast.success(`${linkHost} added — now point it at us`)
+    },
+    onError: (err) => toast.error(parseApiError(err) || 'Could not add that address'),
+  })
+
+  const check = useMutation({
+    mutationFn: () => verifyRedirectDomainCname(existing!.id),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['redirect-domains'] })
+      if (result.cnameOk) {
+        toast.success('DNS is pointing at us — address verified')
+        onDone()
+      } else {
+        toast.error(result.detail || 'DNS is not pointing at us yet')
+      }
+    },
+    onError: () => toast.error('DNS lookup failed. Try again in a few minutes.'),
+  })
+
+  return (
+    <div>
+      <h1 className="text-xl font-bold text-slate-900 mb-1">Pick your link address</h1>
+      <p className="text-sm text-neutral-500 mb-5">
+        Your link needs its own address — a subdomain of{' '}
+        <strong>{root}</strong>. We can't use {protectedDomain.domain} itself, because
+        that's where your website lives and it has to keep pointing at your own host.
+      </p>
+
+      {!existing ? (
+        <>
+          <div className="flex items-center gap-2 mb-3">
+            <input
+              type="text"
+              value={prefix}
+              onChange={(e) => setPrefix(e.target.value.replace(/[^a-zA-Z0-9-]/g, '').toLowerCase().slice(0, 63))}
+              aria-label="Subdomain prefix"
+              className="w-24 bg-slate-50 border border-neutral-200 rounded-xl px-3 py-3 text-sm text-center font-mono focus:outline-none focus:border-black"
+            />
+            <span className="text-sm text-neutral-400 font-mono">.</span>
+            <span className="flex-1 min-w-0 truncate text-sm font-mono text-slate-700 bg-slate-50 border border-neutral-200 rounded-xl px-3 py-3">
+              {root}
+            </span>
+          </div>
+
+          <div className="flex flex-wrap gap-1.5 mb-5">
+            {['go', 't', 'link', 'r'].map((p) => (
+              <button
+                key={p}
+                type="button"
+                onClick={() => setPrefix(p)}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold font-mono transition-colors ${
+                  prefix === p ? 'bg-black text-white' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                }`}
+              >
+                {p}.
+              </button>
+            ))}
+          </div>
+
+          <button
+            onClick={() => linkHost && add.mutate()}
+            disabled={!prefix || add.isPending}
+            className="w-full bg-black hover:bg-neutral-800 text-white py-3 rounded-xl text-sm font-bold transition-all disabled:opacity-50"
+          >
+            {add.isPending ? 'Adding…' : `Use ${linkHost || '…'}`}
+          </button>
+        </>
+      ) : (
+        <>
+          <div className="bg-slate-50 border border-neutral-200 rounded-xl p-4 mb-4">
+            <p className="text-sm font-bold text-slate-900 mb-1">
+              Add this record at your DNS provider
+            </p>
+            <p className="text-xs text-neutral-500 mb-3">
+              This is the same place you manage your domain — Cloudflare, Namecheap,
+              GoDaddy, wherever you bought it.
+            </p>
+            <div className="bg-slate-900 text-emerald-400 text-xs font-mono p-3 rounded-lg space-y-1 overflow-x-auto">
+              <div><span className="text-neutral-400">Type: </span>CNAME</div>
+              <div><span className="text-neutral-400">Name: </span>{existing.domain.split('.')[0]}</div>
+              <div><span className="text-neutral-400">Value:</span> edge.vericlick.cc</div>
+              <div><span className="text-neutral-400">TTL:  </span>Auto</div>
+            </div>
+          </div>
+
+          <p className="text-xs text-neutral-500 mb-5">
+            Only <span className="font-mono">{existing.domain}</span> moves — {protectedDomain.domain}{' '}
+            and your email keep working exactly as they do now. DNS usually updates within
+            a few minutes.
+          </p>
+
+          <button
+            onClick={() => check.mutate()}
+            disabled={check.isPending}
+            className="w-full bg-black hover:bg-neutral-800 text-white py-3 rounded-xl text-sm font-bold transition-all disabled:opacity-50"
+          >
+            {check.isPending ? 'Checking DNS…' : "I've added it — check DNS"}
+          </button>
+        </>
+      )}
+    </div>
+  )
+}
+
+function StepDestination({ linkDomain, onDone }: { linkDomain: RedirectDomain; onDone: () => void }) {
   const queryClient = useQueryClient()
   const [destinationUrl, setDestinationUrl] = useState('')
   const [slug, setSlug] = useState('')
 
   const create = useMutation({
     mutationFn: () => createRedirectRoute({
-      domainId: domain.id,
+      domainId: linkDomain.id,
       slug,
       destinationUrl,
       botAction: 'honeypot',
     }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['redirect-routes'] })
-      queryClient.invalidateQueries({ queryKey: ['domains'] })
-      toast.success('Your redirect link is live')
+      toast.success('Your link is live')
       onDone()
     },
     onError: (err) => toast.error(parseApiError(err) || 'Could not create the link'),
@@ -340,13 +462,13 @@ function StepRedirect({ domain, onDone }: { domain: Domain; onDone: () => void }
 
   return (
     <div>
-      <h1 className="text-xl font-bold text-slate-900 mb-1">Create your redirect link</h1>
+      <h1 className="text-xl font-bold text-slate-900 mb-1">Where should the link send people?</h1>
       <p className="text-sm text-neutral-500 mb-5">
-        A link on <strong>{domain.domain}</strong> that sends real people to your page and
-        traps bots instead.
+        Real visitors get forwarded here. Bots get a decoy page instead and never
+        reach it.
       </p>
 
-      <label className="text-sm font-bold text-slate-900 block mb-1">Where should people land?</label>
+      <label className="text-sm font-bold text-slate-900 block mb-1">Destination</label>
       <input
         type="url"
         value={destinationUrl}
@@ -364,10 +486,13 @@ function StepRedirect({ domain, onDone }: { domain: Domain; onDone: () => void }
         placeholder="offer"
         className="w-full bg-slate-50 border border-neutral-200 rounded-xl px-4 py-3 text-sm font-mono focus:outline-none focus:border-black mb-2"
       />
-      <p className="text-xs text-neutral-500 mb-5">
-        Your link will be{' '}
-        <span className="font-mono text-slate-700">{domain.domain}{slug ? `/${slug}` : ''}</span>
-      </p>
+
+      <div className="bg-slate-50 border border-neutral-200 rounded-xl p-3 mb-5">
+        <p className="text-xs text-neutral-500 mb-0.5">Your finished link</p>
+        <p className="text-sm font-mono text-slate-900 break-all">
+          {linkDomain.domain}{slug ? `/${slug}` : ''}
+        </p>
+      </div>
 
       <button
         onClick={() => create.mutate()}
@@ -405,6 +530,9 @@ export default function Onboarding() {
   const { data: routes } = useQuery({
     queryKey: ['redirect-routes'], queryFn: fetchRedirectRoutes,
   })
+  const { data: redirectDomains } = useQuery({
+    queryKey: ['redirect-domains'], queryFn: fetchRedirectDomains,
+  })
 
   // Coming back from Bachs: refresh so the new plan is reflected immediately.
   useEffect(() => {
@@ -421,9 +549,14 @@ export default function Onboarding() {
   const isProtected = !!activeDomain?.verified || !!activeDomain?.scriptInstalled
   const hasRoute = (routes?.length ?? 0) > 0
 
+  // The link's own hostname — a redirect-purpose subdomain, never the protected
+  // site's apex.
+  const linkDomain = redirectDomains?.find((d) => d.purpose === 'redirect') ?? null
+  const linkReady = !!linkDomain?.verified
+
   // Derived, not stored: checkout navigates away and back, so any in-memory
   // step counter would be gone by the time the user returns.
-  const step = !hasPlan ? 1 : !activeDomain ? 2 : !isProtected ? 3 : 4
+  const step = !hasPlan ? 1 : !activeDomain ? 2 : !isProtected ? 3 : !linkReady ? 4 : 5
   const done = finished || (hasPlan && !!activeDomain && isProtected && (hasRoute || skippedRedirect))
 
   if (wsLoading || domLoading) {
@@ -451,10 +584,10 @@ export default function Onboarding() {
                   <HugeiconsIcon icon={Globe02Icon} className="w-4 h-4 text-emerald-600" />
                   {activeDomain?.domain} is verified and protected
                 </p>
-                {hasRoute && (
-                  <p className="flex items-center justify-center gap-1.5">
-                    <HugeiconsIcon icon={LinkSquare02Icon} className="w-4 h-4 text-emerald-600" />
-                    Your redirect link is live
+                {hasRoute && linkDomain && (
+                  <p className="flex items-center justify-center gap-1.5 font-mono text-xs">
+                    <HugeiconsIcon icon={LinkSquare02Icon} className="w-4 h-4 text-emerald-600 shrink-0" />
+                    {linkDomain.domain}{routes?.[0]?.slug ? `/${routes[0].slug}` : ''} is live
                   </p>
                 )}
               </div>
@@ -487,8 +620,15 @@ export default function Onboarding() {
                 />
               )}
               {step === 4 && activeDomain && (
-                <StepRedirect
-                  domain={activeDomain}
+                <StepLinkAddress
+                  protectedDomain={activeDomain}
+                  existing={linkDomain}
+                  onDone={() => queryClient.invalidateQueries({ queryKey: ['redirect-domains'] })}
+                />
+              )}
+              {step === 5 && linkDomain && (
+                <StepDestination
+                  linkDomain={linkDomain}
                   onDone={() => {
                     setSkippedRedirect(true)
                     setFinished(true)

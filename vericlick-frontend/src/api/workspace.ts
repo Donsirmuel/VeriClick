@@ -113,11 +113,15 @@ export async function deleteRedirectDomain(domainId: string): Promise<void> {
   await apiClient.delete(`/redirect-domains/${domainId}/`)
 }
 
-export async function verifyRedirectDomainCname(domainId: string): Promise<{
-  cname_ok: boolean
+export interface CnameCheckResult {
+  cnameOk: boolean
   target: string | null
+  /** Set once a correct CNAME has verified the domain. */
+  verified?: boolean
   detail: string
-}> {
+}
+
+export async function verifyRedirectDomainCname(domainId: string): Promise<CnameCheckResult> {
   const { data } = await apiClient.post(`/redirect-domains/${domainId}/verify-cname/`)
   return data
 }
