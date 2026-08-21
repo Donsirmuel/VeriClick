@@ -154,6 +154,56 @@ async def test_unknown_route_serves_neutral():
 
 
 @pytest.mark.asyncio
+async def test_a_bot_verdict_stops_the_redirect(monkeypatch):
+    """The point of the shared engine: a bot with a clean IP used to sail
+    straight through to the destination."""
+    from app import routes as routes_mod
+
+    async def _bot(*a, **k):
+        return {"is_bot": True, "decision": "blocked", "reason": "Suspicious UA"}
+
+    monkeypatch.setattr(routes_mod, "get_verdict", _bot)
+    redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    await _seed(redis, bot_action="honeypot")
+
+    resp = await routes.handle_request(_request(), redis, _FakeBatcher())
+    assert resp.status_code == 200          # honeypot page
+    assert "location" not in resp.headers   # not forwarded to the destination
+
+
+@pytest.mark.asyncio
+async def test_a_human_verdict_still_redirects(monkeypatch):
+    from app import routes as routes_mod
+
+    async def _human(*a, **k):
+        return {"is_bot": False, "decision": "allowed", "reason": ""}
+
+    monkeypatch.setattr(routes_mod, "get_verdict", _human)
+    redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    await _seed(redis)
+
+    resp = await routes.handle_request(_request(), redis, _FakeBatcher())
+    assert resp.status_code == 302
+    assert resp.headers["location"] == "https://target.example.com/landing"
+
+
+@pytest.mark.asyncio
+async def test_an_unavailable_verdict_still_redirects(monkeypatch):
+    # Fail open all the way through the request path, not just in the client.
+    from app import routes as routes_mod
+
+    async def _unavailable(*a, **k):
+        return {"is_bot": False, "decision": "allowed", "reason": "verdict-unavailable"}
+
+    monkeypatch.setattr(routes_mod, "get_verdict", _unavailable)
+    redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    await _seed(redis)
+
+    resp = await routes.handle_request(_request(), redis, _FakeBatcher())
+    assert resp.status_code == 302
+
+
+@pytest.mark.asyncio
 async def test_raw_ip_host_is_refused():
     redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
     resp = await routes.handle_request(_request(host="203.0.113.9"), redis, _FakeBatcher())

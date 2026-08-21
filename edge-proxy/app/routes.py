@@ -14,6 +14,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 from . import geo, events as events_mod
 from .sync import get_route, get_blocked_ips, get_country_rules
+from .verdict import get_verdict
 
 logger = logging.getLogger("edge.routes")
 
@@ -135,6 +136,19 @@ async def handle_request(
     country_action = _is_country_blocked(country_code, country_rules)
     if country_action == "deny":
         return _apply_action(bot_action, destination, batcher, host, slug, ip, user_agent, is_bot=True, country_code=country_code)
+
+    # Everything above is a local rule. Now ask the backend for the same verdict
+    # the script path gets — bot user agents, rate limits, datacenter ranges,
+    # reputation — so one rule means one thing across both products.
+    #
+    # Fails open by design: get_verdict returns "allowed" on timeout or error,
+    # because a slow check must never take a customer's link offline.
+    verdict = await get_verdict(redis, host, slug, ip, user_agent)
+    if verdict.get("is_bot"):
+        return _apply_action(
+            bot_action, destination, batcher, host, slug, ip, user_agent,
+            is_bot=True, country_code=country_code,
+        )
 
     # Human traffic — redirect
     _queue_event(batcher, host, slug, ip, user_agent, destination, "allowed", False, country_code=country_code)

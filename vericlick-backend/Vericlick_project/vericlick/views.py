@@ -2604,6 +2604,72 @@ def edge_validate_domain(request):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+def edge_verdict(request):
+    """Classify one visitor for the edge proxy.
+
+    The edge decided on its own using only the IP blocklist and country rules,
+    while the script path ran the full chain — allowlist, denylist, country,
+    device, bot UA, rate limit, datacenter, reputation. The same rule therefore
+    produced different outcomes depending on which product a visitor hit, and
+    "Honeypot" on a redirect caught nothing but blocked IPs.
+
+    This puts both paths on one engine. The edge sends what it knows about the
+    request; the workspace and its rules are resolved here from the hostname.
+    """
+    from .models import EdgeSyncCredential, RedirectRoute
+
+    api_key = request.headers.get('X-Edge-Api-Key', '')
+    if not api_key:
+        return Response({'error': 'X-Edge-Api-Key header required'}, status=status.HTTP_401_UNAUTHORIZED)
+
+    workspace, _ = EdgeSyncCredential.verify_key(api_key)
+    if not workspace:
+        return Response({'error': 'Invalid API key'}, status=status.HTTP_401_UNAUTHORIZED)
+
+    domain = (request.data.get('domain') or '').strip().lower()
+    slug = (request.data.get('slug') or '').strip()
+    ip = (request.data.get('ip') or '').strip()
+    user_agent = request.data.get('user_agent') or ''
+
+    if not domain or not ip:
+        return Response(
+            {'errors': [{'field': 'domain', 'detail': 'domain and ip are required.'}]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    route = RedirectRoute.objects.select_related('domain').filter(
+        workspace=workspace, domain__domain=domain, slug=slug, is_active=True,
+    ).first()
+    if not route:
+        # Nothing to protect here; the edge serves its neutral page either way.
+        return Response({
+            'is_bot': False, 'decision': 'allowed', 'reason': 'no-route',
+            'reason_label': '', 'bot_action': 'neutral',
+        })
+
+    # Suspended workspaces fail open, matching shield_verify — a lapsed plan
+    # stops analysis, it does not start blocking a customer's own traffic.
+    if workspace.plan_status == 'suspended':
+        return Response({
+            'is_bot': False, 'decision': 'allowed', 'reason': 'suspended',
+            'reason_label': '', 'bot_action': route.bot_action,
+        })
+
+    result = classify_request(None, ip, user_agent, workspace)
+    is_bot = result['decision'] != 'allowed'
+
+    return Response({
+        'is_bot': is_bot,
+        'decision': result['decision'],
+        'reason': result['reason'],
+        'reason_label': reason_label(result['decision'], result['reason'], result['matched_rule']),
+        'bot_action': route.bot_action,
+        'fallback_url': route.fallback_url,
+    })
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
 def edge_events_batch(request):
     """Edge proxy batch-pushes click events every 60 seconds."""
     from .models import EdgeSyncCredential, RedirectRoute, RedirectEvent

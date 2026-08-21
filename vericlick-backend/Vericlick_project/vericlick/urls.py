@@ -77,6 +77,7 @@ urlpatterns = [
     # Edge sync
     path('edge/sync/', views.edge_routes_sync, name='edge-routes-sync'),
     path('edge/validate-domain/', views.edge_validate_domain, name='edge-validate-domain'),
+    path('edge/verdict/', views.edge_verdict, name='edge-verdict'),
     path('edge/events/', views.edge_events_batch, name='edge-events-batch'),
     path('edge/credentials/', views.edge_credential_list_create, name='edge-credential-list-create'),
     path('edge/credentials/<uuid:credential_id>/', views.edge_credential_revoke, name='edge-credential-revoke'),

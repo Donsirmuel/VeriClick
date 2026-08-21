@@ -1923,6 +1923,88 @@ class EdgeEventAttributionTests(APITestCase):
         self.assertEqual(self._clicks(), 3)
 
 
+class EdgeVerdictTests(APITestCase):
+    """One engine for both products: the edge now gets the same classification
+    the script gets, instead of deciding on IP and country alone."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='vd', email='vd@example.com', password='pw')
+        self.workspace = Workspace.objects.get(owner=self.user)
+        self.workspace.plan = Plan.objects.get(code='basic')
+        self.workspace.save(update_fields=['plan'])
+        self.domain = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='r.example.com',
+            purpose='redirect', verified=True,
+        )
+        self.route = RedirectRoute.objects.create(
+            workspace=self.workspace, domain=self.domain, slug='promo',
+            destination_url='https://example.com/offer', bot_action='honeypot',
+        )
+        self.raw_key, _ = EdgeSyncCredential.create_for_workspace(self.workspace)
+
+    def _ask(self, ua='Mozilla/5.0', ip='203.0.113.9', slug='promo', key=None):
+        return self.client.post('/api/edge/verdict/', {
+            'domain': 'r.example.com', 'slug': slug, 'ip': ip, 'user_agent': ua,
+        }, format='json', HTTP_X_EDGE_API_KEY=key if key is not None else self.raw_key)
+
+    def test_requires_an_edge_api_key(self):
+        res = self.client.post('/api/edge/verdict/', {
+            'domain': 'r.example.com', 'slug': 'promo', 'ip': '1.2.3.4',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_rejects_a_bad_key(self):
+        self.assertEqual(self._ask(key='ek_wrong').status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_a_bot_user_agent_is_flagged(self):
+        # The signal the edge never had: a bot with a perfectly clean IP.
+        res = self._ask(ua='curl/8.0')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertTrue(res.json()['isBot'])
+
+    def test_an_ordinary_browser_is_allowed(self):
+        res = self._ask(ua='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 '
+                           '(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertFalse(res.json()['isBot'])
+
+    def test_a_denied_ip_rule_is_honoured(self):
+        IPRule.objects.create(workspace=self.workspace, ip_or_cidr='203.0.113.9', action='deny')
+        self.assertTrue(self._ask()['isBot'] if isinstance(self._ask(), dict) else self._ask().json()['isBot'])
+
+    def test_an_allowlisted_ip_beats_a_bot_user_agent(self):
+        # Allowlist is top of the chain — a recovered false positive stays allowed.
+        IPRule.objects.create(workspace=self.workspace, ip_or_cidr='203.0.113.9', action='allow')
+        self.assertFalse(self._ask(ua='curl/8.0').json()['isBot'])
+
+    def test_the_route_bot_action_is_returned(self):
+        # The edge needs to know WHICH decoy to serve.
+        self.assertEqual(self._ask().json()['botAction'], 'honeypot')
+
+    def test_an_unknown_slug_is_not_classified(self):
+        body = self._ask(slug='favicon.ico').json()
+        self.assertFalse(body['isBot'])
+        self.assertEqual(body['reason'], 'no-route')
+
+    def test_a_suspended_workspace_fails_open(self):
+        # A lapsed plan stops analysis; it must not start blocking their traffic.
+        self.workspace.plan_expires_at = timezone.now() - timedelta(days=PLAN_GRACE_DAYS + 1)
+        self.workspace.save(update_fields=['plan_expires_at'])
+        self.assertEqual(self.workspace.plan_status, 'suspended')
+        self.assertFalse(self._ask(ua='curl/8.0').json()['isBot'])
+
+    def test_missing_fields_are_rejected(self):
+        res = self.client.post('/api/edge/verdict/', {'domain': '', 'ip': ''},
+                               format='json', HTTP_X_EDGE_API_KEY=self.raw_key)
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_another_workspaces_route_is_not_classified(self):
+        other = User.objects.create_user(username='vd2', email='vd2@example.com', password='pw')
+        other_key, _ = EdgeSyncCredential.create_for_workspace(Workspace.objects.get(owner=other))
+        body = self._ask(key=other_key).json()
+        self.assertEqual(body['reason'], 'no-route')
+
+
 class PricingEndpointTests(APITestCase):
     def test_pricing_returns_seeded_plans(self):
         res = self.client.get('/api/pricing/')

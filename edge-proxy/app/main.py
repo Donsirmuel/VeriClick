@@ -69,6 +69,8 @@ async def startup():
 async def shutdown():
     if _batcher:
         await _batcher._flush()
+    from .verdict import close_client
+    await close_client()
     if _redis:
         await _redis.close()
 

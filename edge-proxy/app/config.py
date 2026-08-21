@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     EDGE_HOSTNAME: str = "edge.vericlick.cc"
     CADDY_ON_DEMAND_API: str = "https://vericlick.site/api/edge/validate-domain/"
 
+    # Verdict lookups sit in the click path, so they are strictly bounded.
+    # On timeout the request is allowed through rather than delayed.
+    VERDICT_TIMEOUT: float = 1.5
+    VERDICT_CACHE_TTL: int = 60
+
     # GeoIP (optional)
     GEOIP2_DB: str = ""
 
