@@ -46,6 +46,11 @@ function RouteCard({ route, onRenew, onDeactivate, onDelete }: {
   const isExpired = route.expiresAt && new Date(route.expiresAt) < new Date()
   const isWarning = days <= 3 && days > 0 && !isExpired
 
+  // The whole point of the link is to be shared, so make the full URL the thing
+  // you grab — not something the user reassembles from domain + slug by eye.
+  const fullUrl = `https://${route.domain.domain}${route.slug ? `/${route.slug}` : ''}`
+  const live = route.isActive && !isExpired
+
   return (
     <div className={`rounded-2xl border p-6 shadow-sm ${isExpired ? 'bg-red-50 border-red-200' : isWarning ? 'bg-amber-50 border-amber-200' : 'bg-white border-neutral-200'}`}>
       <div className="flex items-start justify-between mb-3">
@@ -60,6 +65,44 @@ function RouteCard({ route, onRenew, onDeactivate, onDelete }: {
         <span className={`text-xs font-bold px-2 py-0.5 rounded-full shrink-0 ml-2 ${route.isActive && !isExpired ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>
           {route.isActive && !isExpired ? 'Active' : isExpired ? 'Expired' : 'Inactive'}
         </span>
+      </div>
+
+      <div className="flex items-center gap-2 mb-4 p-2.5 rounded-xl bg-slate-50 border border-neutral-200">
+        <code className="flex-1 min-w-0 truncate text-xs font-mono text-slate-800" title={fullUrl}>
+          {fullUrl}
+        </code>
+        <button
+          onClick={() => {
+            navigator.clipboard.writeText(fullUrl)
+            toast.success('Link copied')
+          }}
+          className="shrink-0 p-1.5 rounded-lg bg-white border border-neutral-200 hover:bg-neutral-100 text-slate-600 hover:text-slate-900 transition-colors"
+          title="Copy link"
+          aria-label="Copy link"
+        >
+          <HugeiconsIcon icon={Copy01Icon} className="w-3.5 h-3.5" />
+        </button>
+        <a
+          href={fullUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => {
+            // Opening a dead link just shows the neutral page and looks broken.
+            if (!live) {
+              e.preventDefault()
+              toast.error(isExpired ? 'This link has expired — renew it first' : 'This link is deactivated')
+            }
+          }}
+          className={`shrink-0 p-1.5 rounded-lg border transition-colors ${
+            live
+              ? 'bg-white border-neutral-200 hover:bg-neutral-100 text-slate-600 hover:text-slate-900'
+              : 'bg-neutral-100 border-neutral-200 text-neutral-400 cursor-not-allowed'
+          }`}
+          title={live ? 'Open link in a new tab' : 'Link is not live'}
+          aria-label="Open link"
+        >
+          <HugeiconsIcon icon={LinkSquare02Icon} className="w-3.5 h-3.5" />
+        </a>
       </div>
 
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted mb-4">

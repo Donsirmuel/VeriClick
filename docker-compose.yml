@@ -35,6 +35,9 @@ services:
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-VeriClick <noreply@vericlick.site>}
       SITE_URL: ${SITE_URL:-https://vericlick.site}
+      # Host the anti-bot snippet points at. Compose only forwards what is
+      # listed here, so without this line setting it in .env does nothing.
+      SCRIPT_BASE_URL: ${SCRIPT_BASE_URL:-}
       BACHS_API_KEY: ${BACHS_API_KEY:-}
       BACHS_WEBHOOK_SECRET: ${BACHS_WEBHOOK_SECRET:-}
       BACHS_BASE_URL: ${BACHS_BASE_URL:-https://sandbox-api.bachs.io}
