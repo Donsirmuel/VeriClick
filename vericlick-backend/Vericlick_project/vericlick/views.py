@@ -1333,7 +1333,10 @@ def serve_tracker_script(request):
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
-    api_base = request.build_absolute_uri('/api/')
+    # Deterministic, not derived from the request: when a CDN host proxies this
+    # through to the origin it rewrites Host, and build_absolute_uri would bake
+    # the app domain back into the script we just moved off it.
+    api_base = f"{getattr(settings, 'SCRIPT_BASE_URL', settings.SITE_URL)}/api/"
     script = template.replace('__API_BASE_URL__', api_base)
     response = HttpResponse(script, content_type='application/javascript')
     response['Cache-Control'] = 'public, max-age=3600'

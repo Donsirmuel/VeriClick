@@ -34,6 +34,9 @@ services:
       - "443:443/udp"
     environment:
       EDGE_HOSTNAME: ${EDGE_HOSTNAME:-edge.vericlick.cc}
+      # Host the anti-bot script is served from, and the origin it proxies to.
+      SCRIPT_HOSTNAME: ${SCRIPT_HOSTNAME:-cdn.vericlick.cc}
+      SCRIPT_ORIGIN: ${SCRIPT_ORIGIN:-https://vericlick.site}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

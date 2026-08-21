@@ -16,6 +16,35 @@
     reverse_proxy app:8000
 }
 
+# Script host: cdn.vericlick.cc
+#
+# Serves the anti-bot script and the endpoints it calls. The point is that a
+# protected customer's page source names THIS host, never the app domain — the
+# same reason redirects resolve to edge.vericlick.cc. The hop back to the origin
+# is server-to-server and invisible to the visitor.
+#
+# Set SCRIPT_HOSTNAME and SCRIPT_ORIGIN in edge-proxy/.env, then set
+# SCRIPT_BASE_URL=https://<SCRIPT_HOSTNAME> on the backend so the snippet it
+# hands out points here.
+{$SCRIPT_HOSTNAME} {
+    header -Server -X-Powered-By
+
+    # Proxying to an https:// upstream already sends the upstream's own Host,
+    # which is what the origin's ALLOWED_HOSTS expects.
+    handle /api/shield.js {
+        reverse_proxy {$SCRIPT_ORIGIN}
+    }
+    handle /api/shield/* {
+        reverse_proxy {$SCRIPT_ORIGIN}
+    }
+
+    # Anything else on this host is not part of the script surface. Answer with
+    # nothing rather than a page that hints at what runs here.
+    handle {
+        respond 404
+    }
+}
+
 # On-demand TLS for customer domains
 https:// {
     header -Server -X-Powered-By
