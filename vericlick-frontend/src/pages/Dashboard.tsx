@@ -10,7 +10,7 @@ import { ActivityFeed } from '@/components/dashboard/ActivityFeed'
 import { BlockedQueueWidget } from '@/components/dashboard/BlockedQueueWidget'
 import { TopBreakdownWidget } from '@/components/dashboard/TopBreakdownWidget'
 import { fetchDashboardStats, fetchTrafficData, fetchActivity, fetchBreakdown } from '@/api/dashboard'
-import { fetchDashboardDomains } from '@/api/workspace'
+import { fetchDashboardDomains, fetchDomains } from '@/api/workspace'
 import { fetchWorkspace } from '@/api/workspace'
 import { FreeTierBanner } from '@/components/FreeTierBanner'
 import { DashboardSkeleton } from '@/components/ui/DashboardSkeleton'
@@ -26,6 +26,13 @@ export default function DashboardPage() {
   const { data: dashboardDomains } = useQuery({
     queryKey: ['dashboard-domains'],
     queryFn: fetchDashboardDomains,
+  })
+
+  // Full registry records — dashboard-domains only carries name/registered/
+  // hasTraffic, and the setup state needs verified/scriptInstalled.
+  const { data: registeredDomains } = useQuery({
+    queryKey: ['domains'],
+    queryFn: fetchDomains,
   })
 
   const domainParam = selectedDomain || undefined
@@ -94,7 +101,77 @@ export default function DashboardPage() {
     return <DashboardSkeleton />
   }
 
+  // "No traffic yet" is a DATA state, not an unfinished SETUP state. Showing the
+  // setup checklist to someone who has already paid, added domains and installed
+  // the script tells them to redo work they've done — and it would reappear for
+  // any real customer whose site simply went quiet for a day.
+  const hasPlan = !!workspace?.planName
+  const activeDomains = registeredDomains?.filter((d) => d.isActive) ?? []
+  const hasDomain = activeDomains.length > 0
+  const scriptLive = activeDomains.some((d) => d.verified || d.scriptInstalled)
+  const setupComplete = hasPlan && hasDomain && scriptLive
+
+  if (!hasData && stats && setupComplete) {
+    return (
+      <div className="max-w-3xl mx-auto py-12 px-4">
+        <div className="text-center">
+          <div className="w-20 h-20 bg-emerald-50 rounded-3xl flex items-center justify-center mx-auto mb-6">
+            <HugeiconsIcon icon={CheckmarkCircle02Icon} className="w-9 h-9 text-emerald-600" />
+          </div>
+          <h1 className="text-2xl font-bold text-slate-900 mb-2">You're protected</h1>
+          <p className="text-sm text-muted max-w-md mx-auto leading-relaxed mb-8">
+            Setup is complete and VeriClick is watching
+            {activeDomains.length === 1
+              ? ` ${activeDomains[0].domain}`
+              : ` your ${activeDomains.length} domains`}
+            . There have been no visitors in the last 24 hours — charts and activity
+            will fill in as traffic arrives.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <button
+              onClick={() => navigate('/app/redirects')}
+              className="bg-black hover:bg-neutral-800 text-white px-6 py-3 rounded-xl text-sm font-bold transition-all"
+            >
+              Create a redirect link
+            </button>
+            <button
+              onClick={() => navigate('/app/shield')}
+              className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-6 py-3 rounded-xl text-sm font-bold transition-colors"
+            >
+              Configure anti-bot
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   if (!hasData && stats) {
+    const steps = [
+      {
+        done: hasPlan,
+        href: '/app/billing',
+        icon: ShieldIcon,
+        title: 'Choose a plan',
+        body: 'Pay once with crypto — weekly or monthly access.',
+      },
+      {
+        done: hasDomain,
+        href: '/app/domains',
+        icon: Globe02Icon,
+        title: 'Add your domain',
+        body: 'Register the domain you want to protect.',
+      },
+      {
+        done: scriptLive,
+        href: '/app/shield',
+        icon: CodeIcon,
+        title: 'Install the script',
+        body: "Paste the snippet into your site's <head>. This also verifies the domain.",
+      },
+    ]
+    const remaining = steps.filter((s) => !s.done).length
+
     return (
       <div className="max-w-3xl mx-auto py-12 px-4">
         <div className="text-center mb-10">
@@ -103,55 +180,43 @@ export default function DashboardPage() {
           </div>
           <h1 className="text-2xl font-bold text-slate-900 mb-2">Get started with VeriClick</h1>
           <p className="text-sm text-muted max-w-md mx-auto leading-relaxed">
-            Register your domain, install the script, and start protecting your site from bots.
+            {remaining === steps.length
+              ? 'Three steps and your site is protected from bots.'
+              : `${remaining} step${remaining !== 1 ? 's' : ''} left — you're nearly there.`}
           </p>
         </div>
 
         <div className="space-y-3 mb-6">
-          <a
-            href="/app/billing"
-            className="w-full flex items-start gap-4 p-4 bg-white border border-neutral-200 rounded-2xl text-left hover:border-neutral-400 hover:shadow-sm transition-all"
-          >
-            <div className="w-10 h-10 rounded-xl bg-neutral-100 flex items-center justify-center shrink-0">
-              <HugeiconsIcon icon={ShieldIcon} className="w-5 h-5 text-muted" />
-            </div>
-            <div className="flex-1">
-              <span className="font-bold text-sm text-slate-900">1. Choose a plan</span>
-              <p className="text-xs text-muted mt-0.5 leading-relaxed">
-                Subscribe to get started — pay once with crypto, 7-day access.
-              </p>
-            </div>
-          </a>
-
-          <a
-            href="/app/domains"
-            className="w-full flex items-start gap-4 p-4 bg-white border border-neutral-200 rounded-2xl text-left hover:border-neutral-400 hover:shadow-sm transition-all"
-          >
-            <div className="w-10 h-10 rounded-xl bg-neutral-100 flex items-center justify-center shrink-0">
-              <HugeiconsIcon icon={Globe02Icon} className="w-5 h-5 text-muted" />
-            </div>
-            <div className="flex-1">
-              <span className="font-bold text-sm text-slate-900">2. Add your domain</span>
-              <p className="text-xs text-muted mt-0.5 leading-relaxed">
-                Register the domain you want to protect and verify ownership.
-              </p>
-            </div>
-          </a>
-
-          <a
-            href="/app/shield"
-            className="w-full flex items-start gap-4 p-4 bg-white border border-neutral-200 rounded-2xl text-left hover:border-neutral-400 hover:shadow-sm transition-all"
-          >
-            <div className="w-10 h-10 rounded-xl bg-neutral-100 flex items-center justify-center shrink-0">
-              <HugeiconsIcon icon={CodeIcon} className="w-5 h-5 text-muted" />
-            </div>
-            <div className="flex-1">
-              <span className="font-bold text-sm text-slate-900">3. Install the script</span>
-              <p className="text-xs text-muted mt-0.5 leading-relaxed">
-                Copy the snippet and paste it into your site's &lt;head&gt;.
-              </p>
-            </div>
-          </a>
+          {steps.map((step, i) => (
+            <a
+              key={step.title}
+              href={step.href}
+              className={`w-full flex items-start gap-4 p-4 border rounded-2xl text-left transition-all ${
+                step.done
+                  ? 'bg-emerald-50/50 border-emerald-200'
+                  : 'bg-white border-neutral-200 hover:border-neutral-400 hover:shadow-sm'
+              }`}
+            >
+              <div
+                className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                  step.done ? 'bg-emerald-100' : 'bg-neutral-100'
+                }`}
+              >
+                <HugeiconsIcon
+                  icon={step.done ? CheckmarkCircle02Icon : step.icon}
+                  className={`w-5 h-5 ${step.done ? 'text-emerald-600' : 'text-muted'}`}
+                />
+              </div>
+              <div className="flex-1">
+                <span className={`font-bold text-sm ${step.done ? 'text-emerald-800' : 'text-slate-900'}`}>
+                  {i + 1}. {step.title}
+                </span>
+                <p className="text-xs text-muted mt-0.5 leading-relaxed">
+                  {step.done ? 'Done' : step.body}
+                </p>
+              </div>
+            </a>
+          ))}
         </div>
       </div>
     )
