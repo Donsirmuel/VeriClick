@@ -1189,13 +1189,13 @@ class PricingEndpointTests(APITestCase):
         self.assertEqual(codes, ['basic', 'plus', 'pro'])
         by_code = {p['code']: p for p in body['plans']}
         self.assertEqual(by_code['basic']['weeklyPrice'], 25)
-        self.assertEqual(by_code['plus']['weeklyPrice'], 50)
-        self.assertEqual(by_code['pro']['weeklyPrice'], 100)
+        self.assertEqual(by_code['plus']['weeklyPrice'], 40)
+        self.assertEqual(by_code['pro']['weeklyPrice'], 70)
 
     def test_pricing_returns_monthly_prices(self):
         res = self.client.get('/api/pricing/')
         by_code = {p['code']: p for p in res.json()['plans']}
-        self.assertEqual(by_code['basic']['monthlyPrice'], 100)
+        self.assertEqual(by_code['basic']['monthlyPrice'], 80)
         self.assertEqual(by_code['plus']['monthlyPrice'], 150)
         self.assertEqual(by_code['pro']['monthlyPrice'], 200)
 

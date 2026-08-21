@@ -767,8 +767,8 @@ class SiteConfig(models.Model):
 class Plan(models.Model):
     # Paid tiers shown on the pricing page. Plans differ by domain count only —
     # the feature set is identical across tiers and across billing periods.
-    # Weekly: Basic $30, Plus $50, Pro $100 (7 days access).
-    # Monthly: Basic $100, Plus $150, Pro $200 (30 days access).
+    # Weekly: Basic $25, Plus $40, Pro $70 (7 days access).
+    # Monthly: Basic $80, Plus $150, Pro $200 (30 days access).
     # All plans: one-time payment, manual renewal, crypto only.
 
     class BillingPeriod(models.TextChoices):
