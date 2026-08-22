@@ -707,12 +707,15 @@ class RedirectRoute(models.Model):
 
 
 class EdgeSyncCredential(models.Model):
-    """Shared secret between backend and each edge proxy node. Used to
-    authenticate the edge → backend routes-sync polling endpoint."""
+    """Shared secret between backend and edge proxy nodes. Used to
+    authenticate the edge → backend API. Any valid credential grants access
+    to ALL routes (data is not scoped to the credential's workspace)."""
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     workspace = models.ForeignKey(
-        Workspace, on_delete=models.CASCADE, related_name='edge_credentials',
+        Workspace, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='edge_credentials',
+        help_text='Workspace that created this credential (informational only — not used for data scoping).',
     )
     label = models.CharField(
         max_length=100, default='default',
@@ -755,16 +758,16 @@ class EdgeSyncCredential(models.Model):
 
     @staticmethod
     def verify_key(raw_key):
-        """Look up an active credential by raw key. Returns (workspace, instance) or (None, None)."""
+        """Look up an active credential by raw key. Returns (credential, None) or (None, None)."""
         import hashlib
         try:
             key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
-            cred = EdgeSyncCredential.objects.select_related('workspace').get(
+            cred = EdgeSyncCredential.objects.get(
                 key_hash=key_hash, is_active=True,
             )
             cred.last_sync_at = now()
             cred.save(update_fields=['last_sync_at'])
-            return cred.workspace, cred
+            return cred, None
         except EdgeSyncCredential.DoesNotExist:
             return None, None
 

@@ -2556,25 +2556,27 @@ class CountryRuleViewSet(viewsets.ModelViewSet):
 @permission_classes([AllowAny])
 def edge_routes_sync(request):
     """Edge proxy polls this for routes + site configs. Authenticated via
-    X-Edge-Api-Key header."""
-    from .models import EdgeSyncCredential, RedirectRoute, IPRule, CountryRule
+    X-Edge-Api-Key header. Returns ALL active routes across all workspaces
+    (the edge proxy is our own internal service)."""
+    from .models import EdgeSyncCredential, RedirectRoute, IPRule, CountryRule, ShieldConfig
 
     api_key = request.headers.get('X-Edge-Api-Key', '')
     if not api_key:
         return Response({'error': 'X-Edge-Api-Key header required'}, status=status.HTTP_401_UNAUTHORIZED)
 
-    workspace, cred = EdgeSyncCredential.verify_key(api_key)
-    if not workspace:
+    cred, _ = EdgeSyncCredential.verify_key(api_key)
+    if not cred:
         return Response({'error': 'Invalid API key'}, status=status.HTTP_401_UNAUTHORIZED)
 
     # Optional domain filter
     domain_filter = request.query_params.get('domain', '')
 
+    # Return ALL active routes across ALL workspaces — the edge proxy needs
+    # to serve traffic for every customer, not just the credential owner.
     routes_qs = RedirectRoute.objects.filter(
-        workspace=workspace,
         is_active=True,
         domain__is_active=True,
-    ).select_related('domain')
+    ).select_related('domain', 'workspace')
 
     if domain_filter:
         routes_qs = routes_qs.filter(domain__domain=domain_filter)
@@ -2591,27 +2593,26 @@ def edge_routes_sync(request):
             'expires_at': r.expires_at.isoformat() if r.expires_at else None,
         })
 
-    # Blocked IPs
+    # Blocked IPs — all workspaces
     blocked_ips = list(
         IPRule.objects.filter(
-            workspace=workspace, action='deny', is_active=True,
+            action='deny', is_active=True,
         ).values_list('ip_or_cidr', flat=True)
     )
 
-    # Country rules
+    # Country rules — all workspaces
     country_rules = list(
         CountryRule.objects.filter(
-            workspace=workspace, is_active=True,
+            is_active=True,
         ).values('country_code', 'action')
     )
 
-    # Site configs
-    from .models import ShieldConfig
-    site_configs = ShieldConfig.objects.filter(workspace=workspace)
+    # Site configs — all workspaces
+    site_configs = ShieldConfig.objects.select_related('workspace').all()
     config_data = []
     for sc in site_configs:
         config_data.append({
-            'workspace_id': str(workspace.id),
+            'workspace_id': str(sc.workspace.id),
             'protection_mode': sc.protection_mode,
             'bot_action': sc.bot_action,
             'protected_paths': sc.protected_paths,
@@ -2682,8 +2683,8 @@ def edge_verdict(request):
     if not api_key:
         return Response({'error': 'X-Edge-Api-Key header required'}, status=status.HTTP_401_UNAUTHORIZED)
 
-    workspace, _ = EdgeSyncCredential.verify_key(api_key)
-    if not workspace:
+    cred, _ = EdgeSyncCredential.verify_key(api_key)
+    if not cred:
         return Response({'error': 'Invalid API key'}, status=status.HTTP_401_UNAUTHORIZED)
 
     domain = (request.data.get('domain') or '').strip().lower()
@@ -2697,8 +2698,8 @@ def edge_verdict(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    route = RedirectRoute.objects.select_related('domain').filter(
-        workspace=workspace, domain__domain=domain, slug=slug, is_active=True,
+    route = RedirectRoute.objects.select_related('domain', 'workspace').filter(
+        domain__domain=domain, slug=slug, is_active=True,
     ).first()
     if not route:
         # Nothing to protect here; the edge serves its neutral page either way.
@@ -2706,6 +2707,9 @@ def edge_verdict(request):
             'is_bot': False, 'decision': 'allowed', 'reason': 'no-route',
             'reason_label': '', 'bot_action': 'neutral',
         })
+
+    # Resolve workspace from the route, not the credential
+    workspace = route.workspace
 
     # Suspended workspaces fail open, matching shield_verify — a lapsed plan
     # stops analysis, it does not start blocking a customer's own traffic.
@@ -2738,8 +2742,8 @@ def edge_events_batch(request):
     if not api_key:
         return Response({'error': 'X-Edge-Api-Key header required'}, status=status.HTTP_401_UNAUTHORIZED)
 
-    workspace, _ = EdgeSyncCredential.verify_key(api_key)
-    if not workspace:
+    cred, _ = EdgeSyncCredential.verify_key(api_key)
+    if not cred:
         return Response({'error': 'Invalid API key'}, status=status.HTTP_401_UNAUTHORIZED)
 
     events_data = request.data.get('events', [])
@@ -2773,7 +2777,6 @@ def edge_events_batch(request):
         route = RedirectRoute.objects.filter(
             domain__domain=domain,
             slug=slug,
-            workspace=workspace,
         ).first()
 
         if not route:
