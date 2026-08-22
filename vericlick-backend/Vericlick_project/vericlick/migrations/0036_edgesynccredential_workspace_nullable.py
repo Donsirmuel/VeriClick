@@ -5,7 +5,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('vericlick', '0035_redirectroute_slug_max_length_200'),
+        ('vericlick', '0043_redirectevent_device_class'),
     ]
 
     operations = [
