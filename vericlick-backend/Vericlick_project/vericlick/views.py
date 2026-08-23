@@ -2783,7 +2783,7 @@ def edge_events_batch(request):
             continue
 
         RedirectEvent.objects.create(
-            workspace=workspace,
+            workspace=route.workspace,
             redirect_route=route,
             domain=domain,
             slug=slug,
