@@ -38,14 +38,21 @@ const BOT_ACTIONS: { value: BotAction; label: string }[] = [
   { value: 'log', label: 'Log only (record but don\'t block)' },
 ]
 
-const PLATFORMS: { key: Platform; name: string; icon: string; description: string; steps: string[] }[] = [
+const PLATFORMS: { key: Platform; name: string; icon: string; description: string; steps: string[]; iniSnippet?: string; iniHint?: string }[] = [
   { key: 'html', name: 'HTML', icon: '🌐', description: 'Add before the closing </head> tag', steps: ['Open your HTML file', 'Find the <head> section', 'Paste the snippet before the closing </head> tag', 'Save and deploy'] },
   { key: 'wordpress', name: 'WordPress', icon: '📝', description: 'Plugin or theme header', steps: ["Install 'Insert Headers and Footers' by WPCode", 'Go to Code Snippets > Header & Footer', 'Paste the snippet in the Header section', 'Save and activate'] },
   { key: 'shopify', name: 'Shopify', icon: '🛒', description: 'theme.liquid before </head>', steps: ['Go to Online Store > Edit Code', 'Open layout/theme.liquid', 'Find the </head> tag', 'Paste the snippet immediately before it', 'Save'] },
   { key: 'wix', name: 'Wix', icon: '✨', description: 'Custom code via Settings', steps: ['Go to Settings > Custom Code', "Click '+ Add Custom Code'", "Select 'Head' as the placement", 'Paste the snippet', 'Save and publish'] },
   { key: 'squarespace', name: 'Squarespace', icon: '🎨', description: 'Code Injection in site settings', steps: ['Go to Settings > Advanced > Code Injection', "Paste the snippet in the 'Header' field", 'Click Save'] },
   { key: 'webflow', name: 'Webflow', icon: '🖼️', description: 'Site Settings > Custom Code', steps: ['Go to Site Settings > Custom Code', "Paste in the 'Head Code' section", 'Save and publish your site'] },
-  { key: 'cpanel', name: 'cPanel / PHP', icon: '📁', description: 'Auto-inject via PHP prepend — no template editing', steps: ['Click "Download .js File" and "Download prepend.php" to save both files', 'Log in to cPanel → File Manager → open your site\'s root folder (public_html)', 'Upload both files there', 'Go to cPanel → Software → MultiPHP INI Editor → Editor Mode', 'Find or add this line and set it:\nauto_prepend_file = "/home/USERNAME/public_html/vericlick-prepend.php"\n(Replace USERNAME with your cPanel username, then Save)', 'Done — the script is now on every PHP page of your site'] },
+  { key: 'cpanel', name: 'cPanel / PHP', icon: '📁', description: 'Auto-inject via PHP prepend — no template editing', steps: [
+    'Click "Download .js File" and "Download prepend.php" above to save both files',
+    "Log in to cPanel \u2192 File Manager \u2192 open your site's root folder (public_html)",
+    'Upload both files there',
+    'Go to cPanel \u2192 Software \u2192 MultiPHP INI Editor \u2192 Editor Mode \u2192 select Home Directory',
+    'Paste the line below into the editor (replace USERNAME with your cPanel username):',
+    'Click Save, then wait about 5 minutes \u2014 PHP picks up the new setting automatically',
+  ], iniSnippet: 'auto_prepend_file = "/home/USERNAME/public_html/vericlick-prepend.php"', iniHint: 'The line must start with auto_prepend_file = \u2014 if you see "invalid line", you may have pasted only the path without the setting name.' },
 ]
 
 export default function ShieldPage() {
@@ -291,6 +298,24 @@ export default function ShieldPage() {
                     </li>
                   ))}
                 </ol>
+                {currentGuide.iniSnippet && (
+                  <div className="mt-3">
+                    <div className="flex items-center justify-between bg-neutral-900 rounded-lg px-3 py-2">
+                      <code className="text-xs font-mono text-neutral-100 break-all">{currentGuide.iniSnippet}</code>
+                      <button
+                        onClick={() => handleCopy(currentGuide.iniSnippet!)}
+                        className="text-neutral-400 hover:text-white text-[10px] font-bold uppercase tracking-wider ml-2 shrink-0"
+                      >
+                        {copiedSnippet ? 'Copied' : 'Copy'}
+                      </button>
+                    </div>
+                    {currentGuide.iniHint && (
+                      <p className="mt-1.5 text-[11px] text-amber-700 leading-relaxed">
+                        {currentGuide.iniHint}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
 
               {snippetData?.apiBase && (

@@ -19,6 +19,8 @@ interface PlatformGuide {
   icon: string;
   description: string;
   detailedSteps: string[];
+  iniSnippet?: string;
+  iniHint?: string;
 }
 
 const PLATFORMS: PlatformGuide[] = [
@@ -102,13 +104,15 @@ const PLATFORMS: PlatformGuide[] = [
     icon: "📁",
     description: "Auto-inject via PHP prepend — no template editing",
     detailedSteps: [
-      'Click "Download .js File" and "Download prepend.php" to save both files',
-      "Log in to cPanel → File Manager → open your site's root folder (public_html)",
+      'Click "Download .js File" and "Download prepend.php" above to save both files',
+      "Log in to cPanel \u2192 File Manager \u2192 open your site's root folder (public_html)",
       "Upload both files there",
-      "Go to cPanel → Software → MultiPHP INI Editor → Editor Mode",
-      'Find or add this line and set it:\nauto_prepend_file = "/home/USERNAME/public_html/vericlick-prepend.php"\n(Replace USERNAME with your cPanel username, then Save)',
-      "Done — the script is now on every PHP page of your site",
+      "Go to cPanel \u2192 Software \u2192 MultiPHP INI Editor \u2192 Editor Mode \u2192 select Home Directory",
+      "Paste the line below into the editor (replace USERNAME with your cPanel username):",
+      "Click Save, then wait about 5 minutes \u2014 PHP picks up the new setting automatically",
     ],
+    iniSnippet: 'auto_prepend_file = "/home/USERNAME/public_html/vericlick-prepend.php"',
+    iniHint: 'The line must start with auto_prepend_file = \u2014 if you see "invalid line", you may have pasted only the path without the setting name.',
   },
 ];
 
@@ -279,6 +283,24 @@ export default function InstallPage() {
               </li>
             ))}
           </ol>
+          {currentGuide.iniSnippet && (
+            <div className="mt-4">
+              <div className="flex items-center justify-between bg-neutral-900 rounded-lg px-3 py-2">
+                <code className="text-xs font-mono text-neutral-100 break-all">{currentGuide.iniSnippet}</code>
+                <button
+                  onClick={() => handleCopy(currentGuide.iniSnippet!)}
+                  className="text-neutral-400 hover:text-white text-[10px] font-bold uppercase tracking-wider ml-2 shrink-0"
+                >
+                  {copiedSnippet ? 'Copied' : 'Copy'}
+                </button>
+              </div>
+              {currentGuide.iniHint && (
+                <p className="mt-1.5 text-[11px] text-amber-700 leading-relaxed">
+                  {currentGuide.iniHint}
+                </p>
+              )}
+            </div>
+          )}
         </div>
       )}
 
