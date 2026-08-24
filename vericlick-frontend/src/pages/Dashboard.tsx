@@ -126,41 +126,6 @@ export default function DashboardPage() {
   // the user could not switch back to one that had traffic.
   const wholeWorkspaceEmpty = !hasData && !!stats && !selectedDomain
 
-  if (wholeWorkspaceEmpty && setupComplete) {
-    return (
-      <div className="max-w-3xl mx-auto py-12 px-4">
-        <div className="text-center">
-          <div className="w-20 h-20 bg-emerald-50 rounded-3xl flex items-center justify-center mx-auto mb-6">
-            <HugeiconsIcon icon={CheckmarkCircle02Icon} className="w-9 h-9 text-emerald-600" />
-          </div>
-          <h1 className="text-2xl font-bold text-slate-900 mb-2">You're protected</h1>
-          <p className="text-sm text-muted max-w-md mx-auto leading-relaxed mb-8">
-            Setup is complete and VeriClick is watching
-            {activeDomains.length === 1
-              ? ` ${activeDomains[0].domain}`
-              : ` your ${activeDomains.length} domains`}
-            . There have been no visitors in the last 24 hours — charts and activity
-            will fill in as traffic arrives.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <button
-              onClick={() => navigate('/app/redirects')}
-              className="bg-black hover:bg-neutral-800 text-white px-6 py-3 rounded-xl text-sm font-bold transition-all"
-            >
-              Create a redirect link
-            </button>
-            <button
-              onClick={() => navigate('/app/shield')}
-              className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-6 py-3 rounded-xl text-sm font-bold transition-colors"
-            >
-              Configure anti-bot
-            </button>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
   if (wholeWorkspaceEmpty) {
     const steps = [
       {

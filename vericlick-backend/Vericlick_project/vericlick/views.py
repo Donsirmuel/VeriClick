@@ -1803,6 +1803,8 @@ def shield_verify(request):
 
     if blocked:
         _log_shield_event(request, workspace, page_url, blocked=True, reason=result['reason'])
+    else:
+        _log_shield_event(request, workspace, page_url, blocked=False, reason=result['reason'])
 
     reason_label_str = reason_label(result['decision'], result['reason'], result['matched_rule'])
 

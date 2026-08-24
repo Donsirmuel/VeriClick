@@ -559,6 +559,11 @@ export default function Onboarding() {
   const step = !hasPlan ? 1 : !activeDomain ? 2 : !isProtected ? 3 : !linkReady ? 4 : 5
   const done = finished || (hasPlan && !!activeDomain && isProtected && (hasRoute || skippedRedirect))
 
+  // When onboarding is complete, go straight to the dashboard.
+  useEffect(() => {
+    if (done) navigate('/app/dashboard', { replace: true })
+  }, [done, navigate])
+
   if (wsLoading || domLoading) {
     return (
       <div className="min-h-screen bg-neutral-100 flex items-center justify-center p-4">
