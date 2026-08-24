@@ -499,6 +499,7 @@ _WEIGHTS = {
     'no_teleports': 0.08,
     'has_mouse': 0.05,
     'events_trusted': 0.12,
+    'is_headless': 0.08,
     'pow_solved': 0.06,
     'pow_timing': 0.05,
 }
@@ -571,6 +572,10 @@ def compute_bot_score(signals):
     _add('events_trusted', 1.0 if signals.get('event_trusted', True) else 0.0,
          'UNTRUSTED_EVENTS')
 
+    # Headless browser detection
+    _add('is_headless', 0.0 if signals.get('is_headless', False) else 1.0,
+         'HEADLESS_BROWSER' if signals.get('is_headless', False) else None)
+
     # PoW signals
     _add('pow_solved', 1.0 if signals.get('pow_solved', False) else 0.0,
          'POW_FAILED')
@@ -639,14 +644,31 @@ def score_from_signals(request, tracker_signals, trajectory, click_metrics):
         # High timing variance = human
         click_dwell = min(1.0, max(0.0, timing_var / 0.5))
 
+    # Headless browser detection signals
+    headless = tracker_signals.get('headless') or {}
+    ua_is_headless = bool(re.search(
+        r'headless|phantomjs|slimerjs|wkhtmlto|puppeteer|webdriver\.io|nightwatch|selenium',
+        ua, re.IGNORECASE,
+    ))
+    navigator_webdriver = headless.get('webdriver', False)
+    no_chrome = not headless.get('chrome', True)
+    no_plugins = headless.get('plugin_count', 1) == 0
+    notification_unavailable = headless.get('notification_permission') == 'unavailable'
+
+    # Combine headless indicators: if 2+ signals indicate headless, mark it
+    headless_signals = [ua_is_headless, navigator_webdriver, no_chrome, no_plugins, notification_unavailable]
+    headless_count = sum(1 for s in headless_signals if s)
+    is_headless = headless_count >= 2
+
     return {
         'ja4_matches_ua': ja4_matches_ua,
         'tls_is_browser': tls_is_browser,
         'has_client_hints': bool(request.META.get('HTTP_SEC_CH_UA')),
         'has_sec_fetch': bool(request.META.get('HTTP_SEC_FETCH_MODE')),
-        'ua_consistent': True,
-        'canvas_hash_stable': True,
+        'ua_consistent': not is_headless and not ua_is_headless,
+        'canvas_hash_stable': bool(tracker_signals.get('canvas_hash')),
         'canvas_provided': bool(tracker_signals.get('canvas_hash')),
+        'is_headless': is_headless,
         'mouse_straightness': mouse_straightness,
         'mouse_speed_variance': mouse_speed_var,
         'click_center_offset': 0.5,
@@ -654,7 +676,7 @@ def score_from_signals(request, tracker_signals, trajectory, click_metrics):
         'keystroke_variance': 0.5,
         'teleport_count': teleports,
         'has_mouse_events': trajectory.get('event_count', 0) > 0,
-        'event_trusted': True,
+        'event_trusted': not is_headless,
         'pow_solved': False,
         'pow_solve_time_ms': 2000,
     }

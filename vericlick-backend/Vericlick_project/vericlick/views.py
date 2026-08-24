@@ -1618,11 +1618,38 @@ def shield_verify(request):
         ip = forwarded.split(',')[0].strip()
     user_agent = request.META.get('HTTP_USER_AGENT', '')
 
+    # --- PoW enforcement (strict mode only) ---
+    if shield_config and shield_config.protection_mode == 'strict':
+        from pow.views import verify_pow_cookie
+        if not verify_pow_cookie(request):
+            return Response({
+                'verdict': 'challenge',
+                'is_bot': False,
+                'reason': 'pow-required',
+                'reason_label': 'Verification required',
+                'bot_action': 'block',
+            })
+
     result = classify_request(None, ip, user_agent, workspace)
     blocked = result['decision'] != 'allowed'
 
-    # In balanced mode, only block obvious bots (not challenged/suspicious)
-    if shield_config and shield_config.protection_mode == 'balanced':
+    # --- Behavioral score enforcement ---
+    # Compute score from signals if available (they haven't been sent yet on
+    # the initial verify call, so this only matters for the second call after
+    # PoW is solved and telemetry is collected).  For the initial call, the
+    # score is computed at the edge via signals from the redirect response.
+    from .services import score_from_signals, compute_bot_score
+    bot_signals = score_from_signals(request, {}, {}, {})
+    bot_result = compute_bot_score(bot_signals)
+
+    # In strict mode: block anything scored as 'bot' (< 0.35)
+    # In balanced mode: only block obvious bots, let suspicious through
+    if shield_config and shield_config.protection_mode == 'strict':
+        if bot_result['verdict'] == 'bot':
+            blocked = True
+            result['reason'] = 'behavioral-score'
+            result['decision'] = 'blocked'
+    elif shield_config and shield_config.protection_mode == 'balanced':
         if result['decision'] == 'challenged':
             blocked = False
 
@@ -2732,8 +2759,33 @@ def edge_verdict(request):
             'reason_label': '', 'bot_action': route.bot_action,
         })
 
+    # --- PoW enforcement (strict mode) ---
+    shield_config = getattr(workspace, 'shield_config', None)
+    if shield_config and shield_config.protection_mode == 'strict':
+        from pow.views import verify_pow_cookie
+        if not verify_pow_cookie(request):
+            return Response({
+                'is_bot': False, 'decision': 'challenge', 'reason': 'pow-required',
+                'reason_label': 'Verification required', 'bot_action': route.bot_action,
+            })
+
     result = classify_request(None, ip, user_agent, workspace)
     is_bot = result['decision'] != 'allowed'
+
+    # --- Behavioral score enforcement ---
+    if shield_config:
+        from .services import score_from_signals, compute_bot_score
+        bot_signals = score_from_signals(request, {}, {}, {})
+        bot_result = compute_bot_score(bot_signals)
+
+        if shield_config.protection_mode == 'strict':
+            if bot_result['verdict'] == 'bot':
+                is_bot = True
+                result['decision'] = 'blocked'
+                result['reason'] = 'behavioral-score'
+        elif shield_config.protection_mode == 'balanced':
+            if result['decision'] == 'challenged':
+                is_bot = False
 
     return Response({
         'is_bot': is_bot,

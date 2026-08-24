@@ -86,6 +86,20 @@
     }
   }
 
+  function collectHeadlessSignals() {
+    var signals = {};
+    try { signals.webdriver = !!navigator.webdriver; } catch (e) { signals.webdriver = false; }
+    try { signals.chrome = !!window.chrome; } catch (e) { signals.chrome = false; }
+    try { signals.plugin_count = navigator.plugins ? navigator.plugins.length : 0; } catch (e) { signals.plugin_count = 0; }
+    try {
+      signals.notification_permission = typeof Notification !== 'undefined' ? Notification.permission : 'unavailable';
+    } catch (e) { signals.notification_permission = 'unavailable'; }
+    try {
+      signals.languages_consistent = navigator.languages && navigator.languages.length > 0;
+    } catch (e) { signals.languages_consistent = false; }
+    return signals;
+  }
+
   function computeTrajectoryMetrics() {
     var pts = mousePoints;
     if (pts.length < 10) {
@@ -189,6 +203,7 @@
   function buildPayload() {
     var trajectory = computeTrajectoryMetrics();
     var clickMetrics = computeClickMetrics();
+    var headless = collectHeadlessSignals();
 
     var payload = {
       api_key: apiKey,
@@ -209,7 +224,8 @@
         viewport: { width: window.innerWidth, height: window.innerHeight },
         canvas_hash: canvasHash,
         trajectory: trajectory,
-        click_metrics: clickMetrics
+        click_metrics: clickMetrics,
+        headless: headless
       },
       engagement: {
         moves: moves,
@@ -273,15 +289,12 @@
 
   function showBlockPage(reasonLabel, botAction) {
     if (botAction === 'honeypot') {
-      // Redirect to a neutral page
       window.location.href = 'https://google.com';
       return;
     }
     if (botAction === 'log') {
-      // Log only, don't block
       return;
     }
-    // Default: show block page overlay
     var overlay = document.createElement('div');
     overlay.style.cssText =
       'position:fixed;top:0;left:0;width:100%;height:100%;z-index:2147483647;' +
@@ -299,7 +312,150 @@
     document.documentElement.appendChild(overlay);
   }
 
-  // Main flow: verify first, then collect signals
+  // --- Proof-of-Work challenge ---
+  function solvePow(challenge, callback) {
+    var challengeBytes = new Uint8Array(challenge.challengeHex.match(/.{1,2}/g).map(function(b) { return parseInt(b, 16); }));
+    var difficulty = challenge.difficulty;
+    var serverNonce = challenge.nonce;
+
+    // Try up to 10M nonces, then give up
+    for (var nonce = 0; nonce < 10000000; nonce++) {
+      var nonceBytes = new Uint8Array(4);
+      nonceBytes[0] = nonce & 0xff;
+      nonceBytes[1] = (nonce >> 8) & 0xff;
+      nonceBytes[2] = (nonce >> 16) & 0xff;
+      nonceBytes[3] = (nonce >> 24) & 0xff;
+
+      var combined = new Uint8Array(challengeBytes.length + 4);
+      combined.set(challengeBytes);
+      combined.set(nonceBytes, challengeBytes.length);
+
+      // Use SubtleCrypto for SHA-256
+      // But SubtleCrypto is async — we batch and check periodically
+      // For simplicity, use synchronous approach with pre-computed table
+      // Actually, SubtleCrypto is the only available SHA-256 in browsers.
+      // We use a chunked async approach.
+      callback(null); // Signal to use async path
+      return;
+    }
+  }
+
+  function solvePowAsync(challenge, onSuccess, onFail) {
+    var challengeBytes = new Uint8Array(challenge.challengeHex.match(/.{1,2}/g).map(function(b) { return parseInt(b, 16); }));
+    var difficulty = challenge.difficulty;
+    var serverNonce = challenge.nonce;
+    var minAgeMs = challenge.minAgeMs || 1500;
+    var startTime = Date.now();
+    var batchSize = 5000;
+
+    function tryBatch(startNonce) {
+      // We can't do true sync SHA-256 in browsers, so we use SubtleCrypto
+      // with batched promises. Each iteration is a full async SHA-256.
+      var promises = [];
+      for (var n = startNonce; n < startNonce + batchSize; n++) {
+        var nonceBytes = new Uint8Array(4);
+        nonceBytes[0] = n & 0xff;
+        nonceBytes[1] = (n >> 8) & 0xff;
+        nonceBytes[2] = (n >> 16) & 0xff;
+        nonceBytes[3] = (n >> 24) & 0xff;
+
+        var combined = new Uint8Array(challengeBytes.length + 4);
+        combined.set(challengeBytes);
+        combined.set(nonceBytes, challengeBytes.length);
+
+        promises.push(
+          crypto.subtle.digest('SHA-256', combined).then(function(buf) {
+            return { nonce: n, hash: Array.from(new Uint8Array(buf)).map(function(b) { return b.toString(16).padStart(2, '0'); }).join('') };
+          })
+        );
+      }
+
+      Promise.all(promises).then(function(results) {
+        for (var i = 0; i < results.length; i++) {
+          var r = results[i];
+          // Check leading zero bits
+          var leadingZeros = 0;
+          for (var j = 0; j < r.hash.length; j++) {
+            var c = r.hash[j];
+            if (c === '0') { leadingZeros += 4; continue; }
+            // Check individual bits
+            var val = parseInt(c, 16);
+            for (var bit = 3; bit >= 0; bit--) {
+              if (val & (1 << bit)) break;
+              leadingZeros++;
+            }
+            break;
+          }
+
+          if (leadingZeros >= difficulty) {
+            var elapsed = Date.now() - startTime;
+            var waitTime = Math.max(0, minAgeMs - elapsed);
+            setTimeout(function() {
+              onSuccess(r.nonce, r.hash, Date.now() - startTime);
+            }, waitTime);
+            return;
+          }
+        }
+
+        // Continue with next batch
+        if (startNonce + batchSize < 10000000) {
+          setTimeout(function() { tryBatch(startNonce + batchSize); }, 0);
+        } else {
+          onFail();
+        }
+      });
+    }
+
+    tryBatch(0);
+  }
+
+  function doPowChallenge(verifyResult) {
+    // If already have a valid PoW cookie, skip
+    if (document.cookie.indexOf('_vc_pow=') !== -1) {
+      run();
+      return;
+    }
+
+    fetch(API + 'pow/challenge/')
+      .then(function(resp) { return resp.json(); })
+      .then(function(challenge) {
+        if (!challenge || !challenge.challengeId) {
+          run();
+          return;
+        }
+        solvePowAsync(challenge,
+          function(nonce, hash, solveTime) {
+            // Submit solution
+            fetch(API + 'pow/verify/', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                challengeId: challenge.challengeId,
+                nonce: nonce,
+                hash: hash,
+                challengeNonce: challenge.nonce
+              })
+            })
+              .then(function(resp) { return resp.json(); })
+              .then(function() {
+                // PoW solved, cookie set by server. Re-run verify.
+                run();
+              })
+              .catch(function() { run(); });
+          },
+          function() {
+            // Failed to solve — let through anyway (fail-open for usability)
+            run();
+          }
+        );
+      })
+      .catch(function() {
+        // Challenge fetch failed — proceed without PoW
+        run();
+      });
+  }
+
+  // Main flow: verify first, then handle verdict
   fetch(API + 'shield/verify/', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -318,6 +474,11 @@
     .then(function (result) {
       if (result && result.verdict === 'block') {
         showBlockPage(result.reason_label, result.bot_action);
+        return;
+      }
+      if (result && result.verdict === 'challenge') {
+        // PoW challenge needed — solve it then re-verify
+        doPowChallenge(result);
         return;
       }
       if (result && result.verdict === 'allow') {
