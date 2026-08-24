@@ -58,22 +58,22 @@ function RouteCard({ route, periodDays, onRenew, onToggleActive, onDelete }: {
   const live = route.isActive && !isExpired
 
   return (
-    <div className={`rounded-2xl border p-6 shadow-sm ${isExpired ? 'bg-red-50 border-red-200' : isWarning ? 'bg-amber-50 border-amber-200' : 'bg-white border-neutral-200'}`}>
-      <div className="flex items-start justify-between mb-3">
-        <div className="min-w-0">
+    <div className={`rounded-2xl border p-4 sm:p-6 shadow-sm overflow-hidden ${isExpired ? 'bg-red-50 border-red-200' : isWarning ? 'bg-amber-50 border-amber-200' : 'bg-white border-neutral-200'}`}>
+      <div className="flex items-start justify-between mb-3 gap-3">
+        <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 mb-1">
             <HugeiconsIcon icon={LinkSquare02Icon} className="w-5 h-5 text-muted shrink-0" />
             <span className="text-sm font-bold text-slate-900 truncate">{route.domain.domain}</span>
-            {route.slug && <span className="text-xs text-muted">/{route.slug}</span>}
+            {route.slug && <span className="text-xs text-muted truncate">/{route.slug}</span>}
           </div>
           <div className="text-xs text-muted truncate">→ {route.destinationUrl}</div>
         </div>
-        <span className={`text-xs font-bold px-2 py-0.5 rounded-full shrink-0 ml-2 ${route.isActive && !isExpired ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>
+        <span className={`text-xs font-bold px-2 py-0.5 rounded-full shrink-0 ${route.isActive && !isExpired ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>
           {route.isActive && !isExpired ? 'Active' : isExpired ? 'Expired' : 'Inactive'}
         </span>
       </div>
 
-      <div className={`flex items-center gap-2 mb-4 p-2.5 rounded-xl border ${
+      <div className={`flex items-center gap-2 mb-4 p-2.5 rounded-xl border min-w-0 ${
         live ? 'bg-slate-50 border-neutral-200' : 'bg-neutral-100 border-neutral-200'
       }`}>
         <code
