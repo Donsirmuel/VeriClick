@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Globe02Icon, Delete01Icon, CheckmarkCircle02Icon, Add01Icon, LinkSquare02Icon } from '@hugeicons/core-free-icons'
@@ -192,6 +193,7 @@ function VerifyModal({ domain, onClose, onCheck, isChecking }: {
 
 export default function Domains() {
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
   const [newDomain, setNewDomain] = useState('')
   const [verifyDomain, setVerifyDomain] = useState<Domain | null>(null)
   const [domainToDelete, setDomainToDelete] = useState<Domain | null>(null)
@@ -208,11 +210,12 @@ export default function Domains() {
 
   const addMutation = useMutation({
     mutationFn: addDomain,
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['domains'] })
       queryClient.invalidateQueries({ queryKey: ['workspace'] })
       setNewDomain('')
-      toast.success('Domain added — now verify it')
+      toast.success('Domain added — install the script next')
+      navigate(`/app/shield?domain=${encodeURIComponent(variables)}`)
     },
     onError: (err) => toast.error(parseApiError(err) || 'Failed to add domain'),
   })

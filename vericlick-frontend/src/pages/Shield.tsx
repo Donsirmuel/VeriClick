@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { ShieldIcon, Shield02Icon, Settings01Icon, Copy01Icon, CheckmarkCircle02Icon, Download01Icon } from '@hugeicons/core-free-icons'
@@ -48,6 +49,7 @@ const PLATFORMS: { key: Platform; name: string; icon: string; description: strin
 
 export default function ShieldPage() {
   const queryClient = useQueryClient()
+  const [searchParams, setSearchParams] = useSearchParams()
 
   const { data: config } = useQuery({
     queryKey: ['workspace-shield-config'],
@@ -69,6 +71,18 @@ export default function ShieldPage() {
   const [botAction, setBotAction] = useState<BotAction>('block')
   const [safeDestination, setSafeDestination] = useState('')
   const [saveError, setSaveError] = useState('')
+
+  // Auto-select domain from ?domain= query param (redirected from Domains page)
+  useEffect(() => {
+    const domainParam = searchParams.get('domain')
+    if (domainParam && domains?.length) {
+      const match = domains.find((d) => d.domain === domainParam)
+      if (match) {
+        setSelectedDomainId(match.id)
+        setSearchParams({}, { replace: true })
+      }
+    }
+  }, [searchParams, domains, setSearchParams])
 
   const selectedDomain = domains?.find((d) => d.id === selectedDomainId)
 
