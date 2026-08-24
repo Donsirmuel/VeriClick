@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { ShieldIcon, Shield02Icon, Settings01Icon, Copy01Icon, CheckmarkCircle02Icon, Download01Icon } from '@hugeicons/core-free-icons'
 import toast from 'react-hot-toast'
 import { apiClient } from '@/api/client'
-import { fetchDomains, fetchSnippet } from '@/api/workspace'
+import { fetchDomains, fetchSnippet, testInstallation } from '@/api/workspace'
 import { formatRelativeTime } from '@/lib/utils'
 
 type ProtectionMode = 'strict' | 'balanced' | 'monitor'
@@ -170,6 +170,19 @@ export default function ShieldPage() {
     }
   }
 
+  const verifyMutation = useMutation({
+    mutationFn: () => testInstallation(selectedDomain!.id),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['domains'] })
+      if (result.installed) {
+        toast.success(`VeriClick script found on ${result.domain}`)
+      } else {
+        toast.error(result.error || 'Script not found — if you just installed it, wait a few minutes and try again')
+      }
+    },
+    onError: () => toast.error('Verification request failed — try again in a moment'),
+  })
+
   const isDirty = config
     ? protectionMode !== config.protectionMode ||
       botAction !== config.botAction ||
@@ -317,6 +330,25 @@ export default function ShieldPage() {
                   </div>
                 )}
               </div>
+
+              {!scriptLive && selectedDomain && (
+                <div className="mt-4 flex flex-col items-start gap-2">
+                  <button
+                    onClick={() => verifyMutation.mutate()}
+                    disabled={verifyMutation.isPending}
+                    className="inline-flex items-center gap-2 text-sm font-bold px-5 py-2.5 rounded-xl bg-black text-white hover:bg-neutral-800 transition-colors disabled:opacity-50"
+                  >
+                    <HugeiconsIcon icon={CheckmarkCircle02Icon} className="w-4 h-4" />
+                    {verifyMutation.isPending ? 'Checking your site…' : "I've added the script — Verify now"}
+                  </button>
+                  <Link
+                    to="/app/domains"
+                    className="text-xs text-muted hover:text-slate-900 transition-colors"
+                  >
+                    Manage domains →
+                  </Link>
+                </div>
+              )}
 
               {snippetData?.apiBase && (
                 <div className="mt-4 bg-amber-50 border border-amber-200 rounded-xl p-4">
