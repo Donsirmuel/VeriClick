@@ -1450,6 +1450,25 @@ def serve_tracker_script(request):
     return response
 
 
+def download_tracker_script(request):
+    """Serve shield.js as a downloadable file for users who upload via cPanel."""
+    try:
+        with open(settings.TRACKER_SCRIPT_PATH, 'r', encoding='utf-8') as f:
+            template = f.read()
+    except (OSError, FileNotFoundError):
+        return Response(
+            {'errors': [{'field': 'script', 'detail': 'Tracker script not found'}]},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+    api_base = f"{getattr(settings, 'SCRIPT_BASE_URL', settings.SITE_URL)}/api/"
+    script = template.replace('__API_BASE_URL__', api_base)
+    response = HttpResponse(script, content_type='application/javascript')
+    response['Content-Disposition'] = 'attachment; filename="vericlick-shield.js"'
+    response['Cache-Control'] = 'public, max-age=3600'
+    return response
+
+
 @api_view(['POST'])
 @permission_classes([AllowAny])
 @throttle_classes([TrackerEventThrottle])

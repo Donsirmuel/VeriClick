@@ -5,12 +5,13 @@ import {
   CodeIcon,
   Copy01Icon,
   CheckmarkCircle02Icon,
+  Download01Icon,
 } from "@hugeicons/core-free-icons";
 import toast from "react-hot-toast";
 import { fetchDomains, fetchSnippet } from "@/api/workspace";
 import { DashboardSkeleton } from "@/components/ui/DashboardSkeleton";
 
-type Platform = "html" | "wordpress" | "shopify" | "wix" | "squarespace" | "webflow";
+type Platform = "html" | "wordpress" | "shopify" | "wix" | "squarespace" | "webflow" | "cpanel";
 
 interface PlatformGuide {
   key: Platform;
@@ -93,6 +94,22 @@ const PLATFORMS: PlatformGuide[] = [
       "Go to Site Settings > Custom Code",
       "Paste in the 'Head Code' section",
       "Save and publish your site",
+    ],
+  },
+  {
+    key: "cpanel",
+    name: "cPanel / PHP",
+    icon: "📁",
+    description: "Upload the script file to your server",
+    detailedSteps: [
+      'Click "Download .js File" below to save the script to your computer',
+      "Log in to your hosting control panel (cPanel)",
+      "Open File Manager and navigate to public_html (or your site's root folder)",
+      "Upload vericlick-shield.js to the site root",
+      "Open your PHP template file (e.g. header.php) and add this before the closing </head> tag:",
+      '<code class="bg-slate-100 px-1 rounded text-xs">&lt;script src="/vericlick-shield.js" data-api-key="YOUR_KEY" defer&gt;&lt;/script&gt;</code>',
+      "Replace YOUR_KEY with the API key shown in the snippet above",
+      "Save the file and upload it back to the server",
     ],
   },
 ];
@@ -196,22 +213,34 @@ export default function InstallPage() {
               </div>
             </div>
             {currentSnippet && (
-              <button
-                onClick={() => handleCopy(currentSnippet)}
-                className="bg-white hover:bg-neutral-100 text-slate-700 border border-neutral-200 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors"
-              >
-                {copiedSnippet ? (
-                  <>
-                    <HugeiconsIcon icon={CheckmarkCircle02Icon} className="w-3.5 h-3.5 text-green-500" />
-                    Copied
-                  </>
-                ) : (
-                  <>
-                    <HugeiconsIcon icon={Copy01Icon} className="w-3.5 h-3.5" />
-                    Copy
-                  </>
+              <div className="flex items-center gap-2">
+                {selectedPlatform === 'cpanel' && snippetData?.apiBase && (
+                  <a
+                    href={`${snippetData.apiBase}/shield.js/download`}
+                    download
+                    className="bg-white hover:bg-neutral-100 text-slate-700 border border-neutral-200 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors"
+                  >
+                    <HugeiconsIcon icon={Download01Icon} className="w-3.5 h-3.5" />
+                    Download .js File
+                  </a>
                 )}
-              </button>
+                <button
+                  onClick={() => handleCopy(currentSnippet)}
+                  className="bg-white hover:bg-neutral-100 text-slate-700 border border-neutral-200 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors"
+                >
+                  {copiedSnippet ? (
+                    <>
+                      <HugeiconsIcon icon={CheckmarkCircle02Icon} className="w-3.5 h-3.5 text-green-500" />
+                      Copied
+                    </>
+                  ) : (
+                    <>
+                      <HugeiconsIcon icon={Copy01Icon} className="w-3.5 h-3.5" />
+                      Copy
+                    </>
+                  )}
+                </button>
+              </div>
             )}
           </div>
           {snippetLoading ? (

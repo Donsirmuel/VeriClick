@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { ShieldIcon, Shield02Icon, Settings01Icon, Copy01Icon, CheckmarkCircle02Icon } from '@hugeicons/core-free-icons'
+import { ShieldIcon, Shield02Icon, Settings01Icon, Copy01Icon, CheckmarkCircle02Icon, Download01Icon } from '@hugeicons/core-free-icons'
 import toast from 'react-hot-toast'
 import { apiClient } from '@/api/client'
 import { fetchDomains, fetchSnippet } from '@/api/workspace'
 
 type ProtectionMode = 'strict' | 'balanced' | 'monitor'
 type BotAction = 'block' | 'honeypot' | 'log'
-type Platform = 'html' | 'wordpress' | 'shopify' | 'wix' | 'squarespace' | 'webflow'
+type Platform = 'html' | 'wordpress' | 'shopify' | 'wix' | 'squarespace' | 'webflow' | 'cpanel'
 
 interface ShieldConfig {
   protectionMode: ProtectionMode
@@ -43,6 +43,7 @@ const PLATFORMS: { key: Platform; name: string; icon: string; description: strin
   { key: 'wix', name: 'Wix', icon: '✨', description: 'Custom code via Settings', steps: ['Go to Settings > Custom Code', "Click '+ Add Custom Code'", "Select 'Head' as the placement", 'Paste the snippet', 'Save and publish'] },
   { key: 'squarespace', name: 'Squarespace', icon: '🎨', description: 'Code Injection in site settings', steps: ['Go to Settings > Advanced > Code Injection', "Paste the snippet in the 'Header' field", 'Click Save'] },
   { key: 'webflow', name: 'Webflow', icon: '🖼️', description: 'Site Settings > Custom Code', steps: ['Go to Site Settings > Custom Code', "Paste in the 'Head Code' section", 'Save and publish your site'] },
+  { key: 'cpanel', name: 'cPanel / PHP', icon: '📁', description: 'Upload the script file to your server', steps: ['Click "Download .js File" below to save the script', 'Log in to cPanel → File Manager', 'Navigate to public_html (or your site root)', 'Upload vericlick-shield.js to the site root', "Add this snippet to your PHP file's <head> section: <code>&lt;script src=\"/vericlick-shield.js\" data-api-key=\"YOUR_KEY\" defer&gt;&lt;/script&gt;</code>", 'Replace YOUR_KEY with your actual API key from the snippet above'] },
 ]
 
 export default function ShieldPage() {
@@ -197,22 +198,34 @@ export default function ShieldPage() {
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-bold text-slate-700">Snippet</span>
                 {currentSnippet && (
-                  <button
-                    onClick={() => handleCopy(currentSnippet)}
-                    className="bg-white hover:bg-neutral-100 text-slate-700 border border-neutral-200 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors"
-                  >
-                    {copiedSnippet ? (
-                      <>
-                        <HugeiconsIcon icon={CheckmarkCircle02Icon} className="w-3.5 h-3.5 text-green-500" />
-                        Copied
-                      </>
-                    ) : (
-                      <>
-                        <HugeiconsIcon icon={Copy01Icon} className="w-3.5 h-3.5" />
-                        Copy
-                      </>
+                  <div className="flex items-center gap-2">
+                    {selectedPlatform === 'cpanel' && snippetData?.apiBase && (
+                      <a
+                        href={`${snippetData.apiBase}/shield.js/download`}
+                        download
+                        className="bg-white hover:bg-neutral-100 text-slate-700 border border-neutral-200 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors"
+                      >
+                        <HugeiconsIcon icon={Download01Icon} className="w-3.5 h-3.5" />
+                        Download .js File
+                      </a>
                     )}
-                  </button>
+                    <button
+                      onClick={() => handleCopy(currentSnippet)}
+                      className="bg-white hover:bg-neutral-100 text-slate-700 border border-neutral-200 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors"
+                    >
+                      {copiedSnippet ? (
+                        <>
+                          <HugeiconsIcon icon={CheckmarkCircle02Icon} className="w-3.5 h-3.5 text-green-500" />
+                          Copied
+                        </>
+                      ) : (
+                        <>
+                          <HugeiconsIcon icon={Copy01Icon} className="w-3.5 h-3.5" />
+                          Copy
+                        </>
+                      )}
+                    </button>
+                  </div>
                 )}
               </div>
               {snippetLoading ? (

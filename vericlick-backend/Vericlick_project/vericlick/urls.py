@@ -72,6 +72,7 @@ urlpatterns = [
     path('shield/config/', views.shield_config_view, name='shield-config'),
     path('shield/telemetry/', views.shield_telemetry, name='shield-telemetry'),
     path('shield.js', views.serve_tracker_script, name='shield-script'),
+    path('shield.js/download', views.download_tracker_script, name='shield-script-download'),
     # Blocked IPs
     path('ip-rules/blocked/', views.blocked_ips, name='blocked-ips'),
     # Edge sync
