@@ -4,7 +4,7 @@ from bisect import bisect_right
 from datetime import timedelta
 from django.db.models import Q
 from django.utils import timezone
-from .models import IPRule, TrackerEvent, IpAsnRange, CountryRule
+from .models import IPRule, TrackerEvent, IpAsnRange, CountryRule, RedirectEvent
 
 
 # How often an IP must trip the traffic checks before it is auto-denied, and
@@ -118,11 +118,16 @@ def parse_device(user_agent):
 
 
 def check_rate_limit(ip, workspace, max_clicks=60, window_seconds=60):
+    """Count clicks from both the script path (TrackerEvent) and the redirect
+    path (RedirectEvent) so edge traffic also triggers rate limiting."""
     cutoff = timezone.now() - timedelta(seconds=window_seconds)
-    recent = TrackerEvent.objects.filter(
+    tracker_count = TrackerEvent.objects.filter(
         workspace=workspace, ip=ip, created_at__gte=cutoff,
     ).count()
-    return recent >= max_clicks
+    redirect_count = RedirectEvent.objects.filter(
+        workspace=workspace, ip=ip, created_at__gte=cutoff,
+    ).count()
+    return (tracker_count + redirect_count) >= max_clicks
 
 
 _datacenter_ranges = None
@@ -170,12 +175,20 @@ def check_auto_reputation(workspace, ip):
     if not workspace.auto_reputation_enabled:
         return None
     cutoff = timezone.now() - timedelta(minutes=AUTO_REP_WINDOW_MINUTES)
-    flags = TrackerEvent.objects.filter(
+    # Count flags from both script (TrackerEvent) and redirect (RedirectEvent) paths.
+    tracker_flags = TrackerEvent.objects.filter(
         workspace=workspace,
         ip=ip,
         created_at__gte=cutoff,
         verdict__in=('blocked', 'challenged'),
     ).count()
+    redirect_flags = RedirectEvent.objects.filter(
+        workspace=workspace,
+        ip=ip,
+        created_at__gte=cutoff,
+        is_bot=True,
+    ).count()
+    flags = tracker_flags + redirect_flags
     if flags < AUTO_REP_FLAG_THRESHOLD:
         return None
 
