@@ -1,14 +1,30 @@
 (function () {
   var installToken = null;
   var apiKey = null;
+
+  // 1. Find our own <script> tag and read data-token / data-api-key.
   var scripts = document.getElementsByTagName('script');
   for (var i = 0; i < scripts.length; i++) {
-    if (/\/shield\.js/.test(scripts[i].src || '')) {
+    var src = (scripts[i].src || '').split('?')[0];
+    if (/shield\.js$/i.test(src)) {
       installToken = scripts[i].getAttribute('data-token');
       apiKey = scripts[i].getAttribute('data-api-key');
       break;
     }
   }
+
+  // 2. Fallback: global config object set by auto_prepend or an inline script.
+  if (!installToken && !apiKey && window._vericlickConfig) {
+    installToken = window._vericlickConfig.token || null;
+    apiKey = window._vericlickConfig.apiKey || null;
+  }
+
+  // 3. Fallback: <meta name="vericlick-api-key" content="..."> tag.
+  if (!installToken && !apiKey) {
+    var meta = document.querySelector('meta[name="vericlick-api-key"]');
+    if (meta) apiKey = meta.getAttribute('content');
+  }
+
   if (!installToken && !apiKey) return;
 
   var API = '__API_BASE_URL__';

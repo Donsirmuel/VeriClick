@@ -1582,6 +1582,51 @@ def download_tracker_script(request):
     return response
 
 
+def download_prepend_script(request):
+    """Serve vericlick-prepend.php with the workspace API key baked in.
+
+    cPanel users upload this file alongside vericlick-shield.js, then set
+    ``auto_prepend_file`` in MultiPHP INI Editor so the script tag is
+    injected into every PHP page automatically — no template editing."""
+    api_key = request.GET.get('api_key', '').strip()
+    if not api_key:
+        return Response(
+            {'errors': [{'field': 'api_key', 'detail': 'api_key query param required'}]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Validate the key maps to an actual workspace.
+    import uuid as _uuid
+    try:
+        _uuid.UUID(str(api_key))
+    except (ValueError, AttributeError, TypeError):
+        return Response(
+            {'errors': [{'field': 'api_key', 'detail': 'Invalid api_key'}]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if not Workspace.objects.filter(tracker_secret=api_key).exists():
+        return Response(
+            {'errors': [{'field': 'api_key', 'detail': 'Invalid api_key'}]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        with open(settings.TRACKER_SCRIPT_PATH.parent / 'vericlick-prepend.php', 'r', encoding='utf-8') as f:
+            template = f.read()
+    except (OSError, FileNotFoundError):
+        return Response(
+            {'errors': [{'field': 'script', 'detail': 'Prepend script template not found'}]},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+    api_base = f"{getattr(settings, 'SCRIPT_BASE_URL', settings.SITE_URL)}/api/"
+    php = template.replace('__API_KEY__', api_key).replace('__API_BASE_URL__', api_base)
+    response = HttpResponse(php, content_type='application/x-php')
+    response['Content-Disposition'] = 'attachment; filename="vericlick-prepend.php"'
+    response['Cache-Control'] = 'public, max-age=3600'
+    return response
+
+
 @api_view(['POST'])
 @permission_classes([AllowAny])
 @throttle_classes([TrackerEventThrottle])

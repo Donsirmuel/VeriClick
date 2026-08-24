@@ -45,7 +45,7 @@ const PLATFORMS: { key: Platform; name: string; icon: string; description: strin
   { key: 'wix', name: 'Wix', icon: '✨', description: 'Custom code via Settings', steps: ['Go to Settings > Custom Code', "Click '+ Add Custom Code'", "Select 'Head' as the placement", 'Paste the snippet', 'Save and publish'] },
   { key: 'squarespace', name: 'Squarespace', icon: '🎨', description: 'Code Injection in site settings', steps: ['Go to Settings > Advanced > Code Injection', "Paste the snippet in the 'Header' field", 'Click Save'] },
   { key: 'webflow', name: 'Webflow', icon: '🖼️', description: 'Site Settings > Custom Code', steps: ['Go to Site Settings > Custom Code', "Paste in the 'Head Code' section", 'Save and publish your site'] },
-  { key: 'cpanel', name: 'cPanel / PHP', icon: '📁', description: 'Upload the script file to your server', steps: ['Click "Download .js File" below to save the script', 'Log in to your hosting account (cPanel, File Manager, or FTP)', 'Upload the downloaded file to your website\'s root folder (usually called public_html)', 'In your hosting file editor, open your main page file (e.g. index.php or header.php)', 'Paste the following line just before the closing </head> tag:', '<code class="bg-slate-100 px-1 rounded text-xs">&lt;script src="/vericlick-shield.js" data-api-key="YOUR_KEY" defer&gt;&lt;/script&gt;</code>', 'Swap "YOUR_KEY" with the API key shown above, save the file, and you\'re done'] },
+  { key: 'cpanel', name: 'cPanel / PHP', icon: '📁', description: 'Auto-inject via PHP prepend — no template editing', steps: ['Click "Download .js File" and "Download prepend.php" to save both files', 'Log in to cPanel → File Manager → open your site\'s root folder (public_html)', 'Upload both files there', 'Go to cPanel → Software → MultiPHP INI Editor → Editor Mode', 'Find or add this line and set it:\nauto_prepend_file = "/home/USERNAME/public_html/vericlick-prepend.php"\n(Replace USERNAME with your cPanel username, then Save)', 'Done — the script is now on every PHP page of your site'] },
 ]
 
 export default function ShieldPage() {
@@ -234,14 +234,24 @@ export default function ShieldPage() {
                 {currentSnippet && (
                   <div className="flex items-center gap-2">
                     {selectedPlatform === 'cpanel' && snippetData?.apiBase && (
-                      <a
-                        href={`${snippetData.apiBase}/shield.js/download`}
-                        download
-                        className="bg-white hover:bg-neutral-100 text-slate-700 border border-neutral-200 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors"
-                      >
-                        <HugeiconsIcon icon={Download01Icon} className="w-3.5 h-3.5" />
-                        Download .js File
-                      </a>
+                      <>
+                        <a
+                          href={`${snippetData.apiBase}/shield.js/download`}
+                          download
+                          className="bg-white hover:bg-neutral-100 text-slate-700 border border-neutral-200 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors"
+                        >
+                          <HugeiconsIcon icon={Download01Icon} className="w-3.5 h-3.5" />
+                          Download .js File
+                        </a>
+                        <a
+                          href={`${snippetData.apiBase}/shield/prepend.php/download?api_key=${snippetData.apiKey}`}
+                          download
+                          className="bg-white hover:bg-neutral-100 text-slate-700 border border-neutral-200 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors"
+                        >
+                          <HugeiconsIcon icon={Download01Icon} className="w-3.5 h-3.5" />
+                          Download prepend.php
+                        </a>
+                      </>
                     )}
                     <button
                       onClick={() => handleCopy(currentSnippet)}
