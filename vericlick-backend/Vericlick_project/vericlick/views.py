@@ -2555,10 +2555,10 @@ class CountryRuleViewSet(viewsets.ModelViewSet):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def edge_routes_sync(request):
-    """Edge proxy polls this for routes + site configs. Authenticated via
-    X-Edge-Api-Key header. Returns ALL active routes across all workspaces
-    (the edge proxy is our own internal service)."""
-    from .models import EdgeSyncCredential, RedirectRoute, IPRule, CountryRule, ShieldConfig
+    """Edge proxy polls this for routes with per-workspace rules embedded.
+    Authenticated via X-Edge-Api-Key header. Returns ALL active routes across
+    all workspaces (the edge proxy is our own internal service)."""
+    from .models import EdgeSyncCredential, RedirectRoute, IPRule, CountryRule
 
     api_key = request.headers.get('X-Edge-Api-Key', '')
     if not api_key:
@@ -2581,8 +2581,46 @@ def edge_routes_sync(request):
     if domain_filter:
         routes_qs = routes_qs.filter(domain__domain=domain_filter)
 
+    # Cache per-workspace rule queries to avoid N+1.
+    _rules_cache: dict = {}
+
+    def _workspace_rules(ws_id):
+        if ws_id in _rules_cache:
+            return _rules_cache[ws_id]
+        blocked_ips = list(
+            IPRule.objects.filter(workspace_id=ws_id, action='deny', is_active=True)
+            .values_list('ip_or_cidr', flat=True)
+        )
+        allowed_ips = list(
+            IPRule.objects.filter(workspace_id=ws_id, action='allow', is_active=True)
+            .values_list('ip_or_cidr', flat=True)
+        )
+        country_rules = list(
+            CountryRule.objects.filter(workspace_id=ws_id, is_active=True)
+            .values('country_code', 'action')
+        )
+        from .models import DevicePolicy
+        try:
+            dp = DevicePolicy.objects.get(workspace_id=ws_id)
+            device_policy = {
+                'allowed_device_classes': dp.allowed_device_classes or [],
+                'blocked_os_families': dp.blocked_os_families or [],
+            }
+        except DevicePolicy.DoesNotExist:
+            device_policy = {'allowed_device_classes': [], 'blocked_os_families': []}
+
+        rules = {
+            'blocked_ips': blocked_ips,
+            'allowed_ips': allowed_ips,
+            'country_rules': country_rules,
+            'device_policy': device_policy,
+        }
+        _rules_cache[ws_id] = rules
+        return rules
+
     route_data = []
     for r in routes_qs:
+        ws_rules = _workspace_rules(r.workspace_id)
         route_data.append({
             'domain': r.domain.domain,
             'slug': r.slug,
@@ -2591,41 +2629,16 @@ def edge_routes_sync(request):
             'bot_action': r.bot_action,
             'fallback_url': r.fallback_url,
             'expires_at': r.expires_at.isoformat() if r.expires_at else None,
-        })
-
-    # Blocked IPs — all workspaces
-    blocked_ips = list(
-        IPRule.objects.filter(
-            action='deny', is_active=True,
-        ).values_list('ip_or_cidr', flat=True)
-    )
-
-    # Country rules — all workspaces
-    country_rules = list(
-        CountryRule.objects.filter(
-            is_active=True,
-        ).values('country_code', 'action')
-    )
-
-    # Site configs — all workspaces
-    site_configs = ShieldConfig.objects.select_related('workspace').all()
-    config_data = []
-    for sc in site_configs:
-        config_data.append({
-            'workspace_id': str(sc.workspace.id),
-            'protection_mode': sc.protection_mode,
-            'bot_action': sc.bot_action,
-            'protected_paths': sc.protected_paths,
-            'blocked_paths': sc.blocked_paths,
-            'rate_limit_per_hour': sc.rate_limit_per_hour,
+            # Per-workspace rules embedded in each route
+            'blocked_ips': ws_rules['blocked_ips'],
+            'allowed_ips': ws_rules['allowed_ips'],
+            'country_rules': ws_rules['country_rules'],
+            'device_policy': ws_rules['device_policy'],
         })
 
     return Response({
         'sync_token': int(timezone.now().timestamp()),
         'routes': route_data,
-        'blocked_ips': blocked_ips,
-        'country_rules': country_rules,
-        'site_configs': config_data,
     })
 
 

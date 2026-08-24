@@ -1,19 +1,19 @@
 """Request handler — receives traffic from Caddy after TLS termination,
-looks up the route in Redis, classifies bot vs human, and redirects or blocks."""
+looks up the route in Redis, enforces per-workspace rules, classifies bot
+vs human via the backend verdict, and redirects or blocks."""
 
 import ipaddress
 import json
 import logging
 from datetime import datetime
 from typing import Optional
-from urllib.parse import urlparse
 
 import redis.asyncio as aioredis
 from fastapi import Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from . import geo, events as events_mod
-from .sync import get_route, get_blocked_ips, get_country_rules
+from .sync import get_route
 from .verdict import get_verdict
 
 logger = logging.getLogger("edge.routes")
@@ -42,19 +42,27 @@ def _client_ip(request: Request) -> str:
     return request.client.host if request.client else "127.0.0.1"
 
 
-def _is_ip_blocked(ip: str, blocked: set) -> bool:
-    if ip in blocked:
-        return True
+def _ip_matches_cidr(ip_str: str, cidr_str: str) -> bool:
+    """Check if an IP matches a CIDR or single IP."""
     try:
-        addr = ipaddress.ip_address(ip)
-        for entry in blocked:
-            try:
-                if addr in ipaddress.ip_network(entry, strict=False):
-                    return True
-            except ValueError:
-                continue
-    except ValueError:
-        pass
+        ip = ipaddress.ip_address(ip_str)
+        network = ipaddress.ip_network(cidr_str, strict=False)
+        return ip in network
+    except (ValueError, TypeError):
+        return False
+
+
+def _is_ip_blocked(ip: str, blocked_ips: list) -> bool:
+    for entry in blocked_ips:
+        if _ip_matches_cidr(ip, entry):
+            return True
+    return False
+
+
+def _is_ip_allowed(ip: str, allowed_ips: list) -> bool:
+    for entry in allowed_ips:
+        if _ip_matches_cidr(ip, entry):
+            return True
     return False
 
 
@@ -75,11 +83,7 @@ def _render(name: str) -> HTMLResponse:
 
 
 def _is_expired(expires_at) -> bool:
-    """Whether a route's expiry has passed.
-
-    An unparseable or missing value is treated as "not expired": a malformed
-    timestamp should not silently take a paying customer's link offline.
-    """
+    """Whether a route's expiry has passed."""
     if not expires_at:
         return False
     try:
@@ -88,6 +92,43 @@ def _is_expired(expires_at) -> bool:
         return False
     now = datetime.now(exp.tzinfo) if exp.tzinfo else datetime.now()
     return exp < now
+
+
+def _parse_ua_device(user_agent: str) -> dict:
+    """Lightweight UA parsing for device/OS checks on the edge.
+
+    Uses keyword matching rather than a full parser library to keep the
+    edge proxy dependency-free and fast. Good enough for allow/block
+    decisions on device class and OS family.
+    """
+    ua = user_agent.lower()
+    is_bot = not user_agent.strip()
+
+    # Device class
+    if any(kw in ua for kw in ("mobile", "android", "iphone", "ipod")):
+        device_class = "mobile"
+    elif any(kw in ua for kw in ("ipad", "tablet", "kindle", "silk")):
+        device_class = "tablet"
+    elif is_bot:
+        device_class = "bot"
+    else:
+        device_class = "desktop"
+
+    # OS family
+    if "windows" in ua:
+        os_family = "Windows"
+    elif "mac os" in ua or ("macintosh" in ua and "iphone" not in ua and "ipad" not in ua):
+        os_family = "macOS"
+    elif "iphone" in ua or "ipad" in ua or "ipod" in ua:
+        os_family = "iOS"
+    elif "android" in ua:
+        os_family = "Android"
+    elif "linux" in ua:
+        os_family = "Linux"
+    else:
+        os_family = "Other"
+
+    return {"device_class": device_class, "os_family": os_family, "is_bot": is_bot}
 
 
 async def handle_request(
@@ -131,24 +172,51 @@ async def handle_request(
     destination = route.get("destination_url", "")
     bot_action = route.get("bot_action", "block")
 
-    # IP check
-    blocked_ips = await get_blocked_ips(redis)
+    # --- Per-workspace rule enforcement (from route data) ---
+
+    # 1. IP allow list (highest priority — allow always wins)
+    allowed_ips = route.get("allowed_ips", [])
+    if allowed_ips and _is_ip_allowed(ip, allowed_ips):
+        _queue_event(batcher, host, slug, ip, user_agent, destination, "allowed", False)
+        return RedirectResponse(url=destination, status_code=302)
+
+    # 2. IP deny list
+    blocked_ips = route.get("blocked_ips", [])
     if _is_ip_blocked(ip, blocked_ips):
         return _apply_action(bot_action, destination, batcher, host, slug, ip, user_agent, is_bot=True)
 
-    # Country check
+    # 3. Country rules (allow wins over deny)
     country_code = geo.lookup(ip)
-    country_rules = await get_country_rules(redis)
-    country_action = _is_country_blocked(country_code, country_rules)
-    if country_action == "deny":
-        return _apply_action(bot_action, destination, batcher, host, slug, ip, user_agent, is_bot=True, country_code=country_code)
+    country_rules = route.get("country_rules", [])
+    if country_code:
+        cc = country_code.upper()
+        allow_country = False
+        deny_country = False
+        for rule in country_rules:
+            if rule.get("country_code", "").upper() == cc:
+                if rule.get("action") == "allow":
+                    allow_country = True
+                elif rule.get("action") == "deny":
+                    deny_country = True
+        if allow_country:
+            _queue_event(batcher, host, slug, ip, user_agent, destination, "allowed", False)
+            return RedirectResponse(url=destination, status_code=302)
+        if deny_country:
+            return _apply_action(bot_action, destination, batcher, host, slug, ip, user_agent, is_bot=True, country_code=country_code)
 
-    # Everything above is a local rule. Now ask the backend for the same verdict
-    # the script path gets — bot user agents, rate limits, datacenter ranges,
-    # reputation — so one rule means one thing across both products.
-    #
-    # Fails open by design: get_verdict returns "allowed" on timeout or error,
-    # because a slow check must never take a customer's link offline.
+    # 4. Device policy
+    device_policy = route.get("device_policy", {})
+    allowed_classes = device_policy.get("allowed_device_classes", [])
+    blocked_os = device_policy.get("blocked_os_families", [])
+    if allowed_classes or blocked_os:
+        device_info = _parse_ua_device(user_agent)
+        if allowed_classes and device_info["device_class"] not in allowed_classes:
+            return _apply_action(bot_action, destination, batcher, host, slug, ip, user_agent, is_bot=True)
+        if blocked_os and device_info["os_family"] in blocked_os:
+            return _apply_action(bot_action, destination, batcher, host, slug, ip, user_agent, is_bot=True)
+
+    # --- Backend verdict for full classification ---
+    # Fails open by design: get_verdict returns "allowed" on timeout or error.
     verdict = await get_verdict(redis, host, slug, ip, user_agent)
     if verdict.get("is_bot"):
         return _apply_action(
