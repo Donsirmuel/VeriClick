@@ -6,6 +6,7 @@ import { ShieldIcon, Shield02Icon, Settings01Icon, Copy01Icon, CheckmarkCircle02
 import toast from 'react-hot-toast'
 import { apiClient } from '@/api/client'
 import { fetchDomains, fetchSnippet } from '@/api/workspace'
+import { formatRelativeTime } from '@/lib/utils'
 
 type ProtectionMode = 'strict' | 'balanced' | 'monitor'
 type BotAction = 'block' | 'honeypot' | 'log'
@@ -90,6 +91,25 @@ export default function ShieldPage() {
     queryKey: ['snippet', selectedDomain?.domain],
     queryFn: () => fetchSnippet(selectedDomain!.domain),
     enabled: !!selectedDomain,
+  })
+
+  interface ProtectedPage {
+    path: string
+    visits: number
+    bots: number
+    lastSeen: string | null
+  }
+
+  const scriptLive = !!selectedDomain && (selectedDomain.verified || !!selectedDomain.scriptInstalled)
+  const { data: protectedPages, isLoading: pagesLoading } = useQuery({
+    queryKey: ['shield-pages', selectedDomain?.domain],
+    queryFn: async () => {
+      const { data } = await apiClient.get<ProtectedPage[]>('/shield/pages/', {
+        params: { domain: selectedDomain!.domain },
+      })
+      return data
+    },
+    enabled: scriptLive,
   })
 
   useEffect(() => {
@@ -262,9 +282,81 @@ export default function ShieldPage() {
                   ))}
                 </ol>
               </div>
+
+              {snippetData?.apiBase && (
+                <div className="mt-4 bg-amber-50 border border-amber-200 rounded-xl p-4">
+                  <p className="text-xs font-bold text-amber-800 mb-1">Using a Content-Security-Policy (CSP)?</p>
+                  <p className="text-xs text-amber-700 leading-relaxed">
+                    A strict CSP silently blocks the script. Allow this host in your policy:
+                    add <code className="bg-amber-100 px-1 rounded font-mono">{snippetData.apiBase.replace(/\/$/, '')}</code> to
+                    both <code className="bg-amber-100 px-1 rounded font-mono">script-src</code> and{' '}
+                    <code className="bg-amber-100 px-1 rounded font-mono">connect-src</code>.
+                  </p>
+                </div>
+              )}
             </>
           )}
         </div>
+
+        {/* Pages covered by the script */}
+        {scriptLive && (
+          <div className="bg-white rounded-2xl border border-neutral-200 p-6 sm:p-8 shadow-sm">
+            <div className="flex items-start justify-between gap-3 mb-1">
+              <h2 className="text-sm font-bold text-slate-900">Pages covered by the script</h2>
+              <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full shrink-0">
+                Last 7 days
+              </span>
+            </div>
+            <p className="text-sm text-muted leading-relaxed mb-4">
+              Pages on <strong>{selectedDomain?.domain}</strong> where the script has reported visits.
+            </p>
+
+            {pagesLoading ? (
+              <p className="text-sm text-neutral-500 py-4 text-center">Loading pages…</p>
+            ) : !protectedPages || protectedPages.length === 0 ? (
+              <div className="bg-slate-50 border border-neutral-200 rounded-xl p-6 text-center">
+                <p className="text-sm font-bold text-slate-700 mb-1">No pages seen yet</p>
+                <p className="text-xs text-muted leading-relaxed">
+                  The script hasn't reported any visits in the last 7 days. Visit a page on your
+                  site, then refresh here — it can take a moment.
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs font-bold text-neutral-500 border-b border-neutral-200">
+                      <th className="py-2 pr-4">Page</th>
+                      <th className="py-2 pr-4 text-right">Visits</th>
+                      <th className="py-2 pr-4 text-right">Bots</th>
+                      <th className="py-2 text-right">Last seen</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {protectedPages.map((p) => (
+                      <tr key={p.path} className="border-b border-neutral-100 last:border-0">
+                        <td className="py-2.5 pr-4 font-mono text-xs text-slate-800 break-all max-w-[280px]">
+                          {p.path}
+                        </td>
+                        <td className="py-2.5 pr-4 text-right font-bold text-slate-900">{p.visits}</td>
+                        <td className="py-2.5 pr-4 text-right">
+                          {p.bots > 0 ? (
+                            <span className="text-red-600 font-bold">{p.bots}</span>
+                          ) : (
+                            <span className="text-neutral-400">0</span>
+                          )}
+                        </td>
+                        <td className="py-2.5 text-right text-xs text-neutral-500 whitespace-nowrap">
+                          {p.lastSeen ? formatRelativeTime(p.lastSeen) : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Protection Level */}
         <div className="bg-white rounded-2xl border border-neutral-200 p-6 sm:p-8 shadow-sm">

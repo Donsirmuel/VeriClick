@@ -38,6 +38,12 @@
         reverse_proxy {$SCRIPT_ORIGIN}
     }
 
+    # Strict mode challenges visitors through these; the script calls them on
+    # the same host it was loaded from, so they must be proxied too.
+    handle /api/pow/* {
+        reverse_proxy {$SCRIPT_ORIGIN}
+    }
+
     # Anything else on this host is not part of the script surface. Answer with
     # nothing rather than a page that hints at what runs here.
     handle {

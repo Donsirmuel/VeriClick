@@ -71,6 +71,7 @@ urlpatterns = [
     path('shield/verify/', views.shield_verify, name='shield-verify'),
     path('shield/config/', views.shield_config_view, name='shield-config'),
     path('shield/telemetry/', views.shield_telemetry, name='shield-telemetry'),
+    path('shield/pages/', views.shield_pages, name='shield-pages'),
     path('shield.js', views.serve_tracker_script, name='shield-script'),
     path('shield.js/download', views.download_tracker_script, name='shield-script-download'),
     # Blocked IPs

@@ -2460,6 +2460,55 @@ def dashboard_domains(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+def shield_pages(request):
+    """Pages covered by the shield script, shown on the Anti-Bot page.
+
+    Distinct page paths the script reported in the last 7 days, with visit
+    counts. Optional ?domain= narrows the list to one registered domain.
+    Grouped in Python because the path must be carved out of the full page
+    URL, which no ORM lookup does portably; seven days of events per
+    workspace stays small enough for this to be fine.
+    """
+    workspace = get_user_workspace(request.user)
+    if not workspace:
+        return Response({'error': 'No workspace found'}, status=status.HTTP_404_NOT_FOUND)
+
+    from urllib.parse import urlparse
+
+    domain_filter = request.query_params.get('domain', '').strip().lower()
+    since = timezone.now() - timedelta(days=7)
+
+    qs = TrackerEvent.objects.filter(workspace=workspace, created_at__gte=since)
+    if domain_filter:
+        qs = qs.filter(domain=domain_filter)
+
+    pages = {}
+    for page_url, is_bot, created_at in qs.values_list('page_url', 'is_bot', 'created_at'):
+        try:
+            path = urlparse(page_url).path or '/'
+        except Exception:
+            path = '/'
+        entry = pages.setdefault(path, {'visits': 0, 'bots': 0, 'lastSeen': None})
+        entry['visits'] += 1
+        if is_bot:
+            entry['bots'] += 1
+        if entry['lastSeen'] is None or created_at > entry['lastSeen']:
+            entry['lastSeen'] = created_at
+
+    result = [
+        {
+            'path': path,
+            'visits': entry['visits'],
+            'bots': entry['bots'],
+            'lastSeen': entry['lastSeen'],
+        }
+        for path, entry in sorted(pages.items(), key=lambda kv: -kv[1]['visits'])[:50]
+    ]
+    return Response(result)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def dashboard_activity(request):
     """The live activity feed, paginated.
 
