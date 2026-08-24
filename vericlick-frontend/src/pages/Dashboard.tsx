@@ -125,31 +125,38 @@ export default function DashboardPage() {
   // the user could not switch back to one that had traffic.
   const wholeWorkspaceEmpty = !hasData && !!stats && !selectedDomain
 
-  if (wholeWorkspaceEmpty) {
-    const steps = [
-      {
-        done: hasPlan,
-        href: '/app/billing',
-        icon: ShieldIcon,
-        title: 'Choose a plan',
-        body: 'Pay once with crypto — weekly or monthly access.',
-      },
-      {
-        done: hasDomain,
-        href: '/app/domains',
-        icon: Globe02Icon,
-        title: 'Add your domain',
-        body: 'Register the domain you want to protect.',
-      },
-      {
-        done: scriptLive,
-        href: '/app/shield',
-        icon: CodeIcon,
-        title: 'Install the script',
-        body: "Paste the snippet into your site's <head>. This also verifies the domain.",
-      },
-    ]
-    const remaining = steps.filter((s) => !s.done).length
+  const setupSteps = [
+    {
+      done: hasPlan,
+      href: '/app/billing',
+      icon: ShieldIcon,
+      title: 'Choose a plan',
+      body: 'Pay once with crypto — weekly or monthly access.',
+    },
+    {
+      done: hasDomain,
+      href: '/app/domains',
+      icon: Globe02Icon,
+      title: 'Add your domain',
+      body: 'Register the domain you want to protect.',
+    },
+    {
+      done: scriptLive,
+      href: '/app/shield',
+      icon: CodeIcon,
+      title: 'Install the script',
+      body: "Paste the snippet into your site's <head>. This also verifies the domain.",
+    },
+  ]
+  const remainingSteps = setupSteps.filter((s) => !s.done).length
+
+  // The checklist only replaces the page while something is genuinely left to
+  // do. A user who finished setup but simply has no traffic yet sees the real
+  // dashboard with zeros — "0 steps left — you're nearly there" told finished
+  // users to redo work they had already completed.
+  if (wholeWorkspaceEmpty && remainingSteps > 0) {
+    const steps = setupSteps
+    const remaining = remainingSteps
 
     return (
       <div className="max-w-3xl mx-auto py-12 px-4">
