@@ -117,9 +117,16 @@ def parse_device(user_agent):
     }
 
 
-def check_rate_limit(ip, workspace, max_clicks=60, window_seconds=60):
+def check_rate_limit(ip, workspace):
     """Count clicks from both the script path (TrackerEvent) and the redirect
-    path (RedirectEvent) so edge traffic also triggers rate limiting."""
+    path (RedirectEvent) so edge traffic also triggers rate limiting.
+
+    Uses the workspace's configured rate_limit_per_hour from ShieldConfig."""
+    # Look up the workspace's configured limit (default 100/hour).
+    shield_config = getattr(workspace, 'shield_config', None)
+    max_clicks = getattr(shield_config, 'rate_limit_per_hour', 100) or 100
+    window_seconds = 3600  # 1 hour, matching the field name
+
     cutoff = timezone.now() - timedelta(seconds=window_seconds)
     tracker_count = TrackerEvent.objects.filter(
         workspace=workspace, ip=ip, created_at__gte=cutoff,
