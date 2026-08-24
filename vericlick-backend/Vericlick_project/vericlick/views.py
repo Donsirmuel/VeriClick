@@ -2,6 +2,7 @@ from datetime import timedelta
 import logging
 import math
 import re
+import dns.resolver
 from django.db.models import Count, F, Q
 from django.db.models.functions import TruncDate
 from django.conf import settings
@@ -741,6 +742,118 @@ def redirect_domain_verify_cname(request, domain_id):
             'target': None,
             'detail': 'DNS lookup failed. Please try again in a few minutes.',
         })
+
+
+# ---------------------------------------------------------------------------
+# Nameserver lookup — detects who manages a domain's DNS
+# ---------------------------------------------------------------------------
+
+_NS_PROVIDER_MAP = [
+    ('cloudflare.com',      'Cloudflare',       'https://dash.cloudflare.com'),
+    ('google.com',          'Google Domains',   'https://domains.google'),
+    ('godaddy.com',         'GoDaddy',          'https://dcc.godaddy.com'),
+    ('registrar-servers.com', 'Namecheap',      'https://ap.www.namecheap.com'),
+    ('namecheaphosting.com', 'Namecheap',       'https://ap.www.namecheap.com'),
+    ('awsdns',              'AWS Route 53',     'https://console.aws.amazon.com/route53'),
+    ('digitalocean.com',    'DigitalOcean',     'https://cloud.digitalocean.com/networking'),
+    ('linode.com',          'Linode',           'https://cloud.linode.com/networking'),
+    ('vultr.com',           'Vultr',            'https://my.vultr.com/networking'),
+    ('hetzner.com',         'Hetzner',          'https://dns.hetzner.com'),
+    ('ovh.net',             'OVHcloud',         'https://api.ovh.com/console/#/domain'),
+    ('gandi.net',           'Gandi',            'https://admin.gandi.net'),
+    ('porkbun.com',         'Porkbun',          'https://porkbun.com/account/domains'),
+    ('dynadot.com',         'Dynadot',          'https://www.dynadot.com/domain'),
+    ('hover.com',           'Hover',            'https://my.hover.com'),
+    ('domaincontrol.com',   'GoDaddy',          'https://dcc.godaddy.com'),
+    ('ui-dns',              'IONOS',            'https://my.ionos.com'),
+    ('east-aws',            'AWS Route 53',     'https://console.aws.amazon.com/route53'),
+    ('west-aws',            'AWS Route 53',     'https://console.aws.amazon.com/route53'),
+    ('south-aws',           'AWS Route 53',     'https://console.aws.amazon.com/route53'),
+    ('north-aws',           'AWS Route 53',     'https://console.aws.amazon.com/route53'),
+]
+
+
+def _detect_ns_provider(nameservers):
+    """Match NS hostnames against known providers.  Returns (provider, dashboard_url)."""
+    ns_lower = ' '.join(n.lower() for n in nameservers)
+    for pattern, provider, url in _NS_PROVIDER_MAP:
+        if pattern in ns_lower:
+            return provider, url
+    return None, None
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def lookup_nameservers(request):
+    """Return the nameserver provider for a domain.
+
+    Helps users who bought a domain at one registrar but pointed it at
+    another provider's nameservers (e.g. Cloudflare) — they need to add
+    DNS records at the nameserver provider, not the registrar.
+
+    GET /api/domains/lookup-ns/?domain=example.com
+    """
+    domain = request.query_params.get('domain', '').strip().lower()
+    if not domain:
+        return Response(
+            {'errors': [{'field': 'domain', 'detail': 'domain query parameter is required.'}]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Basic sanity — strip protocol/path if user pasted a URL
+    if '://' in domain:
+        try:
+            domain = urlparse(domain).hostname or domain
+        except Exception:
+            pass
+
+    # Strip trailing dot
+    domain = domain.rstrip('.')
+
+    try:
+        answers = dns.resolver.resolve(domain, 'NS', lifetime=5)
+        nameservers = [str(rdata).rstrip('.') for rdata in answers]
+    except dns.resolver.NXDOMAIN:
+        return Response({
+            'domain': domain,
+            'nameservers': [],
+            'provider': None,
+            'dashboard_url': None,
+            'detail': f'Domain "{domain}" does not exist. Please check the spelling and try again.',
+        })
+    except dns.resolver.NoAnswer:
+        return Response({
+            'domain': domain,
+            'nameservers': [],
+            'provider': None,
+            'dashboard_url': None,
+            'detail': f'No NS records found for "{domain}". This may be a subdomain without its own nameservers.',
+        })
+    except dns.resolver.NoNameservers:
+        return Response({
+            'domain': domain,
+            'nameservers': [],
+            'provider': None,
+            'dashboard_url': None,
+            'detail': 'DNS servers are currently unreachable. Please try again in a few minutes.',
+        })
+    except Exception:
+        return Response({
+            'domain': domain,
+            'nameservers': [],
+            'provider': None,
+            'dashboard_url': None,
+            'detail': 'DNS lookup failed. Please try again in a few minutes.',
+        })
+
+    provider, dashboard_url = _detect_ns_provider(nameservers)
+
+    return Response({
+        'domain': domain,
+        'nameservers': nameservers,
+        'provider': provider,
+        'dashboard_url': dashboard_url,
+    })
 
 
 # ---------------------------------------------------------------------------

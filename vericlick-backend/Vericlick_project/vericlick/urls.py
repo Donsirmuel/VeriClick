@@ -84,6 +84,8 @@ urlpatterns = [
     path('edge/credentials/<uuid:credential_id>/', views.edge_credential_revoke, name='edge-credential-revoke'),
     # Redirect domain CNAME verification
     path('redirect-domains/<uuid:domain_id>/verify-cname/', views.redirect_domain_verify_cname, name='redirect-domain-verify-cname'),
+    # Nameserver lookup
+    path('domains/lookup-ns/', views.lookup_nameservers, name='lookup-nameservers'),
     # Test installation
     path('test-installation/', views.test_installation, name='test-installation'),
     # CRUD

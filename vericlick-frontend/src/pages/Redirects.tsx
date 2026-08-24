@@ -12,8 +12,9 @@ import {
   renewRedirectRoute, updateRedirectRoute,
   fetchRedirectDomains, addRedirectDomain,
   verifyRedirectDomainCname, fetchWorkspace,
+  lookupNameservers,
 } from '@/api/workspace'
-import type { CnameCheckResult } from '@/api/workspace'
+import type { CnameCheckResult, NsLookupResult } from '@/api/workspace'
 import type { RedirectRoute } from '@/types'
 import { parseApiError } from '@/lib/errors'
 import { DashboardSkeleton } from '@/components/ui/DashboardSkeleton'
@@ -241,6 +242,13 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
 
   const selectedDomain = redirectDomains?.find((d) => d.id === domainId)
 
+  const { data: nsInfo } = useQuery({
+    queryKey: ['ns-lookup', selectedDomain?.domain],
+    queryFn: () => lookupNameservers(selectedDomain!.domain),
+    enabled: !!selectedDomain?.domain && step === 3 && !useShortlink,
+    staleTime: 300_000,
+  })
+
   // A link must live on a subdomain: an apex cannot hold a CNAME, and pointing a
   // protected site's apex at the edge would take the whole site off its host.
   const rootDomains = Array.from(new Set(
@@ -386,8 +394,42 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
             <div className="space-y-4">
               <p className="text-sm text-muted">
                 One DNS record connects <strong>{selectedDomain.domain}</strong> to VeriClick.
-                Add it wherever you manage your domain — Cloudflare, Namecheap, GoDaddy.
               </p>
+
+              {/* Provider-aware hint */}
+              {nsInfo && nsInfo.nameservers.length > 0 && (
+                <div className={`p-4 rounded-xl border text-xs leading-relaxed ${
+                  nsInfo.provider
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                    : 'bg-slate-50 border-neutral-200 text-slate-700'
+                }`}>
+                  {nsInfo.provider ? (
+                    <>
+                      <p className="font-bold text-sm mb-1">Your DNS is managed by {nsInfo.provider}</p>
+                      <p className="text-xs mb-2">
+                        You bought your domain elsewhere, but you pointed it at <strong>{nsInfo.provider}</strong>'s
+                        nameservers — so you need to add this CNAME record in your {nsInfo.provider} account, not your registrar.
+                      </p>
+                      {nsInfo.dashboard_url && (
+                        <a
+                          href={nsInfo.dashboard_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-xs font-bold underline underline-offset-2"
+                        >
+                          Open {nsInfo.dashboard_url.replace('https://', '').split('/')[0]} &rarr;
+                        </a>
+                      )}
+                    </>
+                  ) : (
+                    <p>
+                      <span className="font-bold">Nameservers:</span> {nsInfo.nameservers.join(', ')}
+                      <br />
+                      Add the CNAME record below in the DNS panel of whoever controls these nameservers.
+                    </p>
+                  )}
+                </div>
+              )}
 
               <div className="p-4 bg-slate-50 border border-neutral-200 rounded-xl space-y-3">
                 <p className="text-sm font-bold text-slate-900">Add this record</p>

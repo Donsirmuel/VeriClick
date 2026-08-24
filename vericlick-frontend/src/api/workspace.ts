@@ -240,3 +240,16 @@ export async function updateShieldConfig(payload: {
   const { data } = await apiClient.patch<ShieldConfig>('/workspace/shield-config/', payload)
   return data
 }
+
+export interface NsLookupResult {
+  domain: string
+  nameservers: string[]
+  provider: string | null
+  dashboard_url: string | null
+  detail?: string
+}
+
+export async function lookupNameservers(domain: string): Promise<NsLookupResult> {
+  const { data } = await apiClient.get('/domains/lookup-ns/', { params: { domain } })
+  return data
+}
