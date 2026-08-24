@@ -83,7 +83,7 @@ export default function DashboardLayout() {
 
       <div className="flex-1 flex flex-col min-h-screen overflow-hidden">
         <TopBar onMenuToggle={() => setSidebarOpen(!sidebarOpen)} />
-        <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-8">
+        <main className="flex-1 overflow-y-auto p-4 md:p-8">
           <div className="max-w-7xl mx-auto w-full">
             <Outlet />
           </div>
