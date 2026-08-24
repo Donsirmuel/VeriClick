@@ -117,6 +117,8 @@ export default function DashboardPage() {
   // any real customer whose site simply went quiet for a day.
   const hasPlan = !!workspace?.planName
   const activeDomains = registeredDomains?.filter((d) => d.isActive) ?? []
+  const hasDomain = activeDomains.length > 0
+  const scriptLive = activeDomains.some((d) => d.verified || d.scriptInstalled)
 
   // Guard both takeovers on there being no domain filter. Selecting a quiet
   // domain used to replace the entire page, header and dropdown included, so
