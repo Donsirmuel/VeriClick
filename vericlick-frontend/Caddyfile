@@ -24,6 +24,36 @@
 	# Layer 3: JA4 TLS fingerprinting — extract and forward to Django
 	ja3_ja4
 
+	# ---- CORS for public shield/script endpoints ----
+	# The shield.js script runs on CUSTOMER domains (e.g. example.com) and
+	# makes cross-origin fetch() calls to vericlick.site/api/shield/* and
+	# /api/pow/*.  Without these headers the browser silently drops every
+	# request, so no events reach the dashboard.
+
+	# Handle CORS preflight (OPTIONS) for public script endpoints
+	@shield_preflight {
+		method OPTIONS
+		path /api/shield.js /api/shield.js/download /api/shield/verify/ /api/shield/config/ /api/shield/telemetry/ /api/pow/challenge/ /api/pow/verify/ /api/tracker/event/ /api/test-installation/
+	}
+	handle @shield_preflight {
+		header Access-Control-Allow-Origin "*"
+		header Access-Control-Allow-Methods "GET, POST, OPTIONS"
+		header Access-Control-Allow-Headers "Content-Type"
+		respond "" 204
+	}
+
+	# Add CORS headers to actual requests on public script endpoints
+	@shield_public {
+		path /api/shield.js /api/shield.js/download /api/shield/verify/ /api/shield/config/ /api/shield/telemetry/ /api/pow/challenge/ /api/pow/verify/ /api/tracker/event/ /api/test-installation/
+	}
+	handle @shield_public {
+		header Access-Control-Allow-Origin "*"
+		reverse_proxy backend:8000 {
+			header_up X-JA4 {tls.ja4}
+			header_up X-JA3 {tls.ja3}
+		}
+	}
+
 	# ---- Django routes proxied to the backend service ----
 	handle /api/* {
 		reverse_proxy backend:8000 {
