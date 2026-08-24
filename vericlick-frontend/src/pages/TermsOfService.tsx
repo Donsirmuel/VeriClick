@@ -44,7 +44,7 @@ const SECTIONS = [
   },
   {
     title: 'Changes & contact',
-    body: 'We may update these terms as the product evolves. Material changes will be announced via email. Questions or abuse reports can be sent through the contact button below or to support@donlabs.site.',
+    body: 'We may update these terms as the product evolves. Material changes will be announced via email. Questions or abuse reports can be sent through the contact button below or to support@vericlick.site.',
   },
 ]
 

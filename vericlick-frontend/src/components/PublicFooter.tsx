@@ -1,8 +1,7 @@
 import { Link } from 'react-router-dom'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { Mail01Icon, ArrowUpRight01Icon } from '@hugeicons/core-free-icons'
+import { Mail01Icon } from '@hugeicons/core-free-icons'
 import { Logo } from '@/components/Logo'
-import { COMPANY_NAME, COMPANY_URL } from '@/lib/site'
 
 export function PublicFooter() {
   return (
@@ -40,16 +39,6 @@ export function PublicFooter() {
               </ul>
             </div>
 
-            <div>
-              <h5 className="font-bold text-white mb-5 text-sm">Company</h5>
-              <ul className="space-y-3 text-sm text-neutral-400">
-                <li>
-                  <a href={COMPANY_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 hover:text-white transition-colors">
-                    Built by {COMPANY_NAME} <HugeiconsIcon icon={ArrowUpRight01Icon} className="w-3.5 h-3.5" />
-                  </a>
-                </li>
-              </ul>
-            </div>
 
             <div className="col-span-2 sm:col-span-1">
               <h5 className="font-bold text-white mb-5 text-sm">Support</h5>

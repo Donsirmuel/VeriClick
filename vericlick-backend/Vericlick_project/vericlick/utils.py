@@ -13,7 +13,7 @@ _extract = tldextract.TLDExtract(suffix_list_urls=())
 def registrable_domain(host: str) -> str:
     """The domain a customer actually owns.
 
-    `r.donlabs.site` and `donlabs.site` are one registration and count as one
+    `r.vericlick.site` and `vericlick.site` are one registration and count as one
     slot; our own design forces the subdomain, since a redirect cannot live on
     the apex, so charging for both would bill people for following our setup.
 

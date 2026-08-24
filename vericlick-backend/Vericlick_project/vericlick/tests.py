@@ -1906,7 +1906,7 @@ class PublicShieldCorsTests(APITestCase):
     dashboard's CORS allowlist was silently dropping every one of them, which is
     why no telemetry ever arrived from a protected site."""
 
-    CUSTOMER = 'https://donlabs.site'
+    CUSTOMER = 'https://vericlick.site'
 
     def test_preflight_from_a_customer_domain_is_allowed(self):
         res = self.client.options(
@@ -1931,7 +1931,7 @@ class PublicShieldCorsTests(APITestCase):
 
     def test_actual_post_carries_the_cors_header(self):
         res = self.client.post(
-            '/api/shield/verify/', {'api_key': 'nope', 'page_url': 'https://donlabs.site/'},
+            '/api/shield/verify/', {'api_key': 'nope', 'page_url': 'https://vericlick.site/'},
             format='json', HTTP_ORIGIN=self.CUSTOMER,
         )
         # Rejected on the key, but the browser must still be allowed to read it.
@@ -1950,7 +1950,7 @@ class PublicShieldCorsTests(APITestCase):
         # ValidationError, so `api_key=nope` returned 500 from a public endpoint.
         for path in ('/api/shield/verify/', '/api/shield/telemetry/'):
             res = self.client.post(
-                path, {'api_key': 'nope', 'page_url': 'https://donlabs.site/'},
+                path, {'api_key': 'nope', 'page_url': 'https://vericlick.site/'},
                 format='json',
             )
             self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED, path)
@@ -1967,7 +1967,7 @@ class HostnameParsingTests(TestCase):
 
     def test_www_prefix_is_removed(self):
         from vericlick.views import _hostname_from_url
-        self.assertEqual(_hostname_from_url('https://www.donlabs.site/x'), 'donlabs.site')
+        self.assertEqual(_hostname_from_url('https://www.vericlick.site/x'), 'vericlick.site')
 
     def test_domains_starting_with_w_survive_intact(self):
         from vericlick.views import _hostname_from_url
@@ -1978,11 +1978,11 @@ class HostnameParsingTests(TestCase):
 
     def test_ordinary_domain_is_unchanged(self):
         from vericlick.views import _hostname_from_url
-        self.assertEqual(_hostname_from_url('https://donlabs.site/about'), 'donlabs.site')
+        self.assertEqual(_hostname_from_url('https://vericlick.site/about'), 'vericlick.site')
 
     def test_case_is_normalised(self):
         from vericlick.views import _hostname_from_url
-        self.assertEqual(_hostname_from_url('https://DonLabs.SITE/'), 'donlabs.site')
+        self.assertEqual(_hostname_from_url('https://VeriClick.SITE/'), 'vericlick.site')
 
     def test_junk_returns_empty_rather_than_raising(self):
         from vericlick.views import _hostname_from_url
@@ -2001,7 +2001,7 @@ class TelemetryRecordingTests(APITestCase):
         self.workspace.plan = Plan.objects.get(code='basic')
         self.workspace.save(update_fields=['plan'])
         DomainRegistry.objects.create(
-            workspace=self.workspace, domain='donlabs.site',
+            workspace=self.workspace, domain='vericlick.site',
             purpose='protection', verified=True,
         )
 
@@ -2012,11 +2012,11 @@ class TelemetryRecordingTests(APITestCase):
         }, format='json')
 
     def test_a_visit_to_a_registered_domain_is_recorded(self):
-        self.assertEqual(self._post('https://donlabs.site/').status_code, status.HTTP_200_OK)
+        self.assertEqual(self._post('https://vericlick.site/').status_code, status.HTTP_200_OK)
         self.assertEqual(TrackerEvent.objects.filter(workspace=self.workspace).count(), 1)
 
     def test_the_www_form_of_a_registered_domain_is_recorded(self):
-        self._post('https://www.donlabs.site/')
+        self._post('https://www.vericlick.site/')
         self.assertEqual(TrackerEvent.objects.filter(workspace=self.workspace).count(), 1)
 
     def test_an_unregistered_domain_is_dropped(self):
@@ -2043,19 +2043,19 @@ class EdgeEventAttributionTests(APITestCase):
         self.user = User.objects.create_user(username='edge', email='e2@example.com', password='pw')
         self.workspace = Workspace.objects.get(owner=self.user)
         self.domain = DomainRegistry.objects.create(
-            workspace=self.workspace, domain='r.donlabs.site',
+            workspace=self.workspace, domain='r.vericlick.site',
             purpose='redirect', verified=True,
         )
         self.route = RedirectRoute.objects.create(
             workspace=self.workspace, domain=self.domain, slug='promo',
-            destination_url='https://donlabs.site/about',
+            destination_url='https://vericlick.site/about',
         )
         self.raw_key, self.cred = EdgeSyncCredential.create_for_workspace(self.workspace)
 
     def _push(self, slug, verdict='allowed'):
         return self.client.post('/api/edge/events/', {'events': [{
-            'domain': 'r.donlabs.site', 'slug': slug, 'ip': '203.0.113.9',
-            'user_agent': 'curl/8', 'destination': 'https://donlabs.site/about',
+            'domain': 'r.vericlick.site', 'slug': slug, 'ip': '203.0.113.9',
+            'user_agent': 'curl/8', 'destination': 'https://vericlick.site/about',
             'verdict': verdict, 'is_bot': False,
         }]}, format='json', HTTP_X_EDGE_API_KEY=self.raw_key)
 
@@ -2191,14 +2191,14 @@ class DomainSlotCountingTests(APITestCase):
         return self.client.get('/api/workspace/').json()['domainsUsed']
 
     def test_a_subdomain_shares_its_parents_slot(self):
-        self._add('donlabs.site')
+        self._add('vericlick.site')
         DomainRegistry.objects.create(
-            workspace=self.workspace, domain='r.donlabs.site', purpose='redirect',
+            workspace=self.workspace, domain='r.vericlick.site', purpose='redirect',
         )
         self.assertEqual(self._used(), 1)
 
     def test_separate_domains_take_separate_slots(self):
-        self._add('donlabs.site')
+        self._add('vericlick.site')
         self._add('example.com')
         self.assertEqual(self._used(), 2)
 

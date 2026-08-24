@@ -170,7 +170,7 @@ class Workspace(models.Model):
     def domain_slots_used(self, excluding=None):
         """How many of the plan's domain slots are taken.
 
-        Counted by registrable domain, so donlabs.site and r.donlabs.site are
+        Counted by registrable domain, so vericlick.site and r.vericlick.site are
         one slot. Our own setup forces that subdomain — a redirect cannot live
         on the apex — so billing both would charge people for following it.
         """
