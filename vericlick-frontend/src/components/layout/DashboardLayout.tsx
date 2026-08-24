@@ -30,11 +30,15 @@ export default function DashboardLayout() {
   // the workspace query resolves, or if the PATCH failed offline.
   const seenTour = tourDone || !!workspace?.tourCompleted
 
-  if (workspace && !workspace.onboardingComplete && !seenTour && location.pathname !== '/app/onboarding') {
+  // Show the product tour only on the dashboard itself — never force-redirect
+  // users away from any page they've navigated to.  The old code redirected
+  // to /app/onboarding which created an inescapable loop when the user had
+  // no plan yet.
+  if (workspace && !workspace.onboardingComplete && !seenTour && location.pathname === '/app/dashboard') {
     return (
       <ProductTour onComplete={() => {
         setTourDone(true)
-        navigate('/app/onboarding')
+        navigate('/app/dashboard', { replace: true })
       }} />
     )
   }
