@@ -14,7 +14,7 @@ import {
   verifyRedirectDomainCname, fetchWorkspace,
   lookupNameservers,
 } from '@/api/workspace'
-import type { CnameCheckResult, NsLookupResult } from '@/api/workspace'
+import type { CnameCheckResult } from '@/api/workspace'
 import type { RedirectRoute } from '@/types'
 import { parseApiError } from '@/lib/errors'
 import { DashboardSkeleton } from '@/components/ui/DashboardSkeleton'
