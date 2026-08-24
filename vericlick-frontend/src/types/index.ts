@@ -245,6 +245,7 @@ export interface BlockedIPEntry {
   country: string
   verdict: string
   createdAt: string
+  whitelisted?: boolean
 }
 
 export interface CountryRule {

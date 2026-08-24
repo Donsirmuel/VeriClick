@@ -8,11 +8,14 @@ from .models import IPRule, TrackerEvent, IpAsnRange, CountryRule, RedirectEvent
 
 
 # How often an IP must trip the traffic checks before it is auto-denied, and
-# how long that auto-deny lasts. These are deliberately small: four flags in a
-# quarter hour is clearly not a human clicking a link.
+# how long that auto-deny lasts. Four flags in a quarter hour is clearly not a
+# human clicking a link — but it is EXACTLY what a workspace owner testing
+# their own new link looks like, so the deny is short: a real attacker re-
+# offends and is re-flagged immediately, while a false positive costs the
+# visitor one hour rather than a full day of a "broken" link.
 AUTO_REP_FLAG_THRESHOLD = 4
 AUTO_REP_WINDOW_MINUTES = 15
-AUTO_REP_DENY_HOURS = 24
+AUTO_REP_DENY_HOURS = 1
 
 
 KNOWN_BOT_UA_PATTERNS = [

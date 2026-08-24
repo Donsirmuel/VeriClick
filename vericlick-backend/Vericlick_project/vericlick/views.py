@@ -2359,7 +2359,10 @@ def blocked_ips(request):
     if domain_filter:
         qs = qs.filter(domain=domain_filter)
 
-    # A whitelisted IP is no longer "blocked"
+    # Whitelisted IPs stay in the list, flagged — hiding them made it look as
+    # if the blocks themselves were rewritten to "allowed" the moment the
+    # owner whitelisted their own IP. The record of what happened is history;
+    # the whitelist only changes what happens NEXT.
     whitelisted = set(
         IPRule.objects.filter(
             workspace=workspace,
@@ -2367,8 +2370,6 @@ def blocked_ips(request):
             is_active=True,
         ).values_list('ip_or_cidr', flat=True)
     )
-    if whitelisted:
-        qs = qs.exclude(ip__in=whitelisted)
 
     search = request.query_params.get('search', '').strip()
     if search:
@@ -2383,7 +2384,10 @@ def blocked_ips(request):
     page = paginator.paginate_queryset(qs, request)
 
     serializer = BlockedIPSerializer(page, many=True)
-    return paginator.get_paginated_response(serializer.data)
+    data = serializer.data
+    for entry in data:
+        entry['whitelisted'] = entry.get('ip') in whitelisted
+    return paginator.get_paginated_response(data)
 
 
 @api_view(['GET', 'PATCH'])

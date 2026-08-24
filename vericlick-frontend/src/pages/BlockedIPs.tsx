@@ -114,6 +114,11 @@ export default function BlockedIPsPage() {
                 <tr key={entry.id} className="border-b border-neutral-100 hover:bg-neutral-50/50 transition-colors">
                   <td className="px-6 py-4">
                     <span className="font-mono font-bold text-sm">{entry.ip}</span>
+                    {entry.whitelisted && (
+                      <span className="ml-2 inline-flex items-center text-[10px] font-bold uppercase tracking-wider bg-success/10 text-success px-2 py-0.5 rounded-full align-middle">
+                        Whitelisted
+                      </span>
+                    )}
                     {entry.country && (
                       <span className="block text-xs text-muted mt-0.5">
                         {entry.country}
@@ -141,14 +146,18 @@ export default function BlockedIPsPage() {
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center justify-end">
-                      <button
-                        onClick={() => setWhitelistTarget(entry)}
-                        disabled={whitelistMutation.isPending}
-                        className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-lg bg-success/10 text-success hover:bg-success/20 transition-colors disabled:opacity-50"
-                      >
-                        <HugeiconsIcon icon={CheckmarkCircle02Icon} className="w-3.5 h-3.5" />
-                        Whitelist
-                      </button>
+                      {entry.whitelisted ? (
+                        <span className="text-xs text-muted italic">Already allowed</span>
+                      ) : (
+                        <button
+                          onClick={() => setWhitelistTarget(entry)}
+                          disabled={whitelistMutation.isPending}
+                          className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-lg bg-success/10 text-success hover:bg-success/20 transition-colors disabled:opacity-50"
+                        >
+                          <HugeiconsIcon icon={CheckmarkCircle02Icon} className="w-3.5 h-3.5" />
+                          Whitelist
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
