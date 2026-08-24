@@ -41,7 +41,12 @@ export default function DashboardLayout() {
 
   const handleTouchStart = (e: React.TouchEvent) => {
     const t = e.touches[0]
-    touchStart.current = { x: t.clientX, y: t.clientY, at: Date.now() }
+    const x = t.clientX
+    // Only capture swipe gestures from the left/right 20px screen edges.
+    // This keeps sidebar swipe working while letting tables and content
+    // scroll horizontally without interference.
+    if (x > 20 && x < window.innerWidth - 20) return
+    touchStart.current = { x, y: t.clientY, at: Date.now() }
   }
 
   const handleTouchEnd = (e: React.TouchEvent) => {
@@ -78,7 +83,7 @@ export default function DashboardLayout() {
 
       <div className="flex-1 flex flex-col min-h-screen overflow-hidden">
         <TopBar onMenuToggle={() => setSidebarOpen(!sidebarOpen)} />
-        <main className="flex-1 overflow-y-auto p-4 md:p-8">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-8">
           <div className="max-w-7xl mx-auto w-full">
             <Outlet />
           </div>

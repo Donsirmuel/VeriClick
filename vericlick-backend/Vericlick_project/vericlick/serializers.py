@@ -363,7 +363,7 @@ class DomainRegistrySerializer(serializers.ModelSerializer):
         ]
 
     def _route(self, obj):
-        return getattr(obj, 'redirect_route', None)
+        return obj.redirect_routes.first()
 
     def get_has_redirect(self, obj):
         return self._route(obj) is not None

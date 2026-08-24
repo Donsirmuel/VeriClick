@@ -763,16 +763,16 @@ class EdgeSyncCredential(models.Model):
 
     @staticmethod
     def verify_key(raw_key):
-        """Look up an active credential by raw key. Returns (credential, None) or (None, None)."""
+        """Look up an active credential by raw key. Returns (workspace, credential) or (None, None)."""
         import hashlib
         try:
             key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
-            cred = EdgeSyncCredential.objects.get(
+            cred = EdgeSyncCredential.objects.select_related('workspace').get(
                 key_hash=key_hash, is_active=True,
             )
             cred.last_sync_at = now()
             cred.save(update_fields=['last_sync_at'])
-            return cred, None
+            return cred.workspace, cred
         except EdgeSyncCredential.DoesNotExist:
             return None, None
 

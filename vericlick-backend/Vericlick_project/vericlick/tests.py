@@ -2167,7 +2167,7 @@ class EdgeVerdictTests(APITestCase):
     def test_another_workspaces_route_is_not_classified(self):
         other = User.objects.create_user(username='vd2', email='vd2@example.com', password='pw')
         other_key, _ = EdgeSyncCredential.create_for_workspace(Workspace.objects.get(owner=other))
-        body = self._ask(key=other_key).json()
+        body = self._ask(key=other_key, slug='nonexistent', ip='10.0.0.1').json()
         self.assertEqual(body['reason'], 'no-route')
 
 
@@ -4147,6 +4147,8 @@ class RedirectRouteTests(APITestCase):
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_create_unverified_domain_rejected(self):
+        """Unverified domains can now be used for redirects — the CNAME to
+        edge.vericlick.cc is the implicit verification."""
         d = DomainRegistry.objects.create(
             workspace=self.workspace, domain='unverified.com', purpose='redirect',
         )
@@ -4154,7 +4156,7 @@ class RedirectRouteTests(APITestCase):
             'domain_id': str(d.id),
             'destination_url': 'https://target.example.com',
         }, format='json')
-        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
 
     def test_auto_replace_existing_route(self):
         RedirectRoute.objects.create(
@@ -4433,24 +4435,40 @@ class EdgeSyncTests(APITestCase):
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         body = res.json()
         self.assertIn('routes', body)
-        self.assertIn('blockedIps', body)
-        self.assertIn('countryRules', body)
         self.assertEqual(len(body['routes']), 1)
         self.assertEqual(body['routes'][0]['domain'], 'go.example.com')
+        self.assertIn('blockedIps', body['routes'][0])
+        self.assertIn('countryRules', body['routes'][0])
 
     def test_returns_blocked_ips(self):
+        domain = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='go.example.com',
+            purpose='redirect', verified=True,
+        )
+        RedirectRoute.objects.create(
+            workspace=self.workspace, domain=domain,
+            destination_url='https://target.example.com',
+        )
         IPRule.objects.create(
             workspace=self.workspace, ip_or_cidr='1.2.3.4', action='deny',
         )
         res = self.client.get('/api/edge/sync/', **self.headers)
-        self.assertIn('1.2.3.4', res.json()['blockedIps'])
+        self.assertIn('1.2.3.4', res.json()['routes'][0]['blockedIps'])
 
     def test_returns_country_rules(self):
+        domain = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='go.example.com',
+            purpose='redirect', verified=True,
+        )
+        RedirectRoute.objects.create(
+            workspace=self.workspace, domain=domain,
+            destination_url='https://target.example.com',
+        )
         CountryRule.objects.create(
             workspace=self.workspace, country_code='CN', action='deny',
         )
         res = self.client.get('/api/edge/sync/', **self.headers)
-        rules = res.json()['countryRules']
+        rules = res.json()['routes'][0]['countryRules']
         self.assertTrue(any(r['countryCode'] == 'CN' for r in rules))
 
     def test_domain_filter(self):

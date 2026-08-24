@@ -308,7 +308,7 @@ def domain_delete(request, domain_id):
 
     # RedirectRoute.domain cascades, so the link goes with the domain. Capture
     # it first so the response can say exactly what was removed.
-    route = getattr(domain, 'redirect_route', None)
+    route = domain.redirect_routes.first()
     removed_route = (
         {'slug': route.slug, 'destination_url': route.destination_url} if route else None
     )
@@ -960,12 +960,6 @@ def redirect_route_list_create(request):
             return Response(
                 {'errors': [{'field': 'domain_id', 'detail': 'Redirect domain not found.'}]},
                 status=status.HTTP_404_NOT_FOUND,
-            )
-
-        if not domain_obj.verified:
-            return Response(
-                {'errors': [{'field': 'domain_id', 'detail': 'Domain must be verified before creating a redirect.'}]},
-                status=status.HTTP_400_BAD_REQUEST,
             )
 
     # Safety check on destination
@@ -2613,8 +2607,8 @@ def edge_routes_sync(request):
     if not api_key:
         return Response({'error': 'X-Edge-Api-Key header required'}, status=status.HTTP_401_UNAUTHORIZED)
 
-    cred, _ = EdgeSyncCredential.verify_key(api_key)
-    if not cred:
+    ws, _ = EdgeSyncCredential.verify_key(api_key)
+    if not ws:
         return Response({'error': 'Invalid API key'}, status=status.HTTP_401_UNAUTHORIZED)
 
     # Optional domain filter
@@ -2746,8 +2740,8 @@ def edge_verdict(request):
     if not api_key:
         return Response({'error': 'X-Edge-Api-Key header required'}, status=status.HTTP_401_UNAUTHORIZED)
 
-    cred, _ = EdgeSyncCredential.verify_key(api_key)
-    if not cred:
+    ws, _ = EdgeSyncCredential.verify_key(api_key)
+    if not ws:
         return Response({'error': 'Invalid API key'}, status=status.HTTP_401_UNAUTHORIZED)
 
     domain = (request.data.get('domain') or '').strip().lower()
@@ -2830,8 +2824,8 @@ def edge_events_batch(request):
     if not api_key:
         return Response({'error': 'X-Edge-Api-Key header required'}, status=status.HTTP_401_UNAUTHORIZED)
 
-    cred, _ = EdgeSyncCredential.verify_key(api_key)
-    if not cred:
+    ws, _ = EdgeSyncCredential.verify_key(api_key)
+    if not ws:
         return Response({'error': 'Invalid API key'}, status=status.HTTP_401_UNAUTHORIZED)
 
     events_data = request.data.get('events', [])
@@ -3038,7 +3032,10 @@ def test_installation(request):
     except (urllib.error.URLError, OSError, ValueError) as exc:
         domain_obj.script_installed = False
         domain_obj.save(update_fields=['script_installed'])
+        # The error is often a DNS resolution failure on the backend server
+        # side, which the user can't diagnose. Keep the message actionable
+        # without blaming DNS.
         return Response({
             'installed': False,
-            'error': f'Could not reach {domain_obj.domain}: {exc}',
+            'error': f'Could not reach {domain_obj.domain}. Please make sure the domain is live and try again.',
         })

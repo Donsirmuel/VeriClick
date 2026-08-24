@@ -104,25 +104,26 @@ def _parse_ua_device(user_agent: str) -> dict:
     ua = user_agent.lower()
     is_bot = not user_agent.strip()
 
-    # Device class
-    if any(kw in ua for kw in ("mobile", "android", "iphone", "ipod")):
-        device_class = "mobile"
-    elif any(kw in ua for kw in ("ipad", "tablet", "kindle", "silk")):
+    # Device class — check iPad first (iPads contain "Mobile" in some UAs)
+    if any(kw in ua for kw in ("ipad", "tablet", "kindle", "silk")):
         device_class = "tablet"
+    elif any(kw in ua for kw in ("mobile", "android", "iphone", "ipod")):
+        device_class = "mobile"
     elif is_bot:
         device_class = "bot"
     else:
         device_class = "desktop"
 
-    # OS family
-    if "windows" in ua:
-        os_family = "Windows"
-    elif "mac os" in ua or ("macintosh" in ua and "iphone" not in ua and "ipad" not in ua):
-        os_family = "macOS"
-    elif "iphone" in ua or "ipad" in ua or "ipod" in ua:
+    # OS family — check Apple mobile BEFORE "mac os" because iPhones report
+    # "like Mac OS X" in their User-Agent string.
+    if "iphone" in ua or "ipad" in ua or "ipod" in ua:
         os_family = "iOS"
     elif "android" in ua:
         os_family = "Android"
+    elif "windows" in ua:
+        os_family = "Windows"
+    elif "mac os" in ua or "macintosh" in ua:
+        os_family = "macOS"
     elif "linux" in ua:
         os_family = "Linux"
     else:
@@ -176,6 +177,7 @@ async def handle_request(
         return _render("neutral")
 
     destination = route.get("destination_url", "")
+    fallback_url = route.get("fallback_url", "")
     bot_action = route.get("bot_action", "block")
 
     # --- Per-workspace rule enforcement (from route data) ---
@@ -189,7 +191,7 @@ async def handle_request(
     # 2. IP deny list
     blocked_ips = route.get("blocked_ips", [])
     if _is_ip_blocked(ip, blocked_ips):
-        return _apply_action(bot_action, destination, batcher, host, slug, ip, user_agent, is_bot=True)
+        return _apply_action(bot_action, destination, fallback_url, batcher, host, slug, ip, user_agent, is_bot=True)
 
     # 3. Country rules (allow wins over deny)
     country_code = geo.lookup(ip)
@@ -208,7 +210,7 @@ async def handle_request(
             _queue_event(batcher, host, slug, ip, user_agent, destination, "allowed", False)
             return RedirectResponse(url=destination, status_code=302)
         if deny_country:
-            return _apply_action(bot_action, destination, batcher, host, slug, ip, user_agent, is_bot=True, country_code=country_code)
+            return _apply_action(bot_action, destination, fallback_url, batcher, host, slug, ip, user_agent, is_bot=True, country_code=country_code)
 
     # 4. Device policy
     device_policy = route.get("device_policy", {})
@@ -217,16 +219,16 @@ async def handle_request(
     if allowed_classes or blocked_os:
         device_info = _parse_ua_device(user_agent)
         if allowed_classes and device_info["device_class"] not in allowed_classes:
-            return _apply_action(bot_action, destination, batcher, host, slug, ip, user_agent, is_bot=True)
+            return _apply_action(bot_action, destination, fallback_url, batcher, host, slug, ip, user_agent, is_bot=True)
         if blocked_os and device_info["os_family"] in blocked_os:
-            return _apply_action(bot_action, destination, batcher, host, slug, ip, user_agent, is_bot=True)
+            return _apply_action(bot_action, destination, fallback_url, batcher, host, slug, ip, user_agent, is_bot=True)
 
     # --- Backend verdict for full classification ---
     # Fails open by design: get_verdict returns "allowed" on timeout or error.
     verdict = await get_verdict(redis, host, slug, ip, user_agent)
     if verdict.get("is_bot"):
         return _apply_action(
-            bot_action, destination, batcher, host, slug, ip, user_agent,
+            bot_action, destination, fallback_url, batcher, host, slug, ip, user_agent,
             is_bot=True, country_code=country_code,
         )
 
@@ -238,6 +240,7 @@ async def handle_request(
 def _apply_action(
     bot_action: str,
     destination: str,
+    fallback_url: str,
     batcher: events_mod.EventBatcher,
     host: str,
     slug: str,
@@ -246,9 +249,14 @@ def _apply_action(
     is_bot: bool = True,
     country_code: Optional[str] = None,
 ) -> Response:
-    if bot_action == "redirect" and destination:
-        _queue_event(batcher, host, slug, ip, user_agent, destination, "blocked", is_bot, country_code=country_code)
-        return RedirectResponse(url=destination, status_code=302)
+    if bot_action == "redirect":
+        target = fallback_url or ""
+        if target:
+            _queue_event(batcher, host, slug, ip, user_agent, target, "blocked", is_bot, country_code=country_code)
+            return RedirectResponse(url=target, status_code=302)
+        # No fallback set — show neutral page instead of leaking the destination
+        _queue_event(batcher, host, slug, ip, user_agent, "", "blocked", is_bot, country_code=country_code)
+        return _render("neutral")
     elif bot_action == "honeypot":
         _queue_event(batcher, host, slug, ip, user_agent, "", "blocked", is_bot, country_code=country_code)
         return _render("honeypot")
