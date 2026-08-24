@@ -115,6 +115,7 @@ export interface RedirectRoute {
   clicksCount: number
   abuseStatus: 'none' | 'flagged' | 'blocked'
   destinationSafe: boolean | null
+  useShortlink: boolean
   createdAt: string
 }
 

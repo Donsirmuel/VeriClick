@@ -13,7 +13,7 @@ from fastapi import Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from . import geo, events as events_mod
-from .sync import get_route
+from .sync import get_route, get_shortlink
 from .verdict import get_verdict
 
 logger = logging.getLogger("edge.routes")
@@ -150,8 +150,14 @@ async def handle_request(
     except ValueError:
         pass  # Not an IP, continue
 
-    # Look up route in Redis
+    # Look up route in Redis — try domain+slug first, then shortlink
     route = await get_route(redis, host, slug)
+
+    if not route and slug:
+        # Shortlink: vericlick.cc/<slug> — resolve by slug alone
+        route = await get_shortlink(redis, slug)
+        if route:
+            host = "vericlick.cc"  # Normalize host for event tracking
 
     if not route:
         # No route found — serve neutral page (never expose vericlick.site)

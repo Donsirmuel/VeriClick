@@ -148,19 +148,25 @@ export async function fetchRedirectRoutes(): Promise<RedirectRoute[]> {
 }
 
 export async function createRedirectRoute(input: {
-  domainId: string
+  domainId?: string
   slug: string
   destinationUrl: string
   botAction?: string
   fallbackUrl?: string
+  useShortlink?: boolean
 }): Promise<RedirectRoute> {
-  const { data } = await apiClient.post<RedirectRoute>('/redirect-routes/', {
-    domain_id: input.domainId,
+  const payload: Record<string, unknown> = {
     slug: input.slug,
     destination_url: input.destinationUrl,
     bot_action: input.botAction || 'honeypot',
     fallback_url: input.fallbackUrl || '',
-  })
+  }
+  if (input.useShortlink) {
+    payload.use_shortlink = true
+  } else if (input.domainId) {
+    payload.domain_id = input.domainId
+  }
+  const { data } = await apiClient.post<RedirectRoute>('/redirect-routes/', payload)
   return data
 }
 

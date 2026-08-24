@@ -50,7 +50,10 @@ function RouteCard({ route, periodDays, onRenew, onToggleActive, onDelete }: {
 
   // The whole point of the link is to be shared, so make the full URL the thing
   // you grab — not something the user reassembles from domain + slug by eye.
-  const fullUrl = `https://${route.domain.domain}${route.slug ? `/${route.slug}` : ''}`
+  const shortlinkUrl = route.useShortlink && route.slug
+    ? `https://vericlick.cc/${route.slug}`
+    : null
+  const fullUrl = shortlinkUrl || `https://${route.domain.domain}${route.slug ? `/${route.slug}` : ''}`
   const live = route.isActive && !isExpired
 
   return (
@@ -176,6 +179,7 @@ function RouteCard({ route, periodDays, onRenew, onToggleActive, onDelete }: {
 function CreateWizard({ onClose }: { onClose: () => void }) {
   const queryClient = useQueryClient()
   const [step, setStep] = useState(1)
+  const [useShortlink, setUseShortlink] = useState<boolean | null>(null) // null = not chosen yet
   const [destinationUrl, setDestinationUrl] = useState('')
   const [botAction, setBotAction] = useState('honeypot')
   const [fallbackUrl, setFallbackUrl] = useState('')
@@ -200,7 +204,7 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
       setDomainId(data.id)
       setNewRedirectDomain('')
       toast.success(`${data.domain} added`)
-      setStep(2)
+      setStep(3) // DNS step
     },
     onError: (err) => toast.error(parseApiError(err) || 'Failed to add domain'),
   })
@@ -212,7 +216,7 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
       queryClient.invalidateQueries({ queryKey: ['redirect-domains'] })
       if (data.cnameOk) {
         toast.success('DNS is pointing at us — address verified')
-        setStep(3)
+        setStep(4) // destination step for custom domain
       }
     },
     onError: () => {
@@ -221,13 +225,11 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
   })
 
   const createMutation = useMutation({
-    mutationFn: () => createRedirectRoute({
-      domainId,
-      slug,
-      destinationUrl,
-      botAction,
-      fallbackUrl: botAction === 'redirect' ? fallbackUrl : undefined,
-    }),
+    mutationFn: () => createRedirectRoute(
+      useShortlink
+        ? { slug, destinationUrl, botAction, useShortlink: true, fallbackUrl: botAction === 'redirect' ? fallbackUrl : undefined }
+        : { domainId, slug, destinationUrl, botAction, fallbackUrl: botAction === 'redirect' ? fallbackUrl : undefined }
+    ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['redirect-routes'] })
       queryClient.invalidateQueries({ queryKey: ['domains'] })
@@ -264,7 +266,31 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
     toast.success('Copied')
   }
 
-  const STEP_LABELS = ['Link address', 'Point DNS', 'Destination']
+  // Dynamic step labels depending on shortlink vs custom domain
+  const STEP_LABELS = useShortlink === null
+    ? ['Link type']
+    : useShortlink
+      ? ['Link type', 'Destination']
+      : ['Link type', 'Link address', 'Point DNS', 'Destination']
+
+  // Current step number for the progress bar (remapped for shortlink path)
+  const displayStep = useShortlink === null
+    ? 1
+    : useShortlink
+      ? step  // step 1 = type, step 2 = destination
+      : step  // step 1 = type, step 2 = address, step 3 = DNS, step 4 = destination
+
+  // Back button target
+  const goBack = () => {
+    if (useShortlink === null) return // can't go back from step 1
+    if (useShortlink) {
+      if (step === 2) setStep(1)
+    } else {
+      if (step === 2) setStep(1)
+      else if (step === 3) setStep(2)
+      else if (step === 4) setStep(3)
+    }
+  }
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
@@ -275,8 +301,8 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
           <div className="flex items-center gap-1.5 mb-5">
             {STEP_LABELS.map((label, i) => {
               const n = i + 1
-              const done = n < step
-              const active = n === step
+              const done = n < displayStep
+              const active = n === displayStep
               return (
                 <div key={label} className="flex-1 min-w-0">
                   <div className={`h-1.5 rounded-full transition-all ${done || active ? 'bg-black' : 'bg-neutral-200'}`} />
@@ -290,25 +316,58 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
             })}
           </div>
 
-          {/* ---- Step 1: which address will the link live on? ---- */}
+          {/* ---- Step 1: choose link type ---- */}
           {step === 1 && (
-            <div className="space-y-4">
+            <div className="space-y-3">
               <p className="text-sm text-muted">
-                Your link needs its own address — a subdomain like{' '}
-                <span className="font-mono text-slate-700">go.yoursite.com</span>. It can't be
-                your main domain, because that has to keep pointing at your website.
+                Choose how your link works. You can always create the other type later.
               </p>
 
+              <button
+                onClick={() => { setUseShortlink(true); setStep(2) }}
+                className="w-full p-4 bg-emerald-50 border-2 border-emerald-300 rounded-xl text-left hover:border-emerald-500 transition-colors group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center shrink-0 group-hover:bg-emerald-200 transition-colors">
+                    <HugeiconsIcon icon={LinkSquare02Icon} className="w-5 h-5 text-emerald-700" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-slate-900">Quick shortlink</p>
+                    <p className="text-xs text-emerald-700">vericlick.cc/your-slug — ready immediately, no DNS setup</p>
+                  </div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => { setUseShortlink(false); setStep(2) }}
+                className="w-full p-4 bg-white border border-neutral-200 rounded-xl text-left hover:border-neutral-400 transition-colors group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center shrink-0 group-hover:bg-slate-200 transition-colors">
+                    <HugeiconsIcon icon={LinkSquare02Icon} className="w-5 h-5 text-slate-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-slate-900">Custom domain</p>
+                    <p className="text-xs text-muted">Use your own subdomain like go.yoursite.com</p>
+                  </div>
+                </div>
+              </button>
+
               {readyDomains.length > 0 && (
-                <div>
-                  <label className="text-sm font-bold text-slate-900 block mb-1">
-                    Use an address you've already set up
-                  </label>
+                <div className="mt-2">
+                  <div className="flex items-center gap-2 text-xs text-muted mb-2">
+                    <span className="flex-1 h-px bg-neutral-200" />
+                    or use an existing domain
+                    <span className="flex-1 h-px bg-neutral-200" />
+                  </div>
                   <select
                     value={domainId}
                     onChange={(e) => {
-                      setDomainId(e.target.value)
-                      if (e.target.value) setStep(3)
+                      if (e.target.value) {
+                        setDomainId(e.target.value)
+                        setUseShortlink(false)
+                        setStep(4) // skip to destination (already verified)
+                      }
                     }}
                     className="w-full bg-slate-50 border border-neutral-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-black"
                   >
@@ -317,13 +376,74 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
                       <option key={d.id} value={d.id}>{d.domain}</option>
                     ))}
                   </select>
-                  <div className="flex items-center gap-2 text-xs text-muted mt-4">
-                    <span className="flex-1 h-px bg-neutral-200" />
-                    or create a new one
-                    <span className="flex-1 h-px bg-neutral-200" />
-                  </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* ---- DNS step (custom domain only) ---- */}
+          {!useShortlink && step === 3 && selectedDomain && (
+            <div className="space-y-4">
+              <p className="text-sm text-muted">
+                One DNS record connects <strong>{selectedDomain.domain}</strong> to VeriClick.
+                Add it wherever you manage your domain — Cloudflare, Namecheap, GoDaddy.
+              </p>
+
+              <div className="p-4 bg-slate-50 border border-neutral-200 rounded-xl space-y-3">
+                <p className="text-sm font-bold text-slate-900">Add this record</p>
+                <div className="bg-slate-900 text-emerald-400 text-xs font-mono p-3 rounded-lg space-y-1 overflow-x-auto">
+                  <div><span className="text-muted">Type: </span>CNAME</div>
+                  <div className="flex items-center gap-2">
+                    <span><span className="text-muted">Name: </span>{selectedDomain.domain.split('.')[0]}</span>
+                    <button onClick={() => copyToClipboard(selectedDomain.domain.split('.')[0])} className="p-0.5 rounded bg-slate-700 text-white shrink-0">
+                      <HugeiconsIcon icon={Copy01Icon} className="w-3 h-3" />
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span><span className="text-muted">Value:</span> edge.vericlick.cc</span>
+                    <button onClick={() => copyToClipboard('edge.vericlick.cc')} className="p-0.5 rounded bg-slate-700 text-white shrink-0">
+                      <HugeiconsIcon icon={Copy01Icon} className="w-3 h-3" />
+                    </button>
+                  </div>
+                  <div><span className="text-muted">TTL:  </span>Auto</div>
+                </div>
+              </div>
+
+              <p className="text-xs text-muted">
+                Only <span className="font-mono">{selectedDomain.domain}</span> changes. Your main
+                site and email keep working exactly as they do now. DNS usually updates within
+                a few minutes.
+              </p>
+
+              {cnameResult && !cnameResult.cnameOk && (
+                <div className="p-3 rounded-xl text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                  {cnameResult.detail}
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <button onClick={() => setStep(2)} className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-3 rounded-xl text-sm font-bold transition-colors">
+                  Back
+                </button>
+                <button
+                  onClick={() => cnameVerifyMutation.mutate()}
+                  disabled={cnameVerifyMutation.isPending}
+                  className="flex-1 bg-black hover:bg-neutral-800 text-white py-3 rounded-xl text-sm font-bold transition-all disabled:opacity-50"
+                >
+                  {cnameVerifyMutation.isPending ? 'Checking DNS…' : "I've added it — check DNS"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ---- Step 2: custom domain address selection ---- */}
+          {!useShortlink && step === 2 && (
+            <div className="space-y-4">
+              <p className="text-sm text-muted">
+                Your link needs its own address — a subdomain like{' '}
+                <span className="font-mono text-slate-700">go.yoursite.com</span>. It can't be
+                your main domain, because that has to keep pointing at your website.
+              </p>
 
               {rootDomains.length === 0 && (
                 <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800">
@@ -376,6 +496,9 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
                   )}
 
                   <div className="flex gap-2">
+                    <button onClick={() => setStep(1)} className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-3 rounded-xl text-sm font-bold transition-colors">
+                      Back
+                    </button>
                     <button
                       onClick={() => domainToAdd && addDomainMutation.mutate(domainToAdd)}
                       disabled={!domainToAdd || addDomainMutation.isPending}
@@ -428,69 +551,22 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
             </div>
           )}
 
-          {/* ---- Step 2: point the address at us ---- */}
-          {step === 2 && selectedDomain && (
-            <div className="space-y-4">
-              <p className="text-sm text-muted">
-                One DNS record connects <strong>{selectedDomain.domain}</strong> to VeriClick.
-                Add it wherever you manage your domain — Cloudflare, Namecheap, GoDaddy.
-              </p>
-
-              <div className="p-4 bg-slate-50 border border-neutral-200 rounded-xl space-y-3">
-                <p className="text-sm font-bold text-slate-900">Add this record</p>
-                <div className="bg-slate-900 text-emerald-400 text-xs font-mono p-3 rounded-lg space-y-1 overflow-x-auto">
-                  <div><span className="text-muted">Type: </span>CNAME</div>
-                  <div className="flex items-center gap-2">
-                    <span><span className="text-muted">Name: </span>{selectedDomain.domain.split('.')[0]}</span>
-                    <button onClick={() => copyToClipboard(selectedDomain.domain.split('.')[0])} className="p-0.5 rounded bg-slate-700 text-white shrink-0">
-                      <HugeiconsIcon icon={Copy01Icon} className="w-3 h-3" />
-                    </button>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span><span className="text-muted">Value:</span> edge.vericlick.cc</span>
-                    <button onClick={() => copyToClipboard('edge.vericlick.cc')} className="p-0.5 rounded bg-slate-700 text-white shrink-0">
-                      <HugeiconsIcon icon={Copy01Icon} className="w-3 h-3" />
-                    </button>
-                  </div>
-                  <div><span className="text-muted">TTL:  </span>Auto</div>
-                </div>
-              </div>
-
-              <p className="text-xs text-muted">
-                Only <span className="font-mono">{selectedDomain.domain}</span> changes. Your main
-                site and email keep working exactly as they do now. DNS usually updates within
-                a few minutes.
-              </p>
-
-              {cnameResult && !cnameResult.cnameOk && (
-                <div className="p-3 rounded-xl text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                  {cnameResult.detail}
-                </div>
-              )}
-
-              <div className="flex gap-2">
-                <button onClick={() => setStep(1)} className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-3 rounded-xl text-sm font-bold transition-colors">
-                  Back
-                </button>
-                <button
-                  onClick={() => cnameVerifyMutation.mutate()}
-                  disabled={cnameVerifyMutation.isPending}
-                  className="flex-1 bg-black hover:bg-neutral-800 text-white py-3 rounded-xl text-sm font-bold transition-all disabled:opacity-50"
-                >
-                  {cnameVerifyMutation.isPending ? 'Checking DNS…' : "I've added it — check DNS"}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* ---- Step 3: where does it send people? ---- */}
-          {step === 3 && selectedDomain && (
+          {/* ---- Destination step (both paths) ---- */}
+          {((useShortlink && step === 2) || (!useShortlink && step === 4)) && (
             <div className="space-y-4">
               <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
                 <p className="text-xs font-bold text-emerald-700 uppercase tracking-wider mb-0.5">Your link</p>
                 <p className="text-sm font-mono text-emerald-900 break-all">
-                  {selectedDomain.domain}{slug ? `/${slug}` : ''}
+                  {useShortlink
+                    ? `vericlick.cc${slug ? `/${slug}` : ''}`
+                    : `${selectedDomain?.domain || ''}${slug ? `/${slug}` : ''}`
+                  }
                 </p>
+                {useShortlink && (
+                  <p className="text-xs text-emerald-600 mt-1">
+                    No DNS setup needed — ready to share immediately
+                  </p>
+                )}
               </div>
 
               <div>
@@ -590,7 +666,7 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
               )}
 
               <div className="flex gap-2">
-                <button onClick={() => setStep(2)} className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-3 rounded-xl text-sm font-bold transition-colors">
+                <button onClick={goBack} className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-3 rounded-xl text-sm font-bold transition-colors">
                   Back
                 </button>
                 <button

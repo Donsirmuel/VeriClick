@@ -902,6 +902,7 @@ def redirect_route_list_create(request):
                 'expires_at': r.expires_at,
                 'clicks_count': r.clicks_count,
                 'abuse_status': r.abuse_status,
+                'use_shortlink': r.use_shortlink,
                 'created_at': r.created_at,
             })
         return Response(data)
@@ -909,6 +910,7 @@ def redirect_route_list_create(request):
     # POST — create route. Every field goes through the same validator PATCH
     # uses, so the two paths cannot accept different things.
     domain_id = request.data.get('domain_id')
+    use_shortlink = request.data.get('use_shortlink', False)
     cleaned = {}
     for field, raw in (
         ('destination_url', request.data.get('destination_url')),
@@ -930,27 +932,41 @@ def redirect_route_list_create(request):
     bot_action = cleaned['bot_action']
     fallback_url = cleaned['fallback_url']
 
-    if not domain_id or not destination_url:
-        return Response(
-            {'errors': [{'field': 'domain_id', 'detail': 'domain_id and destination_url are required.'}]},
-            status=status.HTTP_400_BAD_REQUEST,
+    if use_shortlink:
+        # Shortlink path: no domain_id needed.  Auto-create / reuse the
+        # platform vericlick.cc domain entry for this workspace.
+        SHORTLINK_DOMAIN = 'vericlick.cc'
+        domain_obj, _ = DomainRegistry.objects.get_or_create(
+            workspace=workspace,
+            domain=SHORTLINK_DOMAIN,
+            defaults={
+                'purpose': DomainRegistry.Purpose.PLATFORM,
+                'verified': True,
+                'script_installed': False,
+            },
         )
+    else:
+        if not domain_id or not destination_url:
+            return Response(
+                {'errors': [{'field': 'domain_id', 'detail': 'domain_id and destination_url are required.'}]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-    try:
-        domain_obj = DomainRegistry.objects.get(
-            id=domain_id, workspace=workspace, is_active=True,
-        )
-    except DomainRegistry.DoesNotExist:
-        return Response(
-            {'errors': [{'field': 'domain_id', 'detail': 'Redirect domain not found.'}]},
-            status=status.HTTP_404_NOT_FOUND,
-        )
+        try:
+            domain_obj = DomainRegistry.objects.get(
+                id=domain_id, workspace=workspace, is_active=True,
+            )
+        except DomainRegistry.DoesNotExist:
+            return Response(
+                {'errors': [{'field': 'domain_id', 'detail': 'Redirect domain not found.'}]},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
-    if not domain_obj.verified:
-        return Response(
-            {'errors': [{'field': 'domain_id', 'detail': 'Domain must be verified before creating a redirect.'}]},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+        if not domain_obj.verified:
+            return Response(
+                {'errors': [{'field': 'domain_id', 'detail': 'Domain must be verified before creating a redirect.'}]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
     # Safety check on destination
     destination_safe = None
@@ -964,8 +980,11 @@ def redirect_route_list_create(request):
     except Exception:
         destination_safe = None
 
-    # Auto-replace: delete existing route for this domain
-    RedirectRoute.objects.filter(domain=domain_obj).delete()
+    # Auto-replace: for custom domains, delete existing route for this domain.
+    # For shortlink (vericlick.cc), keep existing shortlink routes — user can
+    # have many shortlinks on the platform domain.
+    if not use_shortlink:
+        RedirectRoute.objects.filter(domain=domain_obj).delete()
 
     route = RedirectRoute.objects.create(
         workspace=workspace,
@@ -976,6 +995,7 @@ def redirect_route_list_create(request):
         fallback_url=fallback_url,
         expires_at=_route_expiry(workspace),
         destination_safe=destination_safe,
+        use_shortlink=use_shortlink,
     )
 
     return Response({
@@ -990,6 +1010,7 @@ def redirect_route_list_create(request):
         'clicks_count': route.clicks_count,
         'abuse_status': route.abuse_status,
         'destination_safe': route.destination_safe,
+        'use_shortlink': route.use_shortlink,
         'created_at': route.created_at,
     }, status=status.HTTP_201_CREATED)
 
@@ -1027,6 +1048,7 @@ def redirect_route_detail(request, route_id):
             'clicks_count': route.clicks_count,
             'abuse_status': route.abuse_status,
             'destination_safe': route.destination_safe,
+            'use_shortlink': route.use_shortlink,
             'created_at': route.created_at,
         })
 
@@ -2656,6 +2678,7 @@ def edge_routes_sync(request):
             'bot_action': r.bot_action,
             'fallback_url': r.fallback_url,
             'expires_at': r.expires_at.isoformat() if r.expires_at else None,
+            'use_shortlink': r.use_shortlink,
             # Per-workspace rules embedded in each route
             'blocked_ips': ws_rules['blocked_ips'],
             'allowed_ips': ws_rules['allowed_ips'],

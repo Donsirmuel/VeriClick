@@ -528,6 +528,7 @@ class DomainRegistry(models.Model):
     class Purpose(models.TextChoices):
         PROTECTION = 'protection', 'Bot Protection'
         REDIRECT = 'redirect', 'Smart Redirect'
+        PLATFORM = 'platform', 'Platform Shortlink'
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     workspace = models.ForeignKey(
@@ -660,8 +661,8 @@ class RedirectRoute(models.Model):
     workspace = models.ForeignKey(
         Workspace, on_delete=models.CASCADE, related_name='redirect_routes',
     )
-    domain = models.OneToOneField(
-        DomainRegistry, on_delete=models.CASCADE, related_name='redirect_route',
+    domain = models.ForeignKey(
+        DomainRegistry, on_delete=models.CASCADE, related_name='redirect_routes',
     )
     slug = models.SlugField(
         max_length=200, blank=True, default='',
@@ -683,6 +684,10 @@ class RedirectRoute(models.Model):
     destination_safe = models.BooleanField(
         null=True, default=None,
         help_text='Last safety-check result for the destination URL.',
+    )
+    use_shortlink = models.BooleanField(
+        default=False,
+        help_text='If true, this route is also available as vericlick.cc/<slug>.',
     )
     clicks_count = models.PositiveIntegerField(default=0)
     abuse_status = models.CharField(

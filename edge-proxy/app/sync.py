@@ -67,6 +67,12 @@ async def _sync_once(redis: aioredis.Redis):
         active_route_keys.add(key)
         pipe.set(key, json.dumps(route), ex=settings.SYNC_INTERVAL * 3)
 
+        # Shortlink secondary index: vericlick.cc/<slug> resolves here
+        if route.get("use_shortlink") and slug:
+            shortlink_key = f"shortlink:{slug}"
+            active_route_keys.add(shortlink_key)
+            pipe.set(shortlink_key, json.dumps(route), ex=settings.SYNC_INTERVAL * 3)
+
     previous = await redis.smembers(ROUTE_INDEX) or set()
     stale = previous - active_route_keys
     if stale:
@@ -86,6 +92,14 @@ async def _sync_once(redis: aioredis.Redis):
 async def get_route(redis: aioredis.Redis, domain: str, slug: str) -> Optional[dict]:
     """Look up a route from Redis cache."""
     raw = await redis.get(f"routes:{domain}:{slug}")
+    if raw:
+        return json.loads(raw)
+    return None
+
+
+async def get_shortlink(redis: aioredis.Redis, slug: str) -> Optional[dict]:
+    """Look up a shortlink route by slug only (vericlick.cc/<slug>)."""
+    raw = await redis.get(f"shortlink:{slug}")
     if raw:
         return json.loads(raw)
     return None
