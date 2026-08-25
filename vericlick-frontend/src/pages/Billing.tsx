@@ -361,7 +361,7 @@ export default function Billing() {
                       : isCurrentPlan
                         ? `Renew ${plan.name}`
                         : sub?.active
-                          ? `Switch to ${plan.name}`
+                          ? `Switch to ${plan.name} (${periodLabel(billingPeriod)})`
                           : `Choose ${plan.name}`}
                 </button>
                 {isCurrentPlan && (
