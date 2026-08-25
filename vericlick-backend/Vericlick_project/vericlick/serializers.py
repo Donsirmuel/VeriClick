@@ -68,6 +68,8 @@ class WorkspaceSerializer(serializers.ModelSerializer):
     trial_active = serializers.SerializerMethodField()
     domains_used = serializers.SerializerMethodField()
     domain_limit = serializers.SerializerMethodField()
+    redirect_limit = serializers.SerializerMethodField()
+    redirects_used = serializers.SerializerMethodField()
     onboarding_complete = serializers.SerializerMethodField()
     # Declared explicitly so the model's URLValidator does not reject a
     # scheme-less address before normalize_safe_destination can add one.
@@ -82,6 +84,7 @@ class WorkspaceSerializer(serializers.ModelSerializer):
             'created_at', 'plan', 'plan_name',
             'plan_billing_mode', 'plan_billing_period', 'plan_expires_at', 'plan_status',
             'trial_expires_at', 'trial_active', 'domains_used', 'domain_limit',
+            'redirect_limit', 'redirects_used',
             'onboarding_complete', 'onboarding_type', 'tour_completed',
             'notify_plan_reminders',
         ]
@@ -90,6 +93,7 @@ class WorkspaceSerializer(serializers.ModelSerializer):
             'plan', 'plan_name', 'plan_billing_mode', 'plan_billing_period', 'plan_expires_at',
             'plan_status',
             'trial_expires_at', 'trial_active', 'domains_used', 'domain_limit',
+            'redirect_limit', 'redirects_used',
             'onboarding_complete', 'onboarding_type',
         ]
 
@@ -122,6 +126,13 @@ class WorkspaceSerializer(serializers.ModelSerializer):
         active = obj.active_plan
         return active.domain_limit if active else 0
 
+    def get_redirect_limit(self, obj):
+        active = obj.active_plan
+        return active.redirect_limit if active else 0
+
+    def get_redirects_used(self, obj):
+        return obj.redirect_routes.filter(is_active=True).count()
+
 
 class PlanSerializer(serializers.ModelSerializer):
     weekly_price = serializers.DecimalField(max_digits=8, decimal_places=2, coerce_to_string=False)
@@ -132,7 +143,7 @@ class PlanSerializer(serializers.ModelSerializer):
         model = Plan
         fields = [
             'code', 'name', 'weekly_price', 'monthly_price', 'monthly_available',
-            'domain_limit', 'features', 'sort_order',
+            'domain_limit', 'redirect_limit', 'features', 'sort_order',
         ]
 
     def get_monthly_available(self, obj):

@@ -237,6 +237,17 @@ export default function Billing() {
           <div className="text-xl font-bold text-slate-900">Unlimited</div>
           <div className="text-xs text-muted mt-1">Pages are never capped on paid plans</div>
         </div>
+        <div className="bg-white border border-neutral-200 rounded-2xl p-5">
+          <div className="text-xs font-bold text-muted uppercase tracking-wider mb-1">Redirects</div>
+          <div className="text-xl font-bold text-slate-900">
+            {workspace?.planName ? `${workspace.redirectsUsed ?? 0} / ${workspace.redirectLimit ?? 0}` : '—'}
+          </div>
+          <div className="text-xs text-muted mt-1">
+            {workspace?.planName
+              ? `${(workspace.redirectLimit ?? 0) - (workspace.redirectsUsed ?? 0)} remaining`
+              : 'Pick a plan to create redirects'}
+          </div>
+        </div>
       </div>
 
       {/* Plans */}

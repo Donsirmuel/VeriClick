@@ -234,6 +234,7 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['redirect-routes'] })
       queryClient.invalidateQueries({ queryKey: ['domains'] })
+      queryClient.invalidateQueries({ queryKey: ['workspace'] })
       toast.success('Your link is live')
       onClose()
     },
@@ -755,6 +756,7 @@ export default function RedirectsPage() {
     mutationFn: renewRedirectRoute,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['redirect-routes'] })
+      queryClient.invalidateQueries({ queryKey: ['workspace'] })
       toast.success('Renewed for 7 more days')
     },
     onError: (err) => toast.error(parseApiError(err) || 'Failed to renew'),
@@ -764,6 +766,7 @@ export default function RedirectsPage() {
     mutationFn: deleteRedirectRoute,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['redirect-routes'] })
+      queryClient.invalidateQueries({ queryKey: ['workspace'] })
       toast.success('Redirect deleted')
     },
     onError: (err) => toast.error(parseApiError(err) || 'Failed to delete'),
@@ -776,6 +779,7 @@ export default function RedirectsPage() {
       updateRedirectRoute(id, { isActive }),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['redirect-routes'] })
+      queryClient.invalidateQueries({ queryKey: ['workspace'] })
       toast.success(variables.isActive ? 'Link is live again' : 'Link deactivated')
     },
     onError: (err) => toast.error(parseApiError(err) || 'Could not change the link'),
@@ -794,6 +798,11 @@ export default function RedirectsPage() {
             Redirect visitors through your custom domains. Each domain gets one link,
             valid for as long as your current plan period.
           </p>
+          {hasPlan && (
+            <p className="text-xs text-muted mt-1">
+              {workspace.redirectsUsed} / {workspace.redirectLimit} links used
+            </p>
+          )}
         </div>
         <button
           onClick={() => hasPlan ? setShowWizard(true) : navigate('/app/billing')}

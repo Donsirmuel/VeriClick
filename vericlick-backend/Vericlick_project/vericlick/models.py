@@ -875,6 +875,10 @@ class Plan(models.Model):
         default=5,
         help_text='How many domains a workspace on this plan may register.',
     )
+    redirect_limit = models.PositiveIntegerField(
+        default=2,
+        help_text='Maximum active redirect routes (shortlinks + custom domains).',
+    )
     features = models.JSONField(default=list, blank=True, help_text='Extra bullet points shown on the pricing page.')
     bachs_product_id = models.CharField(
         'Bachs recurring product ID (legacy)',

@@ -64,6 +64,8 @@ export interface Workspace {
   trialActive: boolean
   domainsUsed: number
   domainLimit: number
+  redirectLimit: number
+  redirectsUsed: number
   onboardingComplete: boolean
   tourCompleted: boolean
   notifyPlanReminders: boolean
@@ -142,6 +144,7 @@ export interface Plan {
   /** Monthly needs its own Bachs product; false means this tier is weekly-only. */
   monthlyAvailable: boolean
   domainLimit: number
+  redirectLimit: number
   features: string[]
   sortOrder: number
 }

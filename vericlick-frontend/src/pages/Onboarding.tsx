@@ -149,7 +149,7 @@ function StepPlan() {
                     )}
                   </div>
                   <p className="text-xs text-neutral-500">
-                    {plan.domainLimit} domain{plan.domainLimit !== 1 ? 's' : ''} · unlimited pages ·{' '}
+                    {plan.domainLimit} domain{plan.domainLimit !== 1 ? 's' : ''} · {plan.redirectLimit} redirects · unlimited pages ·{' '}
                     {PERIOD_DAYS[period]} days access
                   </p>
                 </div>

@@ -1045,6 +1045,40 @@ def redirect_route_list_create(request):
     bot_action = cleaned['bot_action']
     fallback_url = cleaned['fallback_url']
 
+    # --- Redirect limit check (applies to both shortlinks and custom domains) ---
+    active_plan = workspace.active_plan
+    if active_plan:
+        current_count = RedirectRoute.objects.filter(
+            workspace=workspace, is_active=True,
+        ).count()
+        if current_count >= active_plan.redirect_limit:
+            return Response(
+                {'errors': [{'field': 'slug', 'detail': f'You\'ve reached the {active_plan.redirect_limit}-redirect limit on {active_plan.name}. Delete a redirect or upgrade to add more.'}]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    # --- Shortlink destination must be a protected domain ---
+    if use_shortlink:
+        from urllib.parse import urlparse
+        try:
+            dest_host = urlparse(destination_url).hostname or ''
+        except Exception:
+            dest_host = ''
+        check_host = dest_host.lower().removeprefix('www.')
+        dest_domain = DomainRegistry.objects.filter(
+            workspace=workspace, domain=check_host, is_active=True,
+        ).first()
+        if not dest_domain:
+            return Response(
+                {'errors': [{'field': 'destination_url', 'detail': 'Destination must be a domain you\'ve added to VeriClick. Add it under Domains first.'}]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not dest_domain.script_installed:
+            return Response(
+                {'errors': [{'field': 'destination_url', 'detail': f'Install the VeriClick script on {dest_domain.domain} first — the destination must be protected.'}]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
     if use_shortlink:
         # Shortlink path: no domain_id needed.  Auto-create / reuse the
         # platform vericlick.cc domain entry for this workspace.

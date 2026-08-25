@@ -1271,6 +1271,8 @@ class BlockedIPTests(APITestCase):
         self.assertTrue(rule.is_active)
 
     def test_whitelisted_ip_hidden_from_blocked_list(self):
+        """Whitelisted IPs now show in the blocked list with a 'whitelisted' badge
+        instead of being hidden, so users can see they're already allowed."""
         blocked_ip = '203.0.113.5'
         other_ip = '198.51.100.7'
         event = TrackerEvent.objects.create(
@@ -1284,9 +1286,16 @@ class BlockedIPTests(APITestCase):
         res = self.client.post(f'/api/ip-rules/{event.id}/whitelist/')
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         res = self.client.get('/api/ip-rules/blocked/')
-        ips = [e['ip'] for e in res.json()['results']]
-        self.assertNotIn(blocked_ip, ips)
+        results = res.json()['results']
+        ips = [e['ip'] for e in results]
+        # Both IPs should appear in the list
+        self.assertIn(blocked_ip, ips)
         self.assertIn(other_ip, ips)
+        # The whitelisted one should be flagged
+        blocked_entry = next(e for e in results if e['ip'] == blocked_ip)
+        self.assertTrue(blocked_entry.get('whitelisted'))
+        other_entry = next(e for e in results if e['ip'] == other_ip)
+        self.assertFalse(other_entry.get('whitelisted', False))
 
 
 class BillingPeriodGrantTests(APITestCase):

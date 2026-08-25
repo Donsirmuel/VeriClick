@@ -133,6 +133,12 @@ function LimitsBand({ plans }: { plans: Plan[] }) {
                 <td key={p.code} className="py-3 font-bold text-white">{p.domainLimit}</td>
               ))}
             </tr>
+            <tr className="border-b border-neutral-900">
+              <td className="py-3 pr-6 text-neutral-400">Redirect links</td>
+              {plans.map((p) => (
+                <td key={p.code} className="py-3 font-bold text-white">{p.redirectLimit}</td>
+              ))}
+            </tr>
             <tr>
               <td className="py-3 pr-6 text-neutral-400">Protected pages</td>
               {plans.map((p) => (
@@ -235,7 +241,7 @@ export default function Pricing() {
               unanswered: does it auto-renew, and what happens on the last day. */}
           <p className="text-center text-sm text-neutral-500 mt-8 max-w-2xl mx-auto leading-relaxed">
             Every plan includes unlimited protected pages and the same full feature set —
-            tiers differ only by how many domains you can protect. Pay once with crypto for
+            tiers differ by how many domains you can protect and how many redirects you can create. Pay once with crypto for
             {period === 'monthly' ? ' 30 days' : ' 7 days'} of access.
           </p>
           <p className="text-center text-sm text-neutral-500 mt-3 max-w-2xl mx-auto leading-relaxed">
