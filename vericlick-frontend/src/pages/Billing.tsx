@@ -222,6 +222,17 @@ export default function Billing() {
           )}
         </div>
         <div className="bg-white border border-neutral-200 rounded-2xl p-5">
+          <div className="text-xs font-bold text-muted uppercase tracking-wider mb-1">Redirects</div>
+          <div className="text-xl font-bold text-slate-900">
+            {workspace?.planName ? `${workspace.redirectsUsed ?? 0} / ${workspace.redirectLimit ?? 0}` : '—'}
+          </div>
+          <div className="text-xs text-muted mt-1">
+            {workspace?.planName
+              ? `${(workspace.redirectLimit ?? 0) - (workspace.redirectsUsed ?? 0)} remaining`
+              : 'Pick a plan to create redirects'}
+          </div>
+        </div>
+        <div className="bg-white border border-neutral-200 rounded-2xl p-5">
           <div className="text-xs font-bold text-muted uppercase tracking-wider mb-1">Domains</div>
           <div className="text-xl font-bold text-slate-900">
             {workspace?.planName ? `${workspace.domainsUsed ?? 0} / ${workspace.domainLimit ?? 0}` : '—'}
@@ -237,17 +248,6 @@ export default function Billing() {
           <div className="text-xl font-bold text-slate-900">Unlimited</div>
           <div className="text-xs text-muted mt-1">Pages are never capped on paid plans</div>
         </div>
-        <div className="bg-white border border-neutral-200 rounded-2xl p-5">
-          <div className="text-xs font-bold text-muted uppercase tracking-wider mb-1">Redirects</div>
-          <div className="text-xl font-bold text-slate-900">
-            {workspace?.planName ? `${workspace.redirectsUsed ?? 0} / ${workspace.redirectLimit ?? 0}` : '—'}
-          </div>
-          <div className="text-xs text-muted mt-1">
-            {workspace?.planName
-              ? `${(workspace.redirectLimit ?? 0) - (workspace.redirectsUsed ?? 0)} remaining`
-              : 'Pick a plan to create redirects'}
-          </div>
-        </div>
       </div>
 
       {/* Plans */}
@@ -258,7 +258,7 @@ export default function Billing() {
               {sub?.active ? 'Renew or switch your plan' : 'Choose your plan'}
             </h2>
             <p className="text-sm text-muted mt-0.5">
-              Every tier has the same features — pick by how many domains you protect.
+              Every tier has the same features — pick by how many redirects and domains you need.
             </p>
             {/* Switching used to overwrite the expiry date, so people avoided
                 changing plans mid-period. It now adds, and saying so is what

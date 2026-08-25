@@ -13,6 +13,7 @@ import {
 import type { BillingPeriod, Plan } from '@/types'
 
 const COMMON_FEATURES = [
+  'Smart redirects — shortlinks and custom domain forwards with built-in bot protection',
   'Unlimited page protection',
   'Bot detection and rate limiting on every request',
   'IP allow/deny rules with whitelisting',
@@ -22,8 +23,9 @@ const COMMON_FEATURES = [
 ]
 
 const HIGHLIGHTS = [
+  { icon: LinkSquare02Icon, title: 'Smart redirects', desc: 'Create shortlinks or custom-domain redirects with bot detection baked in — every click is screened before it reaches your destination.' },
   { icon: ShieldIcon, title: 'Protected pages', desc: 'Paste a single script tag into your site and every page is covered — no per-link setup required.' },
-  { icon: LinkSquare02Icon, title: 'Bot detection', desc: 'Every request is checked against IP rules, bot signatures, and rate limits before it reaches your page.' },
+  { icon: ZapIcon, title: 'Bot detection', desc: 'Every request is checked against IP rules, bot signatures, and rate limits before it reaches your page.' },
   { icon: Globe02Icon, title: 'Real-time monitoring', desc: 'Your site is monitored in real time for suspicious traffic patterns and malicious bots.' },
   { icon: Chart03Icon, title: 'Live dashboard', desc: 'Traffic chart, activity feed, site health, and a blocked-IP review queue — all explained in plain language.' },
 ]
@@ -63,17 +65,17 @@ function PlanCard({ plan, popular, period }: { plan: Plan; popular?: boolean; pe
       </p>
       <div className="grid grid-cols-2 gap-2 mb-6">
         <div className="rounded-xl bg-neutral-800/50 border border-neutral-700/60 px-4 py-3">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 mb-1">Redirects</div>
+          <div className="flex items-center gap-1.5 text-sm font-bold text-white">
+            <HugeiconsIcon icon={LinkSquare02Icon} className="w-4 h-4" />
+            {plan.redirectLimit ?? '—'}
+          </div>
+        </div>
+        <div className="rounded-xl bg-neutral-800/50 border border-neutral-700/60 px-4 py-3">
           <div className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 mb-1">Domains</div>
           <div className="flex items-center gap-1.5 text-sm font-bold text-white">
             <HugeiconsIcon icon={Globe02Icon} className="w-4 h-4" />
             {plan.domainLimit ?? '—'}
-          </div>
-        </div>
-        <div className="rounded-xl bg-neutral-800/50 border border-neutral-700/60 px-4 py-3">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 mb-1">Pages</div>
-          <div className="flex items-center gap-1.5 text-sm font-bold text-white">
-            <HugeiconsIcon icon={LinkSquare02Icon} className="w-4 h-4" />
-            Unlimited
           </div>
         </div>
       </div>
@@ -110,11 +112,11 @@ function LimitsBand({ plans }: { plans: Plan[] }) {
   return (
     <div className="mb-8 bg-neutral-950 border border-neutral-800 rounded-3xl p-6 sm:p-8">
       <div className="flex items-center gap-2 mb-1">
-        <HugeiconsIcon icon={Globe02Icon} className="w-4 h-4 text-neutral-300" />
-        <h3 className="text-sm font-bold">Plan features</h3>
+        <HugeiconsIcon icon={LinkSquare02Icon} className="w-4 h-4 text-neutral-300" />
+        <h3 className="text-sm font-bold">What you get</h3>
       </div>
       <p className="text-xs text-neutral-400 mb-6">
-        Your plan sets how many sites you can protect — protected pages are always unlimited.
+        Every plan includes the same full feature set — tiers differ by how many domains you protect and how many redirects you can create.
       </p>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[560px] text-sm">
@@ -128,13 +130,13 @@ function LimitsBand({ plans }: { plans: Plan[] }) {
           </thead>
           <tbody>
             <tr className="border-b border-neutral-900">
-              <td className="py-3 pr-6 text-neutral-400">Domains</td>
+              <td className="py-3 pr-6 text-white font-bold">Redirect links</td>
               {plans.map((p) => (
-                <td key={p.code} className="py-3 font-bold text-white">{p.domainLimit}</td>
+                <td key={p.code} className="py-3 font-bold text-white">{p.redirectLimit}</td>
               ))}
             </tr>
             <tr className="border-b border-neutral-900">
-              <td className="py-3 pr-6 text-neutral-400">Redirect links</td>
+              <td className="py-3 pr-6 text-neutral-400">Domains</td>
               {plans.map((p) => (
                 <td key={p.code} className="py-3 font-bold text-white">{p.redirectLimit}</td>
               ))}
@@ -193,11 +195,12 @@ export default function Pricing() {
             Pricing
           </div>
           <h1 className="text-4xl md:text-6xl font-bold tracking-tight mb-6 leading-tight">
-            Simple plans.<br />Clear pricing.
+            Smart redirects.<br />Full bot protection.
           </h1>
           <p className="text-lg text-neutral-400 max-w-2xl mx-auto mb-4 leading-relaxed">
-            Pick the plan that fits your needs. Pay once for a week or a month of
-            access, then renew whenever you choose. No subscription.
+            Create shortlinks and custom-domain redirects with built-in bot detection.
+            Every click is screened before it reaches your destination.
+            Pay once for a week or a month — no subscription.
           </p>
         </div>
       </section>
@@ -240,8 +243,9 @@ export default function Pricing() {
               two questions people actually have were the ones going
               unanswered: does it auto-renew, and what happens on the last day. */}
           <p className="text-center text-sm text-neutral-500 mt-8 max-w-2xl mx-auto leading-relaxed">
-            Every plan includes unlimited protected pages and the same full feature set —
-            tiers differ by how many domains you can protect and how many redirects you can create. Pay once with crypto for
+            Every plan includes smart redirects with bot protection, unlimited protected pages,
+            and the same full feature set — tiers differ by how many redirects and domains you get.
+            Pay once with crypto for
             {period === 'monthly' ? ' 30 days' : ' 7 days'} of access.
           </p>
           <p className="text-center text-sm text-neutral-500 mt-3 max-w-2xl mx-auto leading-relaxed">
