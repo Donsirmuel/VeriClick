@@ -316,21 +316,25 @@ export default function Billing() {
                 </p>
                 <div className="grid grid-cols-2 gap-2 mb-5">
                   <div className="rounded-xl bg-neutral-50 border border-neutral-200 px-3 py-2.5">
+                    <div className="text-[10px] font-bold text-muted uppercase tracking-wider mb-1">Redirects</div>
+                    <div className="flex items-center gap-1.5 text-sm font-bold text-slate-900">
+                      <HugeiconsIcon icon={LinkSquare02Icon} className="w-4 h-4 text-muted" />
+                      {plan.redirectLimit ?? '—'}
+                    </div>
+                  </div>
+                  <div className="rounded-xl bg-neutral-50 border border-neutral-200 px-3 py-2.5">
                     <div className="text-[10px] font-bold text-muted uppercase tracking-wider mb-1">Domains</div>
                     <div className="flex items-center gap-1.5 text-sm font-bold text-slate-900">
                       <HugeiconsIcon icon={Globe02Icon} className="w-4 h-4 text-muted" />
                       {plan.domainLimit ?? '—'}
                     </div>
                   </div>
-                  <div className="rounded-xl bg-neutral-50 border border-neutral-200 px-3 py-2.5">
-                    <div className="text-[10px] font-bold text-muted uppercase tracking-wider mb-1">Pages</div>
-                    <div className="flex items-center gap-1.5 text-sm font-bold text-slate-900">
-                      <HugeiconsIcon icon={LinkSquare02Icon} className="w-4 h-4 text-muted" />
-                      Unlimited
-                    </div>
-                  </div>
                 </div>
                 <ul className="space-y-2.5 mb-6 text-sm text-slate-600 flex-1">
+                  <li className="flex items-start gap-2">
+                    <HugeiconsIcon icon={LinkSquare02Icon} className="w-4 h-4 text-muted shrink-0 mt-0.5" />
+                    Smart redirects with bot detection on every click
+                  </li>
                   <li className="flex items-start gap-2">
                     <HugeiconsIcon icon={ShieldIcon} className="w-4 h-4 text-muted shrink-0 mt-0.5" />
                     Full anti-bot engine included
