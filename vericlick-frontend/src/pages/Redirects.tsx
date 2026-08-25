@@ -858,16 +858,15 @@ export default function RedirectsPage() {
         <ul className="text-sm text-muted space-y-2 leading-relaxed">
           <li className="flex items-start gap-2">
             <span className="text-xs mt-1.5">1.</span>
-            Point your domain (e.g. app.yourdomain.com) to our edge proxy via CNAME.
+            <span><strong className="text-slate-900">Quick shortlink:</strong> Pick a slug and go — your link is live on vericlick.cc instantly. <strong className="text-slate-900">Custom domain:</strong> Point your domain (e.g. app.yourdomain.com) to our edge proxy via CNAME.</span>
           </li>
           <li className="flex items-start gap-2">
             <span className="text-xs mt-1.5">2.</span>
-            Visitors are redirected to your destination. Bots are handled per your settings.
+            Every visitor is screened by our anti-bot engine before reaching your destination. Bots get blocked, rate-limited, or sent to a honeypot — your call.
           </li>
           <li className="flex items-start gap-2">
             <span className="text-xs mt-1.5">3.</span>
-            Links last as long as your plan period ({periodDays} days on your current plan).
-            You'll get an email reminder before one expires.
+            Links last as long as your plan period ({periodDays} days on your current plan). You'll get an email reminder before one expires.
           </li>
         </ul>
       </div>
