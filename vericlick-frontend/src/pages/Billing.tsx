@@ -72,10 +72,11 @@ export default function Billing() {
   }, [returned])
 
   const current = workspace?.plan ?? null
+  const currentPeriod = workspace?.planBillingPeriod ?? null
   const plans = pricing?.plans ?? []
   const sub = history?.subscription
 
-  const isCurrent = (code: string) => current === code
+  const isCurrent = (code: string) => current === code && currentPeriod === billingPeriod
 
   const beginCheckout = (planCode: string) => {
     checkoutMutation.mutate({ planCode, billingPeriod })
