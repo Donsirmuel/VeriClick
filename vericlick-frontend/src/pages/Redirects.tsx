@@ -851,14 +851,28 @@ export default function RedirectsPage() {
       )}
 
       <div className="bg-white rounded-2xl border border-neutral-200 p-6 shadow-sm">
-        <h3 className="text-sm font-bold text-slate-900 mb-2 flex items-center gap-2">
+        <h3 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-2">
           <HugeiconsIcon icon={Clock02Icon} className="w-4 h-4 text-muted" />
           How redirects work
         </h3>
+        <div className="grid sm:grid-cols-2 gap-4 mb-4">
+          <div className="rounded-xl bg-slate-50 border border-neutral-200 p-4">
+            <div className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-1">Quick shortlink</div>
+            <p className="text-sm text-muted leading-relaxed">
+              Pick a slug (e.g. <code className="text-xs bg-neutral-100 px-1 py-0.5 rounded">vericlick.cc/promo</code>) and your link is live instantly — no DNS setup needed. Ideal for sharing on social media, emails, or ads.
+            </p>
+          </div>
+          <div className="rounded-xl bg-slate-50 border border-neutral-200 p-4">
+            <div className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-1">Custom domain</div>
+            <p className="text-sm text-muted leading-relaxed">
+              Point your own subdomain (e.g. <code className="text-xs bg-neutral-100 px-1 py-0.5 rounded">go.yourdomain.com</code>) to our edge proxy via CNAME. Full control over the URL your visitors see.
+            </p>
+          </div>
+        </div>
         <ul className="text-sm text-muted space-y-2 leading-relaxed">
           <li className="flex items-start gap-2">
             <span className="text-xs mt-1.5">1.</span>
-            <span><strong className="text-slate-900">Quick shortlink:</strong> Pick a slug and go — your link is live on vericlick.cc instantly. <strong className="text-slate-900">Custom domain:</strong> Point your domain (e.g. app.yourdomain.com) to our edge proxy via CNAME.</span>
+            Create a redirect by choosing a type, entering your destination URL, and setting how bots should be handled.
           </li>
           <li className="flex items-start gap-2">
             <span className="text-xs mt-1.5">2.</span>
