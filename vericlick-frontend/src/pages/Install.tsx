@@ -21,6 +21,7 @@ interface PlatformGuide {
   detailedSteps: string[];
   iniSnippet?: string;
   iniHint?: string;
+  altMethods?: { id: string; label: string; steps: string[]; iniSnippet: string; iniHint: string }[];
 }
 
 const PLATFORMS: PlatformGuide[] = [
@@ -103,21 +104,31 @@ const PLATFORMS: PlatformGuide[] = [
     name: "cPanel / PHP",
     icon: "📁",
     description: "Auto-inject via PHP prepend — no template editing",
-    detailedSteps: [
-      'Click "Download .js File" and "Download prepend.php" above to save both files',
-      "Log in to cPanel \u2192 File Manager \u2192 open your site's root folder (public_html)",
-      "Upload both files there",
-      "Go to cPanel \u2192 Software \u2192 MultiPHP INI Editor \u2192 Editor Mode \u2192 select Home Directory",
-      "Paste the line below into the editor (replace USERNAME with your cPanel username):",
-      "Click Save, then wait about 5 minutes \u2014 PHP picks up the new setting automatically",
+    detailedSteps: [],
+    altMethods: [
+      { id: 'multiphp', label: 'MultiPHP INI Editor', steps: [
+        'Click "Download .js File" and "Download prepend.php" above to save both files',
+        "Log in to cPanel \u2192 File Manager \u2192 open your site's root folder (public_html)",
+        'Upload both files there',
+        "Go to cPanel \u2192 Software \u2192 MultiPHP INI Editor \u2192 Editor Mode \u2192 select Home Directory",
+        "Paste the line below into the editor (replace USERNAME with your cPanel username):",
+        'Click Save, then wait about 5 minutes \u2014 PHP picks up the new setting automatically',
+      ], iniSnippet: 'auto_prepend_file = "/home/USERNAME/public_html/vericlick-prepend.php"', iniHint: 'The line must start with auto_prepend_file = \u2014 if you see "invalid line", you may have pasted only the path without the setting name.' },
+      { id: 'dot-user-ini', label: '.user.ini file', steps: [
+        'Click "Download .js File" and "Download prepend.php" above to save both files',
+        "Log in to cPanel \u2192 File Manager \u2192 open your site's root folder (public_html)",
+        'Upload both files there',
+        'Create a new file called .user.ini in public_html',
+        'Paste this line into .user.ini (replace USERNAME with your cPanel username):',
+        'Save and wait about 5 minutes \u2014 PHP picks up the new setting automatically',
+      ], iniSnippet: 'auto_prepend_file = "/home/USERNAME/public_html/vericlick-prepend.php"', iniHint: 'The file must be called exactly .user.ini (with the dot). If it shows as .user.ini.txt in File Manager, enable "Show hidden files" and rename it.' },
     ],
-    iniSnippet: 'auto_prepend_file = "/home/USERNAME/public_html/vericlick-prepend.php"',
-    iniHint: 'The line must start with auto_prepend_file = \u2014 if you see "invalid line", you may have pasted only the path without the setting name.',
   },
 ];
 
 export default function InstallPage() {
   const [selectedPlatform, setSelectedPlatform] = useState<Platform>("html");
+  const [cpanelMethod, setCpanelMethod] = useState("multiphp");
   const [selectedDomainId, setSelectedDomainId] = useState<string>("");
   const [copiedSnippet, setCopiedSnippet] = useState(false);
 
@@ -273,33 +284,86 @@ export default function InstallPage() {
           <h3 className="text-sm font-bold text-slate-900 mb-3">
             {currentGuide.icon} {currentGuide.name} — Step by Step
           </h3>
-          <ol className="space-y-3">
-            {currentGuide.detailedSteps.map((step, i) => (
-              <li key={i} className="flex gap-3">
-                <span className="bg-slate-100 text-slate-600 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">
-                  {i + 1}
-                </span>
-                <span className="text-sm text-slate-700">{step}</span>
-              </li>
-            ))}
-          </ol>
-          {currentGuide.iniSnippet && (
-            <div className="mt-4">
-              <div className="flex items-center justify-between bg-neutral-900 rounded-lg px-3 py-2">
-                <code className="text-xs font-mono text-neutral-100 break-all">{currentGuide.iniSnippet}</code>
-                <button
-                  onClick={() => handleCopy(currentGuide.iniSnippet!)}
-                  className="text-neutral-400 hover:text-white text-[10px] font-bold uppercase tracking-wider ml-2 shrink-0"
-                >
-                  {copiedSnippet ? 'Copied' : 'Copy'}
-                </button>
+          {selectedPlatform === 'cpanel' && currentGuide.altMethods ? (
+            <>
+              <div className="flex gap-1 mb-4 bg-slate-100 rounded-lg p-1">
+                {currentGuide.altMethods.map((m) => (
+                  <button
+                    key={m.id}
+                    onClick={() => setCpanelMethod(m.id)}
+                    className={`flex-1 text-[11px] font-bold px-3 py-1.5 rounded-md transition-all ${
+                      cpanelMethod === m.id
+                        ? 'bg-white text-slate-900 shadow-sm'
+                        : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    {m.label}
+                  </button>
+                ))}
               </div>
-              {currentGuide.iniHint && (
-                <p className="mt-1.5 text-[11px] text-amber-700 leading-relaxed">
-                  {currentGuide.iniHint}
-                </p>
+              {(() => {
+                const method = currentGuide.altMethods!.find((m) => m.id === cpanelMethod) || currentGuide.altMethods![0]
+                return (
+                  <>
+                    <ol className="space-y-3">
+                      {method.steps.map((step, i) => (
+                        <li key={i} className="flex gap-3">
+                          <span className="bg-slate-100 text-slate-600 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">
+                            {i + 1}
+                          </span>
+                          <span className="text-sm text-slate-700">{step}</span>
+                        </li>
+                      ))}
+                    </ol>
+                    <div className="mt-4">
+                      <div className="flex items-center justify-between bg-neutral-900 rounded-lg px-3 py-2">
+                        <code className="text-xs font-mono text-neutral-100 break-all">{method.iniSnippet}</code>
+                        <button
+                          onClick={() => handleCopy(method.iniSnippet)}
+                          className="text-neutral-400 hover:text-white text-[10px] font-bold uppercase tracking-wider ml-2 shrink-0"
+                        >
+                          {copiedSnippet ? 'Copied' : 'Copy'}
+                        </button>
+                      </div>
+                      <p className="mt-1.5 text-[11px] text-amber-700 leading-relaxed">
+                        {method.iniHint}
+                      </p>
+                    </div>
+                  </>
+                )
+              })()}
+            </>
+          ) : (
+            <>
+              <ol className="space-y-3">
+                {currentGuide.detailedSteps.map((step, i) => (
+                  <li key={i} className="flex gap-3">
+                    <span className="bg-slate-100 text-slate-600 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">
+                      {i + 1}
+                    </span>
+                    <span className="text-sm text-slate-700">{step}</span>
+                  </li>
+                ))}
+              </ol>
+              {currentGuide.iniSnippet && (
+                <div className="mt-4">
+                  <div className="flex items-center justify-between bg-neutral-900 rounded-lg px-3 py-2">
+                    <code className="text-xs font-mono text-neutral-100 break-all">{currentGuide.iniSnippet}</code>
+                    <button
+                      onClick={() => handleCopy(currentGuide.iniSnippet!)}
+                      className="text-neutral-400 hover:text-white text-[10px] font-bold uppercase tracking-wider ml-2 shrink-0"
+                    >
+                      {copiedSnippet ? 'Copied' : 'Copy'}
+                    </button>
+                  </div>
+                  {currentGuide.iniHint && (
+                    <p className="mt-1.5 text-[11px] text-amber-700 leading-relaxed">
+                      {currentGuide.iniHint}
+                    </p>
+                  )}
+                </div>
               )}
-            </div>
+            </>
           )}
         </div>
       )}
