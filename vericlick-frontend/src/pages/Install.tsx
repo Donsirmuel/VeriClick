@@ -106,21 +106,6 @@ const PLATFORMS: PlatformGuide[] = [
     description: "Auto-inject via PHP prepend — no template editing",
     detailedSteps: [],
     altMethods: [
-      { id: 'dot-user-ini', label: '.user.ini file', steps: [
-        'Click the download buttons above to save all three files',
-        "Log in to cPanel \u2192 File Manager \u2192 open your site's root folder (public_html)",
-        'Upload all three files there',
-        'Rename vericlick-user-ini.txt to .user.ini and replace USERNAME with your cPanel username',
-        'Save and wait about 5 minutes \u2014 PHP picks up the new setting automatically',
-      ], iniSnippet: 'auto_prepend_file = "/home/USERNAME/public_html/vericlick-prepend.php"', iniHint: '.user.ini is a hidden file — in cPanel File Manager, click Settings and enable "Show Hidden Files (dotfiles)" to see it. Rename vericlick-user-ini.txt to .user.ini.' },
-      { id: 'htaccess', label: '.htaccess', steps: [
-        'Click the download buttons above to save the .js and prepend.php files',
-        "Log in to cPanel \u2192 File Manager \u2192 open your site's root folder (public_html)",
-        'Upload both files there',
-        'Create a new file called .htaccess in public_html (if one already exists, open it)',
-        'Paste the line below at the top of the file (replace USERNAME with your cPanel username):',
-        'Save and wait about 5 minutes \u2014 PHP picks up the new setting automatically',
-      ], iniSnippet: 'php_value auto_prepend_file "/home/USERNAME/public_html/vericlick-prepend.php"', iniHint: 'If you get a 500 error after saving, your host may not allow php_value in .htaccess — try the .user.ini or MultiPHP INI Editor method instead.' },
       { id: 'multiphp', label: 'MultiPHP INI Editor', steps: [
         'Click the download buttons above to save the .js and prepend.php files',
         "Log in to cPanel \u2192 File Manager \u2192 open your site's root folder (public_html)",
@@ -129,13 +114,21 @@ const PLATFORMS: PlatformGuide[] = [
         "Paste the line below into the editor (replace USERNAME with your cPanel username):",
         'Click Save, then wait about 5 minutes \u2014 PHP picks up the new setting automatically',
       ], iniSnippet: 'auto_prepend_file = "/home/USERNAME/public_html/vericlick-prepend.php"', iniHint: 'The line must start with auto_prepend_file = \u2014 if you see "invalid line", you may have pasted only the path without the setting name.' },
+      { id: 'php-include', label: 'Edit each .php file', steps: [
+        'Click the download buttons above to save the .js and prepend.php files',
+        "Log in to cPanel \u2192 File Manager \u2192 open your site's root folder (public_html)",
+        'Upload both files there',
+        'Open index.php (your main entry point)',
+        'Add this as the VERY FIRST line, before any HTML or PHP code:',
+        'Repeat for every other .php file you want protected (e.g. apply.php, about.php)',
+      ], iniSnippet: "<?php require_once '/home/USERNAME/public_html/vericlick-prepend.php'; ?>", iniHint: 'This works on any PHP host \u2014 no server config needed. Every .php page you want protected must include this line at the top.' },
     ],
   },
 ];
 
 export default function InstallPage() {
   const [selectedPlatform, setSelectedPlatform] = useState<Platform>("html");
-  const [cpanelMethod, setCpanelMethod] = useState("dot-user-ini");
+  const [cpanelMethod, setCpanelMethod] = useState("multiphp");
   const [selectedDomainId, setSelectedDomainId] = useState<string>("");
   const [copiedSnippet, setCopiedSnippet] = useState(false);
 
@@ -252,14 +245,6 @@ export default function InstallPage() {
                       <HugeiconsIcon icon={Download01Icon} className="w-3.5 h-3.5" />
                       Download prepend.php
                     </a>
-                    <a
-                      href={`${snippetData.apiBase}/shield/user-ini/download?api_key=${snippetData.apiKey}`}
-                      download
-                      className="bg-white hover:bg-neutral-100 text-slate-700 border border-neutral-200 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors"
-                    >
-                      <HugeiconsIcon icon={Download01Icon} className="w-3.5 h-3.5" />
-                      Download .user.ini
-                    </a>
                   </>
                 )}
                 <button
@@ -313,7 +298,7 @@ export default function InstallPage() {
                     }`}
                   >
                     {m.label}
-                    {m.id === 'dot-user-ini' && <span className="ml-1 text-[9px] text-emerald-600 font-extrabold">★</span>}
+                    {m.id === 'php-include' && <span className="ml-1 text-[9px] text-emerald-600 font-extrabold">★</span>}
                   </button>
                 ))}
               </div>
