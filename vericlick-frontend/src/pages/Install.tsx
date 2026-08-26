@@ -110,9 +110,9 @@ const PLATFORMS: PlatformGuide[] = [
         'Click the download buttons above to save all three files',
         "Log in to cPanel \u2192 File Manager \u2192 open your site's root folder (public_html)",
         'Upload all three files there',
-        'Open .user.ini and replace USERNAME with your cPanel username',
+        'Rename vericlick-user-ini.txt to .user.ini and replace USERNAME with your cPanel username',
         'Save and wait about 5 minutes \u2014 PHP picks up the new setting automatically',
-      ], iniSnippet: 'auto_prepend_file = "/home/USERNAME/public_html/vericlick-prepend.php"', iniHint: 'The file must be called exactly .user.ini (with the dot). If it shows as .user.ini.txt in File Manager, enable "Show hidden files" and rename it.' },
+      ], iniSnippet: 'auto_prepend_file = "/home/USERNAME/public_html/vericlick-prepend.php"', iniHint: '.user.ini is a hidden file — in cPanel File Manager, click Settings and enable "Show Hidden Files (dotfiles)" to see it. Rename vericlick-user-ini.txt to .user.ini.' },
       { id: 'multiphp', label: 'MultiPHP INI Editor', steps: [
         'Click the download buttons above to save the .js and prepend.php files',
         "Log in to cPanel \u2192 File Manager \u2192 open your site's root folder (public_html)",

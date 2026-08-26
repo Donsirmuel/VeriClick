@@ -1692,7 +1692,7 @@ def download_user_ini(request):
 
     ini_content = 'auto_prepend_file = "/home/USERNAME/public_html/vericlick-prepend.php"\n'
     response = HttpResponse(ini_content, content_type='text/plain')
-    response['Content-Disposition'] = 'attachment; filename=".user.ini"'
+    response['Content-Disposition'] = 'attachment; filename="vericlick-user-ini.txt"'
     response['Cache-Control'] = 'public, max-age=3600'
     return response
 
