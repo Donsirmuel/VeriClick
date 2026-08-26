@@ -381,6 +381,7 @@ export default function InstallPage() {
           <h3 className="text-sm font-bold text-slate-900 mb-3">Watch the tutorial</h3>
           <div className="bg-neutral-900 rounded-xl overflow-hidden">
             <video
+              key={currentGuide.tutorialVideo}
               className="w-full h-auto aspect-video object-cover"
               controls
               playsInline

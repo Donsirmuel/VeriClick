@@ -399,6 +399,7 @@ export default function ShieldPage() {
                   <h4 className="text-xs font-bold text-slate-700 mb-2">Watch the tutorial</h4>
                   <div className="bg-neutral-900 rounded-xl overflow-hidden">
                     <video
+                      key={currentGuide.tutorialVideo}
                       className="w-full h-auto aspect-video object-cover"
                       controls
                       playsInline
