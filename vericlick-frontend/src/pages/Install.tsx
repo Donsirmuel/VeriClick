@@ -106,29 +106,28 @@ const PLATFORMS: PlatformGuide[] = [
     description: "Auto-inject via PHP prepend — no template editing",
     detailedSteps: [],
     altMethods: [
+      { id: 'dot-user-ini', label: '.user.ini file', steps: [
+        'Click the download buttons above to save all three files',
+        "Log in to cPanel \u2192 File Manager \u2192 open your site's root folder (public_html)",
+        'Upload all three files there',
+        'Open .user.ini and replace USERNAME with your cPanel username',
+        'Save and wait about 5 minutes \u2014 PHP picks up the new setting automatically',
+      ], iniSnippet: 'auto_prepend_file = "/home/USERNAME/public_html/vericlick-prepend.php"', iniHint: 'The file must be called exactly .user.ini (with the dot). If it shows as .user.ini.txt in File Manager, enable "Show hidden files" and rename it.' },
       { id: 'multiphp', label: 'MultiPHP INI Editor', steps: [
-        'Click "Download .js File" and "Download prepend.php" above to save both files',
+        'Click the download buttons above to save the .js and prepend.php files',
         "Log in to cPanel \u2192 File Manager \u2192 open your site's root folder (public_html)",
         'Upload both files there',
         "Go to cPanel \u2192 Software \u2192 MultiPHP INI Editor \u2192 Editor Mode \u2192 select Home Directory",
         "Paste the line below into the editor (replace USERNAME with your cPanel username):",
         'Click Save, then wait about 5 minutes \u2014 PHP picks up the new setting automatically',
       ], iniSnippet: 'auto_prepend_file = "/home/USERNAME/public_html/vericlick-prepend.php"', iniHint: 'The line must start with auto_prepend_file = \u2014 if you see "invalid line", you may have pasted only the path without the setting name.' },
-      { id: 'dot-user-ini', label: '.user.ini file', steps: [
-        'Click "Download .js File" and "Download prepend.php" above to save both files',
-        "Log in to cPanel \u2192 File Manager \u2192 open your site's root folder (public_html)",
-        'Upload both files there',
-        'Create a new file called .user.ini in public_html',
-        'Paste this line into .user.ini (replace USERNAME with your cPanel username):',
-        'Save and wait about 5 minutes \u2014 PHP picks up the new setting automatically',
-      ], iniSnippet: 'auto_prepend_file = "/home/USERNAME/public_html/vericlick-prepend.php"', iniHint: 'The file must be called exactly .user.ini (with the dot). If it shows as .user.ini.txt in File Manager, enable "Show hidden files" and rename it.' },
     ],
   },
 ];
 
 export default function InstallPage() {
   const [selectedPlatform, setSelectedPlatform] = useState<Platform>("html");
-  const [cpanelMethod, setCpanelMethod] = useState("multiphp");
+  const [cpanelMethod, setCpanelMethod] = useState("dot-user-ini");
   const [selectedDomainId, setSelectedDomainId] = useState<string>("");
   const [copiedSnippet, setCopiedSnippet] = useState(false);
 
@@ -245,6 +244,14 @@ export default function InstallPage() {
                       <HugeiconsIcon icon={Download01Icon} className="w-3.5 h-3.5" />
                       Download prepend.php
                     </a>
+                    <a
+                      href={`${snippetData.apiBase}/shield/user-ini/download?api_key=${snippetData.apiKey}`}
+                      download
+                      className="bg-white hover:bg-neutral-100 text-slate-700 border border-neutral-200 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors"
+                    >
+                      <HugeiconsIcon icon={Download01Icon} className="w-3.5 h-3.5" />
+                      Download .user.ini
+                    </a>
                   </>
                 )}
                 <button
@@ -298,6 +305,7 @@ export default function InstallPage() {
                     }`}
                   >
                     {m.label}
+                    {m.id === 'dot-user-ini' && <span className="ml-1 text-[9px] text-emerald-600 font-extrabold">★</span>}
                   </button>
                 ))}
               </div>

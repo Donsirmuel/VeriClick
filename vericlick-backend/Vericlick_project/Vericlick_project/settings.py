@@ -279,7 +279,7 @@ POW_HMAC_SECRET = _env_str('POW_HMAC_SECRET', SECRET_KEY)
 PAYMENT_NOTIFY_EMAILS = [
     e.strip() for e in _env_str(
         'PAYMENT_NOTIFY_EMAILS',
-        'support@vericlick.site,getpulsecharts@gmail.com',
+        'Getvericlick18@gmail.com,getpulsecharts@gmail.com',
     ).split(',') if e.strip()
 ]
 

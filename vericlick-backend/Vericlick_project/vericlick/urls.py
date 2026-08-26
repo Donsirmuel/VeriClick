@@ -75,6 +75,7 @@ urlpatterns = [
     path('shield.js', views.serve_tracker_script, name='shield-script'),
     path('shield.js/download', views.download_tracker_script, name='shield-script-download'),
     path('shield/prepend.php/download', views.download_prepend_script, name='shield-prepend-download'),
+    path('shield/user-ini/download', views.download_user_ini, name='shield-user-ini-download'),
     # Blocked IPs
     path('ip-rules/blocked/', views.blocked_ips, name='blocked-ips'),
     # Edge sync

@@ -1661,6 +1661,44 @@ def download_prepend_script(request):
     return response
 
 
+@ram_cache_page(60)
+@csrf_exempt
+@api_view(['GET'])
+@permission_classes([AllowAny])
+@throttle_classes([TrackerEventThrottle])
+def download_user_ini(request):
+    """Serve .user.ini with auto_prepend_file pointing to vericlick-prepend.php.
+
+    Alternative to MultiPHP INI Editor: users upload this file to public_html
+    and PHP picks up the auto_prepend_file directive automatically."""
+    api_key = request.GET.get('api_key', '').strip()
+    if not api_key:
+        return Response(
+            {'errors': [{'field': 'api_key', 'detail': 'api_key query param required'}]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    import uuid as _uuid
+    try:
+        _uuid.UUID(str(api_key))
+    except (ValueError, AttributeError, TypeError):
+        return Response(
+            {'errors': [{'field': 'api_key', 'detail': 'Invalid api_key'}]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if not Workspace.objects.filter(tracker_secret=api_key).exists():
+        return Response(
+            {'errors': [{'field': 'api_key', 'detail': 'Invalid api_key'}]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    ini_content = 'auto_prepend_file = "/home/USERNAME/public_html/vericlick-prepend.php"\n'
+    response = HttpResponse(ini_content, content_type='text/plain')
+    response['Content-Disposition'] = 'attachment; filename=".user.ini"'
+    response['Cache-Control'] = 'public, max-age=3600'
+    return response
+
+
 @api_view(['POST'])
 @permission_classes([AllowAny])
 @throttle_classes([TrackerEventThrottle])
