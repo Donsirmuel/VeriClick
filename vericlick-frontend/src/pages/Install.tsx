@@ -22,6 +22,8 @@ interface PlatformGuide {
   iniSnippet?: string;
   iniHint?: string;
   altMethods?: { id: string; label: string; steps: string[]; iniSnippet: string; iniHint: string }[];
+  tutorialVideo?: string;
+  tutorialPoster?: string;
 }
 
 const PLATFORMS: PlatformGuide[] = [
@@ -36,6 +38,8 @@ const PLATFORMS: PlatformGuide[] = [
       "Paste the snippet before the closing </head> tag",
       "Save and deploy your changes",
     ],
+    tutorialVideo: "/tutorial-html.mp4",
+    tutorialPoster: "/tutorial-html-poster.jpg",
   },
   {
     key: "wordpress",
@@ -105,6 +109,8 @@ const PLATFORMS: PlatformGuide[] = [
     icon: "📁",
     description: "Auto-inject via PHP prepend — no template editing",
     detailedSteps: [],
+    tutorialVideo: "/tutorial-cpanel.mp4",
+    tutorialPoster: "/tutorial-cpanel-poster.jpg",
     altMethods: [
       { id: 'multiphp', label: 'MultiPHP INI Editor', steps: [
         'Click the download buttons above to save the .js and prepend.php files',
@@ -366,6 +372,24 @@ export default function InstallPage() {
               )}
             </>
           )}
+        </div>
+      )}
+
+      {/* Tutorial video */}
+      {selectedDomainId && currentGuide.tutorialVideo && (
+        <div className="bg-white rounded-2xl border border-neutral-200 p-6 shadow-sm">
+          <h3 className="text-sm font-bold text-slate-900 mb-3">Watch the tutorial</h3>
+          <div className="bg-neutral-900 rounded-xl overflow-hidden">
+            <video
+              className="w-full h-auto aspect-video object-cover"
+              controls
+              playsInline
+              preload="metadata"
+              poster={currentGuide.tutorialPoster}
+            >
+              <source src={currentGuide.tutorialVideo} type="video/mp4" />
+            </video>
+          </div>
         </div>
       )}
 

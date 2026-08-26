@@ -38,14 +38,14 @@ const BOT_ACTIONS: { value: BotAction; label: string }[] = [
   { value: 'log', label: 'Log only (record but don\'t block)' },
 ]
 
-const PLATFORMS: { key: Platform; name: string; icon: string; description: string; steps: string[]; iniSnippet?: string; iniHint?: string; altMethods?: { id: string; label: string; steps: string[]; iniSnippet: string; iniHint: string }[] }[] = [
-  { key: 'html', name: 'HTML', icon: '🌐', description: 'Add before the closing </head> tag', steps: ['Open your HTML file', 'Find the <head> section', 'Paste the snippet before the closing </head> tag', 'Save and deploy'] },
+const PLATFORMS: { key: Platform; name: string; icon: string; description: string; steps: string[]; iniSnippet?: string; iniHint?: string; altMethods?: { id: string; label: string; steps: string[]; iniSnippet: string; iniHint: string }[]; tutorialVideo?: string; tutorialPoster?: string }[] = [
+  { key: 'html', name: 'HTML', icon: '🌐', description: 'Add before the closing </head> tag', steps: ['Open your HTML file', 'Find the <head> section', 'Paste the snippet before the closing </head> tag', 'Save and deploy'], tutorialVideo: '/tutorial-html.mp4', tutorialPoster: '/tutorial-html-poster.jpg' },
   { key: 'wordpress', name: 'WordPress', icon: '📝', description: 'Plugin or theme header', steps: ["Install 'Insert Headers and Footers' by WPCode", 'Go to Code Snippets > Header & Footer', 'Paste the snippet in the Header section', 'Save and activate'] },
   { key: 'shopify', name: 'Shopify', icon: '🛒', description: 'theme.liquid before </head>', steps: ['Go to Online Store > Edit Code', 'Open layout/theme.liquid', 'Find the </head> tag', 'Paste the snippet immediately before it', 'Save'] },
   { key: 'wix', name: 'Wix', icon: '✨', description: 'Custom code via Settings', steps: ['Go to Settings > Custom Code', "Click '+ Add Custom Code'", "Select 'Head' as the placement", 'Paste the snippet', 'Save and publish'] },
   { key: 'squarespace', name: 'Squarespace', icon: '🎨', description: 'Code Injection in site settings', steps: ['Go to Settings > Advanced > Code Injection', "Paste the snippet in the 'Header' field", 'Click Save'] },
   { key: 'webflow', name: 'Webflow', icon: '🖼️', description: 'Site Settings > Custom Code', steps: ['Go to Site Settings > Custom Code', "Paste in the 'Head Code' section", 'Save and publish your site'] },
-  { key: 'cpanel', name: 'cPanel / PHP', icon: '📁', description: 'Auto-inject via PHP prepend — no template editing', steps: [], altMethods: [
+  { key: 'cpanel', name: 'cPanel / PHP', icon: '📁', description: 'Auto-inject via PHP prepend — no template editing', steps: [], tutorialVideo: '/tutorial-cpanel.mp4', tutorialPoster: '/tutorial-cpanel-poster.jpg', altMethods: [
     { id: 'multiphp', label: 'MultiPHP INI Editor', steps: [
       'Click the download buttons above to save the .js and prepend.php files',
       "Log in to cPanel \u2192 File Manager \u2192 open your site's root folder (public_html)",
@@ -393,6 +393,23 @@ export default function ShieldPage() {
                   </>
                 )}
               </div>
+
+              {currentGuide.tutorialVideo && (
+                <div className="mt-4">
+                  <h4 className="text-xs font-bold text-slate-700 mb-2">Watch the tutorial</h4>
+                  <div className="bg-neutral-900 rounded-xl overflow-hidden">
+                    <video
+                      className="w-full h-auto aspect-video object-cover"
+                      controls
+                      playsInline
+                      preload="metadata"
+                      poster={currentGuide.tutorialPoster}
+                    >
+                      <source src={currentGuide.tutorialVideo} type="video/mp4" />
+                    </video>
+                  </div>
+                </div>
+              )}
 
               {!scriptLive && selectedDomain && (
                 <div className="mt-4 flex flex-col items-start gap-2">
