@@ -1661,7 +1661,6 @@ def download_prepend_script(request):
     return response
 
 
-@ram_cache_page(60)
 @csrf_exempt
 @api_view(['GET'])
 @permission_classes([AllowAny])
