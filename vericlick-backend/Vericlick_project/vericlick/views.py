@@ -1661,7 +1661,6 @@ def download_prepend_script(request):
     return response
 
 
-@csrf_exempt
 @api_view(['GET'])
 @permission_classes([AllowAny])
 @throttle_classes([TrackerEventThrottle])
