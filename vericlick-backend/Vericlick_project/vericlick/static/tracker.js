@@ -247,9 +247,9 @@
     sent = true;
     var endpoint = API + 'tracker/event/';
     var body = JSON.stringify(buildPayload());
-    if (navigator.sendBeacon) {
-      if (navigator.sendBeacon(endpoint, new Blob([body], { type: 'application/json' }))) return;
-    }
+    // This endpoint is cross-origin. Beacon queues application/json without
+    // exposing the response, so a queued beacon can look successful while CORS
+    // rejects it. Keepalive fetch sends the credentialed JSON request directly.
     fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
