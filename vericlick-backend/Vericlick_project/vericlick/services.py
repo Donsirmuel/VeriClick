@@ -3,6 +3,7 @@ import re
 from bisect import bisect_right
 from datetime import timedelta
 from django.db.models import Q
+from django.conf import settings
 from django.utils import timezone
 from .models import IPRule, TrackerEvent, IpAsnRange, CountryRule, RedirectEvent
 
@@ -452,7 +453,11 @@ def classify_request(link, ip, user_agent, workspace):
         }
 
     # 7. Datacenter / hosting / VPN networks.
-    if workspace.auto_reputation_enabled and is_datacenter_ip(ip):
+    if (
+        workspace.auto_reputation_enabled
+        and settings.DATACENTER_BLOCKING_ENABLED
+        and is_datacenter_ip(ip)
+    ):
         # Bots and scanners overwhelmingly come from hosting/datacenter/VPN
         # networks. Divert them unless the workspace turned this off. Each
         # block also feeds the auto-reputation counter below.

@@ -5,6 +5,7 @@ import logging
 import time
 import urllib.error
 import urllib.request
+from datetime import timedelta
 
 from django.conf import settings
 
@@ -340,8 +341,6 @@ def record_recurring_collection(data):
     workspace = Workspace.objects.filter(pk=workspace_id).first()
     if workspace is None:
         return False
-    if not workspace.is_plan_active():
-        return False
 
     charge_id = (data or {}).get('charge_id', '')
     if charge_id and BillingEvent.objects.filter(charge_id=charge_id).exists():
@@ -350,6 +349,16 @@ def record_recurring_collection(data):
     plan = (Plan.objects.filter(code=plan_code).first() if plan_code else None) or workspace.plan
     if plan is None:
         return False
+
+    now = timezone.now()
+    base = workspace.plan_expires_at if workspace.plan_expires_at and workspace.plan_expires_at > now else now
+    days = workspace.period_days
+    workspace.plan = plan
+    workspace.plan_expires_at = base + timedelta(days=days)
+    workspace.plan_billing_mode = Workspace.BillingMode.PERIOD
+    workspace.save(update_fields=[
+        'plan', 'plan_expires_at', 'plan_billing_mode',
+    ])
 
     BillingEvent.objects.create(
         workspace=workspace,

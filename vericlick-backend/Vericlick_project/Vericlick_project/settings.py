@@ -238,6 +238,12 @@ CORS_ALLOW_CREDENTIALS = True
 CSRF_TRUSTED_ORIGINS = config('CSRF_TRUSTED_ORIGINS', default='', cast=Csv())
 
 PUBLIC_TRACKING_BASE_URL = _env_str('PUBLIC_TRACKING_BASE_URL').rstrip('/')
+EDGE_OPERATOR_API_KEY = _env_str('EDGE_OPERATOR_API_KEY')
+
+# Datacenter/VPN ASN matches are useful abuse signals but can include legitimate
+# visitors. Keep the existing behavior by default and make the policy explicit
+# so operators can disable it without a code change during incident response.
+DATACENTER_BLOCKING_ENABLED = _env_bool('DATACENTER_BLOCKING_ENABLED', True)
 
 # Optional override for the public IP Caddy listens on, used to decide whether a
 # customer domain is actually pointed at this server (not just resolving

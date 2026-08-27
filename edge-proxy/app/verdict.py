@@ -51,11 +51,18 @@ async def close_client():
         _client = None
 
 
-def _cache_key(domain: str, slug: str, ip: str, user_agent: str) -> str:
+def _cache_key(
+    domain: str,
+    slug: str,
+    ip: str,
+    user_agent: str,
+    has_clearance: bool = False,
+) -> str:
     # The verdict depends on the visitor, not the moment. Hash the UA so the key
     # stays short and bounded.
     ua = hashlib.sha256(user_agent.encode("utf-8", "ignore")).hexdigest()[:16]
-    return f"verdict:{domain}:{slug}:{ip}:{ua}"
+    clearance = "clear" if has_clearance else "unclear"
+    return f"verdict:{domain}:{slug}:{ip}:{ua}:{clearance}"
 
 
 async def get_verdict(
@@ -74,7 +81,7 @@ async def get_verdict(
     if not settings.EDGE_API_KEY:
         return ALLOW
 
-    key = _cache_key(domain, slug, ip, user_agent)
+    key = _cache_key(domain, slug, ip, user_agent, has_clearance="_vc_pow=" in cookies)
 
     try:
         cached = await redis.get(key)
@@ -107,7 +114,12 @@ async def get_verdict(
         return ALLOW
 
     try:
-        await redis.set(key, json.dumps(verdict), ex=settings.VERDICT_CACHE_TTL)
+        ttl = (
+            settings.BLOCKED_VERDICT_CACHE_TTL
+            if verdict.get("is_bot")
+            else settings.VERDICT_CACHE_TTL
+        )
+        await redis.set(key, json.dumps(verdict), ex=ttl)
     except Exception:
         pass
 

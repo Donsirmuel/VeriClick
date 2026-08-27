@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     # On timeout the request is allowed through rather than delayed.
     VERDICT_TIMEOUT: float = 1.5
     VERDICT_CACHE_TTL: int = 15
+    BLOCKED_VERDICT_CACHE_TTL: int = 60
 
     # GeoIP (optional)
     GEOIP2_DB: str = ""

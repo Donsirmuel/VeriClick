@@ -926,6 +926,18 @@ class ServicesTests(TestCase):
         self.assertFalse(result['is_bot'])
         self.assertEqual(result['decision'], 'allowed')
 
+    @override_settings(DATACENTER_BLOCKING_ENABLED=False)
+    @patch('vericlick.services.is_datacenter_ip', return_value=True)
+    def test_datacenter_policy_can_be_disabled(self, _is_datacenter):
+        from .services import classify_request
+        result = classify_request(
+            None, '8.8.8.8',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            self.workspace,
+        )
+        self.assertFalse(result['is_bot'])
+        self.assertEqual(result['decision'], 'allowed')
+
     def test_classify_bot_ua(self):
         from .services import classify_request
         result = classify_request(
@@ -3194,6 +3206,31 @@ class BillingExpiryTests(APITestCase):
         self.assertIsNone(sub['planName'])
         self.assertNotIn('graceExpiresAt', sub)
 
+    @patch('vericlick.emails.send_payment_receipt_email')
+    def test_legacy_recurring_renewal_restores_expired_access(self, _send_receipt):
+        from vericlick.payments import record_recurring_collection
+
+        self._expire()
+        result = record_recurring_collection({
+            'metadata': {
+                'workspace_id': str(self.workspace.id),
+                'plan_code': self.plan.code,
+            },
+            'charge_id': 'renewal-expired-1',
+        })
+
+        self.assertTrue(result)
+        self.workspace.refresh_from_db()
+        self.assertTrue(self.workspace.is_plan_active())
+        self.assertGreater(self.workspace.plan_expires_at, timezone.now())
+        self.assertTrue(
+            BillingEvent.objects.filter(
+                workspace=self.workspace,
+                kind=BillingEvent.Kind.PLAN_RENEWED,
+                charge_id='renewal-expired-1',
+            ).exists()
+        )
+
 
 @override_settings(BACHS_API_KEY='test_api_key')
 class CheckoutProductSelectionTests(APITestCase):
@@ -3947,11 +3984,22 @@ class InstallTokenTests(APITestCase):
         self.user = User.objects.create_user(username='token_user', password='testpass123')
         self.client.force_authenticate(user=self.user)
         self.workspace = Workspace.objects.get(owner=self.user)
+        self.workspace.plan = Plan.objects.get(code='basic')
+        self.workspace.plan_expires_at = timezone.now() + timedelta(days=7)
+        self.workspace.save(update_fields=['plan', 'plan_expires_at'])
 
     def test_list_empty(self):
         res = self.client.get('/api/install-tokens/')
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         self.assertEqual(res.json(), [])
+
+    def test_create_requires_an_active_plan(self):
+        self.workspace.plan = None
+        self.workspace.plan_expires_at = None
+        self.workspace.save(update_fields=['plan', 'plan_expires_at'])
+        res = self.client.post('/api/install-tokens/', format='json')
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(res.json()['errors'][0]['field'], 'plan')
 
     def test_create_token(self):
         res = self.client.post('/api/install-tokens/', {'label': 'Test'}, format='json')
@@ -4128,6 +4176,9 @@ class RedirectRouteTests(APITestCase):
         self.user = User.objects.create_user(username='route_user', password='testpass123')
         self.client.force_authenticate(user=self.user)
         self.workspace = Workspace.objects.get(owner=self.user)
+        self.workspace.plan = Plan.objects.get(code='basic')
+        self.workspace.plan_expires_at = timezone.now() + timedelta(days=7)
+        self.workspace.save(update_fields=['plan', 'plan_expires_at'])
         self.domain = DomainRegistry.objects.create(
             workspace=self.workspace, domain='go.example.com',
             purpose='redirect', verified=True,
@@ -4150,6 +4201,17 @@ class RedirectRouteTests(APITestCase):
         self.assertEqual(body['slug'], 'promo')
         self.assertEqual(body['destinationUrl'], 'https://target.example.com')
         self.assertTrue(body['isActive'])
+
+    def test_create_route_requires_an_active_plan(self):
+        self.workspace.plan = None
+        self.workspace.plan_expires_at = None
+        self.workspace.save(update_fields=['plan', 'plan_expires_at'])
+        res = self.client.post('/api/redirect-routes/', {
+            'domain_id': str(self.domain.id),
+            'destination_url': 'https://target.example.com',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(res.json()['errors'][0]['field'], 'plan')
 
     def test_create_requires_domain_and_url(self):
         res = self.client.post('/api/redirect-routes/', {}, format='json')
@@ -4429,6 +4491,16 @@ class EdgeSyncTests(APITestCase):
     def test_invalid_key(self):
         res = self.client.get('/api/edge/sync/', **{'HTTP_X_EDGE_API_KEY': 'ek_bad'})
         self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    @override_settings(EDGE_OPERATOR_API_KEY='operator-test-key')
+    def test_operator_key_replaces_workspace_key_when_configured(self):
+        res = self.client.get('/api/edge/sync/', **self.headers)
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+        res = self.client.get(
+            '/api/edge/sync/',
+            HTTP_X_EDGE_API_KEY='operator-test-key',
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
 
     def test_returns_routes(self):
         domain = DomainRegistry.objects.create(

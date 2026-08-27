@@ -1,4 +1,5 @@
 from datetime import timedelta
+import hmac
 import logging
 import math
 import re
@@ -59,6 +60,31 @@ logger = logging.getLogger(__name__)
 # for readability. It is deliberately not an infinite archive.
 ACTIVITY_MAX_EVENTS = 200
 ACTIVITY_PAGE_SIZE = 10
+
+
+def _require_active_plan(workspace):
+    """Return a structured response when a paid feature lacks access."""
+    if workspace and workspace.has_plan_access():
+        return None
+    if workspace and workspace.suspended:
+        detail = 'Your plan was suspended. Renew it to restore access.'
+    else:
+        detail = 'An active plan is required for this feature. Select a plan to get started.'
+    return Response(
+        {'errors': [{'field': 'plan', 'detail': detail}]},
+        status=status.HTTP_403_FORBIDDEN,
+    )
+
+
+def _authenticate_edge_request(request):
+    """Authenticate the edge deployment, with a migration-safe legacy path."""
+    api_key = request.headers.get('X-Edge-Api-Key', '')
+    operator_key = getattr(settings, 'EDGE_OPERATOR_API_KEY', '')
+    if operator_key:
+        return bool(api_key) and hmac.compare_digest(api_key, operator_key)
+    from .models import EdgeSyncCredential
+    workspace, _ = EdgeSyncCredential.verify_key(api_key) if api_key else (None, None)
+    return workspace is not None
 
 
 def get_user_workspace(user):
@@ -264,6 +290,10 @@ def domain_list_create(request):
     if request.method == 'GET':
         domains = DomainRegistry.objects.filter(workspace=workspace).order_by('-created_at')
         return Response(DomainRegistrySerializer(domains, many=True).data)
+
+    plan_error = _require_active_plan(workspace)
+    if plan_error:
+        return plan_error
 
     # POST — add a domain. Enforce the plan's domain_limit.
     serializer = DomainRegistrySerializer(data=request.data)
@@ -547,6 +577,10 @@ def install_token_list_create(request):
         tokens = InstallToken.objects.filter(workspace=workspace)
         return Response(InstallTokenSerializer(tokens, many=True).data)
 
+    plan_error = _require_active_plan(workspace)
+    if plan_error:
+        return plan_error
+
     # POST — generate new token
     active_count = InstallToken.objects.filter(workspace=workspace, is_active=True).count()
     if active_count >= MAX_INSTALL_TOKENS:
@@ -612,6 +646,10 @@ def redirect_domain_list_create(request):
             Q(purpose='redirect') | Q(purpose='protection', verified=True),
         ).order_by('-created_at')
         return Response(DomainRegistrySerializer(domains, many=True).data)
+
+    plan_error = _require_active_plan(workspace)
+    if plan_error:
+        return plan_error
 
     serializer = DomainRegistrySerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
@@ -1020,6 +1058,10 @@ def redirect_route_list_create(request):
             })
         return Response(data)
 
+    plan_error = _require_active_plan(workspace)
+    if plan_error:
+        return plan_error
+
     # POST — create route. Every field goes through the same validator PATCH
     # uses, so the two paths cannot accept different things.
     domain_id = request.data.get('domain_id')
@@ -1047,15 +1089,14 @@ def redirect_route_list_create(request):
 
     # --- Redirect limit check (applies to both shortlinks and custom domains) ---
     active_plan = workspace.active_plan
-    if active_plan:
-        current_count = RedirectRoute.objects.filter(
-            workspace=workspace, is_active=True,
-        ).count()
-        if current_count >= active_plan.redirect_limit:
-            return Response(
-                {'errors': [{'field': 'slug', 'detail': f'You\'ve reached the {active_plan.redirect_limit}-redirect limit on {active_plan.name}. Delete a redirect or upgrade to add more.'}]},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+    current_count = RedirectRoute.objects.filter(
+        workspace=workspace, is_active=True,
+    ).count()
+    if current_count >= active_plan.redirect_limit:
+        return Response(
+            {'errors': [{'field': 'slug', 'detail': f'You\'ve reached the {active_plan.redirect_limit}-redirect limit on {active_plan.name}. Delete a redirect or upgrade to add more.'}]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     # --- Shortlink destination must be a protected domain ---
     if use_shortlink:
@@ -2905,12 +2946,7 @@ def edge_routes_sync(request):
     all workspaces (the edge proxy is our own internal service)."""
     from .models import EdgeSyncCredential, RedirectRoute, IPRule, CountryRule
 
-    api_key = request.headers.get('X-Edge-Api-Key', '')
-    if not api_key:
-        return Response({'error': 'X-Edge-Api-Key header required'}, status=status.HTTP_401_UNAUTHORIZED)
-
-    ws, _ = EdgeSyncCredential.verify_key(api_key)
-    if not ws:
+    if not _authenticate_edge_request(request):
         return Response({'error': 'Invalid API key'}, status=status.HTTP_401_UNAUTHORIZED)
 
     # Optional domain filter
@@ -3045,12 +3081,7 @@ def edge_verdict(request):
     """
     from .models import EdgeSyncCredential, RedirectRoute
 
-    api_key = request.headers.get('X-Edge-Api-Key', '')
-    if not api_key:
-        return Response({'error': 'X-Edge-Api-Key header required'}, status=status.HTTP_401_UNAUTHORIZED)
-
-    ws, _ = EdgeSyncCredential.verify_key(api_key)
-    if not ws:
+    if not _authenticate_edge_request(request):
         return Response({'error': 'Invalid API key'}, status=status.HTTP_401_UNAUTHORIZED)
 
     domain = (request.data.get('domain') or '').strip().lower()
@@ -3129,12 +3160,7 @@ def edge_events_batch(request):
     """Edge proxy batch-pushes click events every 60 seconds."""
     from .models import EdgeSyncCredential, RedirectRoute, RedirectEvent
 
-    api_key = request.headers.get('X-Edge-Api-Key', '')
-    if not api_key:
-        return Response({'error': 'X-Edge-Api-Key header required'}, status=status.HTTP_401_UNAUTHORIZED)
-
-    ws, _ = EdgeSyncCredential.verify_key(api_key)
-    if not ws:
+    if not _authenticate_edge_request(request):
         return Response({'error': 'Invalid API key'}, status=status.HTTP_401_UNAUTHORIZED)
 
     events_data = request.data.get('events', [])
