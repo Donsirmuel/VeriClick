@@ -224,6 +224,7 @@ export default function Domains() {
     mutationFn: deleteDomain,
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['domains'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard-domains'] })
       queryClient.invalidateQueries({ queryKey: ['workspace'] })
       queryClient.invalidateQueries({ queryKey: ['redirect-routes'] })
       queryClient.invalidateQueries({ queryKey: ['redirect-domains'] })

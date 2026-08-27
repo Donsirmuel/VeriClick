@@ -153,7 +153,7 @@ export function TopBreakdownWidget({ dimension, rows, canManage }: TopBreakdownW
                   )}
                 </div>
                 <div className="text-xs text-muted">
-                  {row.total.toLocaleString()} clicks
+                  {row.total.toLocaleString()} {isCountry ? 'visits' : 'visits'}
                   {row.blocked > 0 && (
                     <span className="text-error"> · {row.blocked.toLocaleString()} blocked</span>
                   )}

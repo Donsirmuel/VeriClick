@@ -38,6 +38,12 @@ export default function DashboardPage() {
 
   const domainParam = selectedDomain || undefined
 
+  useEffect(() => {
+    if (dashboardDomains && selectedDomain && !dashboardDomains.some((d) => d.domain === selectedDomain)) {
+      setSelectedDomain('')
+    }
+  }, [dashboardDomains, selectedDomain])
+
   const { data: stats, isLoading: statsLoading } = useQuery({
     queryKey: ['dashboard-stats', selectedDomain],
     queryFn: () => fetchDashboardStats(domainParam),

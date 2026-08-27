@@ -248,15 +248,15 @@
     var endpoint = API + 'tracker/event/';
     var body = JSON.stringify(buildPayload());
     if (navigator.sendBeacon) {
-      navigator.sendBeacon(endpoint, new Blob([body], { type: 'application/json' }));
-    } else {
-      fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: body,
-        keepalive: true
-      });
+      if (navigator.sendBeacon(endpoint, new Blob([body], { type: 'application/json' }))) return;
     }
+    fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: body,
+      keepalive: true
+    });
   }
 
   function scheduleSend() {

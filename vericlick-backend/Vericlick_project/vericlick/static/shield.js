@@ -264,15 +264,15 @@
     var endpoint = API + 'shield/telemetry/';
     var body = JSON.stringify(buildPayload());
     if (navigator.sendBeacon) {
-      navigator.sendBeacon(endpoint, new Blob([body], { type: 'application/json' }));
-    } else {
-      fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: body,
-        keepalive: true
-      });
+      if (navigator.sendBeacon(endpoint, new Blob([body], { type: 'application/json' }))) return;
     }
+    fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: body,
+      keepalive: true
+    });
   }
 
   function scheduleSend() {
@@ -301,6 +301,9 @@
     });
     window.addEventListener('beforeunload', send);
     window.addEventListener('pagehide', send);
+    // Record quiet page views too; waiting for interaction meant visitors who
+    // only read a page never appeared in analytics.
+    scheduleSend();
   }
 
   function showBlockPage(reasonLabel, botAction) {

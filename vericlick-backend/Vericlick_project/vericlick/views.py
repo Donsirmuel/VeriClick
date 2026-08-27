@@ -1779,6 +1779,8 @@ def receive_tracker_event(request):
     tracker_signals = request.data.get('signals') or {}
     trajectory = tracker_signals.get('trajectory') or {}
     click_metrics = tracker_signals.get('click_metrics') or {}
+    from .services import lookup_location
+    location = lookup_location(ip)
 
     # Layer 5: Compute behavioral score
     from .services import score_from_signals, compute_bot_score
@@ -1817,6 +1819,8 @@ def receive_tracker_event(request):
         # Layer 5: Behavioral score
         'bot_score': bot_result['score'],
         'bot_verdict': bot_result['verdict'],
+        'country_code': location.get('country_code', ''),
+        'country': location.get('country', ''),
     }
 
     serializer = TrackerEventSerializer(data=data)
@@ -1992,9 +1996,10 @@ def _log_shield_event(request, workspace, page_url, blocked=False, reason=''):
     trajectory = tracker_signals.get('trajectory') or {}
     click_metrics = tracker_signals.get('click_metrics') or {}
 
-    from .services import score_from_signals, compute_bot_score
+    from .services import lookup_location, score_from_signals, compute_bot_score
     bot_signals = score_from_signals(request, tracker_signals, trajectory, click_metrics)
     bot_result = compute_bot_score(bot_signals)
+    location = lookup_location(ip)
 
     TrackerEvent.objects.create(
         workspace=workspace,
@@ -2013,6 +2018,8 @@ def _log_shield_event(request, workspace, page_url, blocked=False, reason=''):
         ja4_hash=getattr(request, 'ja4_hash', ''),
         bot_score=bot_result['score'],
         bot_verdict=bot_result['verdict'],
+        country_code=location.get('country_code', ''),
+        country=location.get('country', ''),
     )
 
 
@@ -2605,8 +2612,8 @@ def dashboard_domains(request):
         ).values_list('domain', flat=True)
     )
 
-    # Merge: registered domains always appear; active-only domains appear too
-    all_domains = registered_domains | active_domains
+    # Historical events must not resurrect a domain after it has been deleted.
+    all_domains = registered_domains
 
     result = []
     for domain in sorted(all_domains):
@@ -3198,6 +3205,13 @@ def edge_events_batch(request):
 
         if not route:
             continue
+
+        # Edge GeoIP is optional; enrich missing location data centrally so the
+        # country dashboard remains useful even when edge has no MMDB loaded.
+        from .services import lookup_location
+        location = lookup_location(ip)
+        country_code = (location.get('country_code') or country_code).upper()
+        country = location.get('country') or country
 
         RedirectEvent.objects.create(
             workspace=route.workspace,

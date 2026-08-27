@@ -30,7 +30,7 @@ export const QUICK_QUESTIONS = [
 const TOPICS: ChatTopic[] = [
   {
     id: 'what-is',
-    keywords: ['what is', 'whats', "what's", 'vericlick', 'about', 'product', 'do you do', 'purpose', 'tool'],
+    keywords: ['what is', 'whats', "what's", 'about the product', 'do you do', 'purpose', 'tool'],
     answer: `VeriClick keeps bots away from two things: your site and your links. The anti-bot script checks every visitor before they reach one of your pages — IP allow/deny rules first, then bot detection from device signals, then rate limits. Smart redirect links do the same check on every click before forwarding someone to your destination. Real visitors pass through; suspicious ones are stopped or diverted. Every decision is recorded and explained in plain language on your dashboard.`,
   },
   {
@@ -118,7 +118,8 @@ const TOPICS: ChatTopic[] = [
 const FALLBACK_ANSWER = `I'm not sure I can answer that one yet. I'm best with questions about domains, the anti-bot script, redirect links, traffic rules, blocked traffic, the dashboard, pricing, and your account. For anything else, use the Contact page (link in the footer) or open the Help page in your dashboard.`
 
 function tokenize(text: string): Set<string> {
-  return new Set(text.split(' ').filter(Boolean))
+  const stopWords = new Set(['a', 'an', 'and', 'are', 'can', 'do', 'does', 'how', 'i', 'is', 'it', 'me', 'my', 'of', 'the', 'to', 'what', 'where', 'which', 'with'])
+  return new Set(text.split(' ').filter((word) => word && !stopWords.has(word)))
 }
 
 function tokensMatch(a: string, b: string): boolean {
@@ -165,7 +166,7 @@ export function answerQuestion(question: string): ChatAnswer {
     }
   }
 
-  if (best) {
+  if (best && bestScore >= 2) {
     return { text: best.answer, suggestions: QUICK_QUESTIONS }
   }
 

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Globe02Icon, LinkSquare02Icon, ShieldIcon, DashboardSquare01Icon, ArrowRight02Icon, Mail01Icon, UserIcon } from '@hugeicons/core-free-icons'
@@ -6,6 +7,7 @@ const sections = [
   {
     icon: ShieldIcon,
     title: 'The two halves',
+    searchText: 'script protection smart redirect engine',
     body: (
       <>
         The <strong>anti-bot script</strong> protects pages on your own site. <strong>Smart redirect links</strong> are
@@ -17,6 +19,7 @@ const sections = [
   {
     icon: Globe02Icon,
     title: 'Domains',
+    searchText: 'domain verify ownership meta tag dns record delete domain',
     body: (
       <>
         Everything starts with a domain you own. Add it under <strong>Domains</strong> and verify it with the meta tag
@@ -28,6 +31,7 @@ const sections = [
   {
     icon: LinkSquare02Icon,
     title: 'The anti-bot script',
+    searchText: 'script anti bot install head block safe page telemetry',
     body: (
       <>
         One <strong>&lt;script&gt;</strong> tag from the <strong>Anti-Bot</strong> page, pasted into your site's{' '}
@@ -40,6 +44,7 @@ const sections = [
   {
     icon: ArrowRight02Icon,
     title: 'Redirect links',
+    searchText: 'redirect link cname dns destination click renew',
     body: (
       <>
         A link like <span className="font-mono text-xs bg-neutral-100 px-1 rounded">go.yoursite.com/promo</span> that
@@ -52,6 +57,7 @@ const sections = [
   {
     icon: ShieldIcon,
     title: 'Traffic rules',
+    searchText: 'traffic rules ip allow block country device operating system',
     body: (
       <>
         Every device on the internet has an address called an <strong>IP address</strong>. IP rules let you allow or
@@ -64,11 +70,13 @@ const sections = [
   {
     icon: DashboardSquare01Icon,
     title: 'Dashboard',
+    searchText: 'dashboard visits clicks countries devices analytics activity',
     body: 'Visits to your protected pages and clicks on your links, together: how many were bots, which countries and devices they came from, and what was decided about each one. New traffic usually appears within a minute.',
   },
   {
     icon: UserIcon,
     title: 'Plan and account',
+    searchText: 'plan billing payment subscription account settings delete',
     body: (
       <>
         Plans are one-time payments for 7 or 30 days — no subscription, nothing renews on its own. We email you before
@@ -82,6 +90,12 @@ const sections = [
 ]
 
 export default function HelpPage() {
+  const [search, setSearch] = useState('')
+  const query = search.trim().toLowerCase()
+  const visibleSections = query
+    ? sections.filter((section) => `${section.title} ${section.searchText}`.toLowerCase().includes(query))
+    : sections
+
   return (
     <div>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-8">
@@ -91,8 +105,21 @@ export default function HelpPage() {
         </div>
       </div>
 
+      <div className="bg-slate-900 rounded-2xl p-5 mb-6">
+        <label htmlFor="help-search" className="block text-sm font-bold text-white mb-2">
+          Search help
+        </label>
+        <input
+          id="help-search"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Try domains, script, redirects, billing…"
+          className="w-full bg-white text-slate-900 rounded-xl px-4 py-3 text-sm outline-none ring-0 focus:ring-2 focus:ring-white/40"
+        />
+      </div>
+
       <div className="grid md:grid-cols-2 gap-4">
-        {sections.map((section) => (
+        {visibleSections.map((section) => (
           <div key={section.title} className="bg-white rounded-2xl border border-border p-6 shadow-sm">
             <div className="flex items-center gap-3 mb-3">
               <div className="w-10 h-10 rounded-xl bg-neutral-100 flex items-center justify-center">
@@ -104,6 +131,17 @@ export default function HelpPage() {
           </div>
         ))}
       </div>
+
+      {visibleSections.length === 0 && (
+        <div className="bg-white border border-border rounded-2xl p-8 text-center">
+          <h2 className="text-base font-bold text-slate-900 mb-1">No matching help topic</h2>
+          <p className="text-sm text-muted mb-4">Try a different search or contact support.</p>
+          <Link to="/contact" className="inline-flex items-center gap-2 bg-black text-white px-4 py-2.5 rounded-xl text-sm font-bold">
+            <HugeiconsIcon icon={Mail01Icon} className="w-4 h-4" />
+            Contact support
+          </Link>
+        </div>
+      )}
 
       <div className="bg-neutral-900 rounded-2xl border border-neutral-800 p-6 mt-6">
         <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
