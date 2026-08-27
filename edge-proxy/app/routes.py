@@ -15,6 +15,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from . import geo, events as events_mod
 from .sync import get_route, get_shortlink
 from .verdict import get_verdict
+from .config import settings
 
 logger = logging.getLogger("edge.routes")
 
@@ -37,9 +38,22 @@ _load_templates()
 
 def _client_ip(request: Request) -> str:
     forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
+    peer = request.client.host if request.client else None
+    trusted_peers = []
+    for entry in settings.TRUSTED_PROXY_IPS.split(","):
+        try:
+            trusted_peers.append(ipaddress.ip_network(entry.strip(), strict=False))
+        except ValueError:
+            logger.warning("Ignoring invalid trusted proxy network: %s", entry)
+    peer_is_trusted = False
+    if peer:
+        try:
+            peer_is_trusted = any(ipaddress.ip_address(peer) in network for network in trusted_peers)
+        except ValueError:
+            peer_is_trusted = False
+    if forwarded and (peer_is_trusted or peer is None):
         return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "127.0.0.1"
+    return peer or "127.0.0.1"
 
 
 def _ip_matches_cidr(ip_str: str, cidr_str: str) -> bool:

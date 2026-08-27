@@ -4464,6 +4464,29 @@ class EdgeSyncTests(APITestCase):
         res = self.client.get('/api/edge/sync/', **self.headers)
         self.assertIn('1.2.3.4', res.json()['routes'][0]['blockedIps'])
 
+    def test_expired_ip_rules_are_not_synced(self):
+        domain = DomainRegistry.objects.create(
+            workspace=self.workspace, domain='expiry.example.com',
+            purpose='redirect', verified=True,
+        )
+        RedirectRoute.objects.create(
+            workspace=self.workspace, domain=domain,
+            destination_url='https://target.example.com',
+        )
+        IPRule.objects.create(
+            workspace=self.workspace, ip_or_cidr='1.2.3.4', action='deny',
+            expires_at=timezone.now() - timedelta(minutes=1),
+        )
+        IPRule.objects.create(
+            workspace=self.workspace, ip_or_cidr='5.6.7.8', action='deny',
+            expires_at=timezone.now() + timedelta(minutes=1),
+        )
+
+        res = self.client.get('/api/edge/sync/', **self.headers)
+        blocked = res.json()['routes'][0]['blockedIps']
+        self.assertNotIn('1.2.3.4', blocked)
+        self.assertIn('5.6.7.8', blocked)
+
     def test_returns_country_rules(self):
         domain = DomainRegistry.objects.create(
             workspace=self.workspace, domain='go.example.com',

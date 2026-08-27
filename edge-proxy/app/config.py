@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     # Edge proxy
     EDGE_HOSTNAME: str = "edge.vericlick.cc"
     CADDY_ON_DEMAND_API: str = "https://vericlick.site/api/edge/validate-domain/"
+    # Immediate proxy networks allowed to supply X-Forwarded-For. Keep this
+    # aligned with the private Docker network or set explicit proxy addresses.
+    TRUSTED_PROXY_IPS: str = "127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
 
     # Verdict lookups sit in the click path, so they are strictly bounded.
     # On timeout the request is allowed through rather than delayed.

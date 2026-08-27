@@ -60,6 +60,26 @@ def test_malformed_blocklist_entry_is_skipped():
     assert routes._is_ip_blocked("1.2.3.4", {"garbage", "1.2.3.4"}) is True
 
 
+def test_forwarded_ip_is_used_from_a_trusted_proxy(monkeypatch):
+    class _Request:
+        headers = {"x-forwarded-for": "1.2.3.4, 172.20.0.2"}
+
+        class client:
+            host = "172.20.0.2"
+
+    assert routes._client_ip(_Request()) == "1.2.3.4"
+
+
+def test_forwarded_ip_is_ignored_from_an_untrusted_peer():
+    class _Request:
+        headers = {"x-forwarded-for": "1.2.3.4"}
+
+        class client:
+            host = "198.51.100.20"
+
+    assert routes._client_ip(_Request()) == "198.51.100.20"
+
+
 # --------------------------------------------------------------------------
 # Country rules
 # --------------------------------------------------------------------------
@@ -138,8 +158,7 @@ async def test_expired_route_serves_neutral_instead_of_redirecting():
 @pytest.mark.asyncio
 async def test_blocked_ip_gets_the_configured_bot_action():
     redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
-    await _seed(redis, bot_action="honeypot")
-    await redis.sadd("blocked_ips", "9.9.9.9")
+    await _seed(redis, bot_action="honeypot", blocked_ips=["9.9.9.9"])
     resp = await routes.handle_request(_request(ip="9.9.9.9"), redis, _FakeBatcher())
     # Honeypot renders a page rather than redirecting to the real destination.
     assert resp.status_code == 200

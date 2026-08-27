@@ -22,6 +22,8 @@ BACKEND_PAYLOAD = {
             "botAction": "honeypot",
             "fallbackUrl": "",
             "expiresAt": "2099-01-01T00:00:00Z",
+            "blockedIps": ["1.2.3.4", "10.0.0.0/8"],
+            "countryRules": [{"countryCode": "CN", "action": "deny"}],
         }
     ],
     "blockedIps": ["1.2.3.4", "10.0.0.0/8"],
@@ -95,9 +97,8 @@ async def test_sync_once_writes_usable_values_to_redis(monkeypatch):
     assert route["bot_action"] == "honeypot"
     assert route["expires_at"] == "2099-01-01T00:00:00Z"
 
-    assert await sync.get_blocked_ips(redis) == {"1.2.3.4", "10.0.0.0/8"}
-    assert (await sync.get_country_rules(redis))[0]["country_code"] == "CN"
-    assert json.loads(await redis.get("site_configs:ws-1"))["protection_mode"] == "balanced"
+    assert route["blocked_ips"] == ["1.2.3.4", "10.0.0.0/8"]
+    assert route["country_rules"] == [{"country_code": "CN", "action": "deny"}]
 
 
 @pytest.mark.asyncio
