@@ -2932,12 +2932,19 @@ def edge_routes_sync(request):
     def _workspace_rules(ws_id):
         if ws_id in _rules_cache:
             return _rules_cache[ws_id]
+        active_rule_filter = Q(
+            expires_at__isnull=True,
+        ) | Q(expires_at__gt=timezone.now())
         blocked_ips = list(
-            IPRule.objects.filter(workspace_id=ws_id, action='deny', is_active=True)
+            IPRule.objects.filter(
+                workspace_id=ws_id, action='deny', is_active=True,
+            ).filter(active_rule_filter)
             .values_list('ip_or_cidr', flat=True)
         )
         allowed_ips = list(
-            IPRule.objects.filter(workspace_id=ws_id, action='allow', is_active=True)
+            IPRule.objects.filter(
+                workspace_id=ws_id, action='allow', is_active=True,
+            ).filter(active_rule_filter)
             .values_list('ip_or_cidr', flat=True)
         )
         country_rules = list(

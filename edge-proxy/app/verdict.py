@@ -64,6 +64,7 @@ async def get_verdict(
     slug: str,
     ip: str,
     user_agent: str,
+    cookies: str = "",
 ) -> dict:
     """Classify a visitor, or allow them if we cannot.
 
@@ -83,10 +84,13 @@ async def get_verdict(
         pass  # A cache miss is never a reason to fail the request.
 
     try:
+        headers = dict(HEADERS)
+        if cookies:
+            headers["Cookie"] = cookies
         resp = await _get_client().post(
             VERDICT_URL,
             json={"domain": domain, "slug": slug, "ip": ip, "user_agent": user_agent},
-            headers=HEADERS,
+            headers=headers,
         )
         if resp.status_code != 200:
             logger.warning("Verdict returned %s for %s", resp.status_code, domain)

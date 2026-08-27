@@ -17,7 +17,12 @@ class PublicShieldCorsMiddleware:
     than loosening the global setting.
     """
 
-    PUBLIC_PREFIXES = ('/api/shield/', '/api/shield.js', '/api/tracker/event/')
+    PUBLIC_PREFIXES = (
+        '/api/shield/',
+        '/api/shield.js',
+        '/api/tracker/event/',
+        '/api/pow/',
+    )
     ALLOW_HEADERS = 'content-type, accept'
     ALLOW_METHODS = 'GET, POST, OPTIONS'
 

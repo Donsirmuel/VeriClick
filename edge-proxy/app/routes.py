@@ -225,7 +225,10 @@ async def handle_request(
 
     # --- Backend verdict for full classification ---
     # Fails open by design: get_verdict returns "allowed" on timeout or error.
-    verdict = await get_verdict(redis, host, slug, ip, user_agent)
+    verdict = await get_verdict(
+        redis, host, slug, ip, user_agent,
+        cookies=request.headers.get("cookie", ""),
+    )
     if verdict.get("is_bot"):
         return _apply_action(
             bot_action, destination, fallback_url, batcher, host, slug, ip, user_agent,

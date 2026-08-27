@@ -63,6 +63,21 @@ async def test_a_human_verdict_is_returned(monkeypatch, redis):
 
 
 @pytest.mark.asyncio
+async def test_clearance_cookie_is_forwarded_to_backend(monkeypatch, redis):
+    class _Client:
+        async def post(self, url, json=None, headers=None):
+            assert headers["Cookie"] == "_vc_pow=clearance"
+            return _Resp(ALLOW)
+
+    monkeypatch.setattr(verdict_mod, "_get_client", lambda: _Client())
+    out = await verdict_mod.get_verdict(
+        redis, "r.example.com", "promo", "1.2.3.4", "Mozilla/5.0",
+        cookies="_vc_pow=clearance",
+    )
+    assert out["is_bot"] is False
+
+
+@pytest.mark.asyncio
 async def test_a_timeout_allows_the_visitor(monkeypatch, redis):
     # The whole point: a redirect must not break because a check was slow.
     monkeypatch.setattr(

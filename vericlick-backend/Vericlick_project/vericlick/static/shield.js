@@ -379,11 +379,11 @@
         combined.set(challengeBytes);
         combined.set(nonceBytes, challengeBytes.length);
 
-        promises.push(
-          crypto.subtle.digest('SHA-256', combined).then(function(buf) {
-            return { nonce: n, hash: Array.from(new Uint8Array(buf)).map(function(b) { return b.toString(16).padStart(2, '0'); }).join('') };
-          })
-        );
+        promises.push((function(nonce, bytes) {
+          return crypto.subtle.digest('SHA-256', bytes).then(function(buf) {
+            return { nonce: nonce, hash: Array.from(new Uint8Array(buf)).map(function(b) { return b.toString(16).padStart(2, '0'); }).join('') };
+          });
+        })(n, combined));
       }
 
       Promise.all(promises).then(function(results) {
@@ -426,13 +426,8 @@
   }
 
   function doPowChallenge(verifyResult) {
-    // If already have a valid PoW cookie, skip
-    if (document.cookie.indexOf('_vc_pow=') !== -1) {
-      run();
-      return;
-    }
-
-    fetch(API + 'pow/challenge/')
+    // The clearance cookie is HttpOnly, so only the server can confirm it.
+    fetch(API + 'pow/challenge/', { credentials: 'include' })
       .then(function(resp) { return resp.json(); })
       .then(function(challenge) {
         if (!challenge || !challenge.challengeId) {
@@ -445,6 +440,7 @@
             fetch(API + 'pow/verify/', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
               body: JSON.stringify({
                 challengeId: challenge.challengeId,
                 nonce: nonce,
@@ -452,9 +448,36 @@
                 challengeNonce: challenge.nonce
               })
             })
-              .then(function(resp) { return resp.json(); })
+              .then(function(resp) {
+                if (!resp.ok) throw new Error('PoW verification failed');
+                return resp.json();
+              })
               .then(function() {
-                // PoW solved, cookie set by server. Re-run verify.
+                // PoW solved; ask the server for the final decision.
+                return fetch(API + 'shield/verify/', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  credentials: 'include',
+                  body: JSON.stringify({
+                    api_key: apiKey,
+                    install_token: installToken,
+                    page_url: window.location.href,
+                    referrer: document.referrer
+                  }),
+                  keepalive: true
+                });
+              })
+              .then(function(resp) {
+                return resp.json().catch(function() { return null; });
+              })
+              .then(function(result) {
+                if (result && result.verdict === 'block') {
+                  showBlockPage(result.reason_label, result.bot_action);
+                  return;
+                }
+                if (result && result.verdict === 'allow') {
+                  verifyResult = result;
+                }
                 run();
               })
               .catch(function() { run(); });
@@ -475,6 +498,7 @@
   fetch(API + 'shield/verify/', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
     body: JSON.stringify({
       api_key: apiKey,
       install_token: installToken,
