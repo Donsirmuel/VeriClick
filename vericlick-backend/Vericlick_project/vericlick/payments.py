@@ -55,17 +55,25 @@ def _request(method, path, payload=None, api_key=None, base_url=None, idempotenc
         raise BachsError(f'Could not reach Bachs: {exc.reason}')
 
 
-ALL_PAYMENT_METHODS = ['card', 'crypto', 'bank_transfer', 'mobile_money']
+ALL_PAYMENT_METHODS = ['crypto']
+
+# Bachs accepts only exact method+currency corridor keys in
+# payment_method_options; any other key leaves no payable method and the whole
+# checkout request is rejected. Our API names are NOT corridor keys, so each
+# internal method maps to the corridor(s) it should unlock.
+METHOD_CORRIDORS = {
+    'card':   ['USD_CARD'],  # kept for the legacy subscription path
+    'crypto': ['CRYPTO'],
+}
 
 
 def create_checkout_session(intent, plan, user_email, user_name, payment_methods=None):
     """Starts a Bachs checkout session for the intent's plan.
 
-    ``payment_methods`` is the allowlist of channels to show at checkout
-    (card / crypto / bank_transfer / mobile_money). Recurring subscriptions
-    are card-only in Bachs ("Subscriptions are USD card only today"), so
-    subscription checkouts default to ``['card']``; one-time "period"
-    payments can use any channel.
+    ``payment_methods`` is the allowlist of channels to show at checkout.
+    Checkout is crypto-only: our method names are translated to Bachs
+    corridor keys via ``METHOD_CORRIDORS``. The legacy offline (subscription)
+    branch keeps ``['card']`` -> ``USD_CARD`` so it cannot regress.
 
     Which product is sold depends on the billing mode, because Bachs decides
     recurring-vs-one-time from the product itself: subscriptions use
@@ -97,6 +105,10 @@ def create_checkout_session(intent, plan, user_email, user_name, payment_methods
     if not product_id:
         raise BachsError('This plan is not available for that billing period yet')
 
+    options = {}
+    for method in methods:
+        options.update({corridor: {} for corridor in METHOD_CORRIDORS[method]})
+    payment_method_options = options
     payload = {
         'product_cart': [
             {'product_id': product_id, 'quantity': 1},
@@ -104,7 +116,7 @@ def create_checkout_session(intent, plan, user_email, user_name, payment_methods
         'customer': {'email': user_email or '', 'name': user_name or ''},
         'success_url': success_url,
         'cancel_url': cancel_url,
-        'allowed_payment_method_types': methods,
+        'payment_method_options': payment_method_options,
         # Our own idempotent reference: retrying the same intent never creates a
         # second checkout.
         'reference': f'vericlick-{intent.pk}',

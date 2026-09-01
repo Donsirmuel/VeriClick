@@ -3256,7 +3256,7 @@ class CheckoutProductSelectionTests(APITestCase):
         create_checkout_session(intent, self.plan, 'a@b.com', 'a', payment_methods=['crypto'])
         payload = mock_request.call_args.kwargs['payload']
         self.assertEqual(payload['product_cart'][0]['product_id'], 'prod_one_time')
-        self.assertEqual(payload['allowed_payment_method_types'], ['crypto'])
+        self.assertEqual(payload['payment_method_options'], {'CRYPTO': {}})
 
     @patch('vericlick.payments._request')
     def test_monthly_period_uses_the_monthly_product(self, mock_request):
