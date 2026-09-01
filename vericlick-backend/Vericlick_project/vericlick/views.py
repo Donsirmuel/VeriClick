@@ -1470,6 +1470,8 @@ def upgrade_workspace(request):
     except BachsError as exc:
         intent.status = CheckoutIntent.Status.FAILED
         intent.save(update_fields=['status', 'updated_at'])
+        logger.error('Bachs checkout failed for intent %s (%s / %s): %s',
+                     intent.pk, billing_mode, billing_period, exc)
         return Response(
             {'errors': [{'field': 'checkout', 'detail': f'Could not start the secure checkout. {exc}'}]},
             status=status.HTTP_502_BAD_GATEWAY,
